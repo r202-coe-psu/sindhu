@@ -1,0 +1,44 @@
+[project]
+name = "sindhu"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Soravit",email = "soravit.sukkarn@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+
+[tool.poetry.dependencies]
+python = ">=3.13,<3.14"
+sindhu-client = {path = "clients/sindhu-client"}
+beanie = ">=2.1.0,<3.0.0"
+fastapi = ">=0.136.1,<0.137.0"
+loguru = ">=0.7.3,<0.8.0"
+pydantic = {version = ">=2.13.3,<3.0.0", extras = ["email"]}
+flask = ">=3.1.3,<4.0.0"
+flask-wtf = ">=1.3.0,<2.0.0"
+flask-login = ">=0.6.3,<0.7.0"
+flask-babel = ">=4.0.0,<5.0.0"
+brython = ">=3.14.0,<4.0.0"
+pydantic-settings = ">=2.14.0,<3.0.0"
+fastapi-cache2 = ">=0.2.2,<0.3.0"
+redis = ">=7.4.0,<8.0.0"
+python-jose = ">=3.5.0,<4.0.0"
+python-multipart = ">=0.0.26,<0.0.27"
+authlib = ">=1.7.0,<2.0.0"
+requests = ">=2.33.1,<3.0.0"
+flask-caching = "^2.4.0"
+
+[tool.poetry.group.dev.dependencies]
+watchdog = ">=6.0.0,<7.0.0"
+fastapi-cli = ">=0.0.24,<0.0.25"
+black = ">=26.3.1,<27.0.0"
+livereload = ">=2.7.1,<3.0.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+sindhu-web = "sindhu.cmd.web:main"
+sindhu-api = "sindhu.cmd.api:main"

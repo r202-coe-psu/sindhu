@@ -1,0 +1,53 @@
+#!/usr/bin/env python
+
+import pathlib
+import os
+import json
+
+import httpx
+
+
+def generate(
+    name, url="http://localhost:8000/openapi.json", config="client-generator.yml"
+):
+    print("Sindhu Client Generator")
+
+    # remove when openapi-python-client support
+    # openapi_json = f"{name}-api.json"
+    # res = httpx.get(url)
+    # data = res.json()
+    # print(data)
+    # # data['components']['securitySchemes']['OAuth2PasswordBearer']['flows']['password'].pop('tokenUrl')
+
+    # with open(openapi_json, "w") as f:
+    #     json.dump(data, f)
+
+    #
+
+    path = pathlib.Path(f"{name}-client")
+    print("check", path, path.exists())
+    if not path.exists():
+        print("Generate Client")
+        # os.system(
+        #     f"openapi-python-client generate --path {openapi_json} --config {config}"
+        # )
+        os.system(f"openapi-python-client generate --url {url} --config {config}")
+    else:
+        print("Update Client")
+        os.system(
+            f"openapi-python-client generate --url {url} --config {config} --overwrite"
+        )
+        # os.system(f"openapi-python-client update --url {url} --config {config}")
+
+    # remove when openapi-python-client support
+    # openapi_json_path = pathlib.Path(openapi_json)
+    # openapi_json_path.unlink(missing_ok=False)
+    #
+
+
+if __name__ == "__main__":
+    generate(
+        "sindhu",
+        "http://localhost:8000/openapi.json",
+        "config/sindhu-client-generator.yml",
+    )

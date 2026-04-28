@@ -1,0 +1,8 @@
+project_name_override: sindhu-client
+package_name_override: sindhu_client
+use_path_prefixes_for_title_model_names: false
+
+class_overrides:
+  _PrivateInternalLongName:
+    class_name: ShortName
+    module_name: short_name
