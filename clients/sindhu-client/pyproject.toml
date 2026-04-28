@@ -5,7 +5,7 @@ description = "A client library for accessing Sindhu"
 authors = []
 readme = "README.md"
 packages = [
-    {include = "sindhu-client"},
+    {include = "sindhu_client"},
 ]
 include = ["CHANGELOG.md", "sindhu_client/py.typed"]
 
