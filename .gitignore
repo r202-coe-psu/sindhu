@@ -6,6 +6,7 @@ __pycache__
 /.env.dev
 /env.dev
 !.env.example
+!.env.dev.example
 /venv
 .ssh_tunnel
 .yaml
