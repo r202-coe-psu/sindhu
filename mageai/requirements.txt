@@ -1,0 +1,11 @@
+
+beanie
+pandas
+pydantic_settings
+pydantic[email]
+passlib
+sympy
+scipy
+matplotlib
+pymongo
+motor

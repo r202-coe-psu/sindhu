@@ -1,0 +1,111 @@
+{% extends '/base/base_layout.html' %}
+
+{% block default_head %}
+<style>
+    body>.grid {
+        height: 100%;
+    }
+
+    .image {
+        margin-top: -100px;
+    }
+
+    .column {
+        max-width: 450px;
+    }
+
+</style>
+{% endblock %}
+{% block title %}
+{{ _('Register') }}
+{% endblock title %}
+
+{% block body %}
+<div class="ui middle aligned center aligned grid">
+    <div class="column">
+        <h2 class="ui image header">
+            <div class="content">
+                {{ _('Create New Account') }}
+            </div>
+        </h2>
+        <form method="POST" class="ui form">
+            {{ form.csrf_token }}
+            <div class="ui stacked secondary  segment">
+                <div class="field">
+                    <div class="ui left icon input ">
+                        <i class="user icon"></i>
+                        {% if g.lang_code == "th" %}
+                        {{ form.username(placeholder="ชื่อบัญชีผู้ใช้") }}
+                        {% else %}
+                        {{ form.username(placeholder="Username") }}
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="two fields">
+                    <div class="field">
+                        <div class="ui left icon input">
+                            <i class="lock icon"></i>
+                            {% if g.lang_code == "th" %}
+                            {{ form.password(placeholder="รหัสผ่าน") }}
+                            {% else %}
+                            {{ form.password(placeholder="Password") }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="field">
+                        <div class="ui left icon input">
+                            <i class="lock icon"></i>
+                            {% if g.lang_code == "th" %}
+                            {{ form.confirm_password(placeholder="ยืนยันรหัสผ่านอีกครั้ง") }}
+                            {% else %}
+                            {{ form.confirm_password(placeholder="Confirm Password") }}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="field">
+                    <div class="ui left icon input">
+                        <i class="envelope icon"></i>
+                        {% if g.lang_code == "th" %}
+                        {{ form.email(placeholder="อีเมล") }}
+                        {% else %}
+                        {{ form.email(placeholder="Email") }}
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="two fields">
+                    <div class="field">
+                        <div class="ui left  input">
+                            {% if g.lang_code == "th" %}
+                            {{ form.first_name(placeholder="ชื่อจริง") }}
+                            {% else %}
+                            {{ form.first_name(placeholder="First Name") }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="field">
+                        <div class="ui left  input">
+                            {% if g.lang_code == "th" %}
+                            {{ form.last_name(placeholder="นามสกุล") }}
+                            {% else %}
+                            {{ form.last_name(placeholder="Last Name") }}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <input class="ui fluid large teal submit button" type="submit" value="{{ _('Register') }}">
+            </div>
+            {% if error_msg %}
+            <div class="ui negative message">
+                <div class="header">
+                    {{ error_msg }}
+                </div>
+            </div>
+            {% endif %}
+        </form>
+        <div class="ui message">
+            {{ _('If you have any account?') }} <a href="{{ url_for('accounts.login') }}">{{ _('Login now') }}</a>
+        </div>
+    </div>
+</div>
+{% endblock body%}

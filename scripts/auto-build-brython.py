@@ -1,0 +1,91 @@
+#!/usr/bin/env python
+
+import sys
+import time
+import logging
+from watchdog.observers import Observer
+from watchdog.events import LoggingEventHandler, PatternMatchingEventHandler
+import os
+import pathlib
+import subprocess
+
+BRYTHON_PATH = "sindhu/web/static/brython"
+
+
+def cls():
+    os.system("cls" if os.name == "nt" else "clear")
+
+
+def when_file_changed(filename, path):
+    cls()
+    print("change:", filename)
+    build(filename, path)
+
+
+def build(filename, path):
+    print("build", filename, path)
+
+    packagename = pathlib.Path(filename[len(path) :]).parts[1]
+
+    module_file = pathlib.Path(path) / f"{packagename}.brython.js"
+    if module_file.exists():
+        module_file.unlink()
+
+    subprocess.run(
+        ["python", "-m", "brython", "make_package", packagename],
+        cwd=(pathlib.Path(path) / packagename).resolve(),
+    )
+
+    new_module_file = pathlib.Path(path) / packagename / f"{packagename}.brython.js"
+
+    if new_module_file.exists():
+        new_module_file.rename(module_file)
+        print(f"Build Success {new_module_file}")
+
+
+def build_first_time(dir_path):
+    path = pathlib.Path(dir_path)
+    for file in path.glob("**/*.py"):
+        print(file)
+        build(str(file), dir_path)
+
+
+class ModifiedHandler(PatternMatchingEventHandler):
+    patterns = ["*.py"]
+    base_path = ""
+
+    def on_created(self, event):
+        when_file_changed(event.src_path, path)
+
+    def on_any_event(self, event):
+        pass
+
+    def on_modified(self, event):
+        when_file_changed(event.src_path, path)
+
+    def set_based_path(self, path):
+        self.based_path = path
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    path = sys.argv[1] if len(sys.argv) > 1 else BRYTHON_PATH
+    # event_handler = LoggingEventHandler()
+
+    build_first_time(path)
+
+    event_handler = ModifiedHandler()
+    event_handler.set_based_path(path)
+    observer = Observer()
+    observer.schedule(event_handler, path, recursive=True)
+    observer.start()
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        observer.stop()
+    observer.join()

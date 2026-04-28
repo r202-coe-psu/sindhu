@@ -1,0 +1,29 @@
+services:
+  mageai:
+    image: mageai-${PROJECT_NAME}-image
+    command: mage start ${PROJECT_NAME}
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      USER_CODE_PATH: /home/src/${PROJECT_NAME}
+      ENV: ${ENV}
+      MONGODB_URI: ${MONGODB_URI}
+      REDIS_URI: ${REDIS_URI}
+      REQUIRE_USER_AUTHENTICATION: 1 # Sign-in required 
+      MAGE_ACCESS_TOKEN_EXPIRY_TIME: 86400 # 24 hrs.
+    ports:
+      - 6789:6789
+    volumes:
+      - ./mageai_home:/home/src/${PROJECT_NAME}
+      - ../${PROJECT_NAME}/models/:/home/src/${PROJECT_NAME}/models
+      - ../${PROJECT_NAME}/schemas/:/home/src/${PROJECT_NAME}/schemas
+      - ../${PROJECT_NAME}/services/:/home/src/${PROJECT_NAME}/services
+      - ../${PROJECT_NAME}/credentials/:/home/src/${PROJECT_NAME}/credentials
+
+    restart: on-failure:5
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    user: "1000:1000"

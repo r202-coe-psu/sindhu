@@ -1,0 +1,15 @@
+{% import '/base/html-renderer-new.html' as renderer %}
+
+{% macro header() %}
+<div class="bg-gradient-to-r from-cyan-600 via-teal-500 to-emerald-800 to-emerald-600 sm:mt-25 mt-40">
+  <div class="container mx-auto max-w-8xl py-12">
+    <div class="text-center text-white">
+      <p class="text-base sm:text-lg text-blue-50 mx-auto px-2 leading-relaxed">
+        <b class="text-2xl text-amber-300">แพลตฟอร์มกลางเพื่อการพยากรณ์ {{ renderer.pm01() }}, {{ renderer.pm1() }} และ {{ renderer.pm25() }}</b>
+        <br>ผลงานวิจัยโดยศูนย์วิจัยมลพิษทางอากาศและผลกระทบต่อสุขภาพ มหาวิทยาลัยสงขลานครินทร์
+        <br>สนับสนุนโดยหน่วยบริหารและจัดการทุนด้านการพัฒนากำลังคนและทุนด้านการพัฒนาสถาบันอุดมศึกษา การวิจัยและการสร้างนวัตกรรม (บพค.)
+      </p>
+    </div>
+  </div>
+</div>
+{% endmacro%}

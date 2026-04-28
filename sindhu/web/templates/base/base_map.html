@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+
+<head>
+    <style>
+        #mapid {
+            height: 60rem;
+            background-color: white;
+        }
+    </style>
+    {% include 'base/map_header.html' %}
+</head>
+
+<body>
+    {% block body %}{% endblock %}
+</body>
+
+{% block additional_js %}{% endblock %}
+
+</html>

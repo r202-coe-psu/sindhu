@@ -1,0 +1,6 @@
+#!/bin/sh -e
+# export APP_ENV=dev
+
+APP_ENV=dev poetry run uvicorn sindhu.cmd.api:app 
+
+

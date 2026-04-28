@@ -1,0 +1,17 @@
+#!/bin/sh
+
+mkdir -p sindhu/web/static/brython_modules/
+poetry run brython-cli update --update-dir sindhu/web/static/brython_modules/
+
+BRYTHON_ID=$(pgrep -f $(pwd)/scripts/auto-build-brython.py);
+
+if [ ! -z "$BRYTHON_ID" ]
+then
+	echo "brython allready run kill!!"
+	kill -KILL $BRYTHON_ID
+fi
+
+poetry run $(pwd)/scripts/auto-build-brython.py &
+
+
+sindhu_SETTINGS=$(pwd)/.env.dev DEBUG=1 poetry run sindhu-web -H 0.0.0.0 -d

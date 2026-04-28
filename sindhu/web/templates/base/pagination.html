@@ -1,0 +1,58 @@
+{% if pagination['paginate'] %}
+
+<div class="ui pagination menu">
+    {% if request.args | length == 0 or (request.args | length == 1 and 'page' in request.args) %}
+    {% set connector='?' %}
+    {% else %}
+    {% set connector='&' %}
+    {% endif %}
+    {% set max_page = pagination['paginate'][-1] %}
+    {% set this_page = request.args.get('page', 1) %}
+
+    {% if this_page|int == 1 %}
+    <a class="disabled item" href="#"><i class="angle left icon"></i></a>
+    {% else %}
+    {{ '<a class="item" href="{}{}page={}"><i class="angle left icon"></i></a>'.format(redirect, connector,
+    this_page|int-1)
+    |safe}}
+    {% endif %}
+
+    {% for i in pagination['paginate']%}
+    {% if i|string == request.args.get('page') %}
+    {{ '<a class="disabled item">{}</a>'.format(i) |safe}}
+    {% elif request.args.get('search') %}
+    {% if i|string == '...' %}
+    {% if loop.index > pagination['paginate'].index(this_page|int) %}
+    {{ '<a class="item" href="{}{}search={}&page={}">{}</a>'.format(redirect, connector, request.args.get('search'),
+    (this_page|int+max_page)//2), i |safe}}
+    {% else %}
+    {{ '<a class="item" href="{}{}search={}&page={}">{}</a>'.format(redirect, connector, request.args.get('search'),
+    (this_page|int+1)//2), i |safe}}
+    {% endif %}
+    {% else %}
+    {{ '<a class="item" href="{}{}search={}&page={}">{}</a>'.format(redirect, connector, request.args.get('search'), i,
+    i) | safe }}
+    {% endif %}
+    {% else%}
+    {% if i|string == '...' %}
+    {% if loop.index > pagination['paginate'].index(this_page|int) %} {{ '<a class="item" href="{}{}page={}">{}</a>'
+    .format(redirect, connector, (this_page|int+max_page)//2, i) | safe }}
+    {% else %}
+    {{ '<a class="item" href="{}{}page={}">{}</a>' .format(redirect, connector, (this_page|int+1)//2, i) | safe }}
+    {% endif %}
+    {% else %}
+    {{ '<a class="item" href="{}{}page={}">{}</a>' .format(redirect, connector, i, i)|safe}}
+    {% endif %}
+    {% endif %}
+    {% endfor %}
+
+    {% if this_page|int==max_page|int %}
+    <a class="disabled item" href="#"><i class="angle right icon"></i></a>
+    {% else %}
+    {{ '<a class="item" href="{}{}page={}"><i class="angle right icon"></i></a>'.format(redirect, connector,
+    this_page|int+1)
+    |safe}}
+    {% endif %}
+</div>
+
+{% endif %}
