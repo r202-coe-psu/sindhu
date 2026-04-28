@@ -1,6 +1,6 @@
 ARG MAGEAI_VERSION
 ARG PROJECT_NAME
-ARG USER_CODE_PATH=/home/src/${PROJECT_NAME:-mageai_template}
+ARG USER_CODE_PATH=/home/src/${PROJECT_NAME:-sindhu}
 ARG DEBIAN_FRONTEND=noninteractive
 
 FROM mageai/mageai:${MAGEAI_VERSION:-latest}
@@ -10,7 +10,7 @@ RUN echo 'deb http://mirrors.psu.ac.th/debian/ bookworm main contrib non-free' >
 
 RUN apt update -y && apt -y install apt-utils && ACCEPT_EULA=Y apt upgrade -y -q
 RUN apt -y install locales apt-utils
- 
+
 RUN sed -i '/th_TH.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
 
 

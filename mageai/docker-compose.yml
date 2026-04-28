@@ -1,5 +1,6 @@
 services:
   mageai:
+    name: ${PROJECT_NAME}-mageai
     image: mageai-${PROJECT_NAME}-image
     command: mage start ${PROJECT_NAME}
     env_file:
