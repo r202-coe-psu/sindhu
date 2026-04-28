@@ -3,11 +3,11 @@ from sindhu import models
 from sindhu.web import forms, acl
 import datetime
 
-from dhara_client import models
-from .. import dhara_api_clients
+from sindhu_client import models
+from .. import sindhu_api_clients
 from .. import models as sindhu_web_models
 
-from dhara_client.api.v1 import (
+from sindhu_client.api.v1 import (
     get_v1_system_settings_get,
     update_v1_system_settings_update_put,
     create_v1_system_settings_create_post,
@@ -28,7 +28,7 @@ module = Blueprint("system_settings", __name__, url_prefix="/system_settings")
 @acl.roles_required("admin")
 def index():
     system_setting = None
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     response = get_v1_system_settings_get.sync(client=client)
     if response:
         system_setting = response.to_dict()
@@ -105,7 +105,7 @@ def add_api_token():
         refresh_token=form.refresh_token.data,
         refresh_token_expires=form.refresh_token_expires.data,
     )
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     response = create_api_token_v1_system_settings_api_tokens_create_post.sync(
         client=client, body=api_token_body
     )
@@ -118,7 +118,7 @@ def add_api_token():
 def edit_api_token(api_token_id):
     form = forms.ApiForm()
 
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     api_token = None
     if api_token_id:
         api_token = (
@@ -150,7 +150,7 @@ def edit_api_token(api_token_id):
 @module.route("/api/remove/<api_token_id>/")
 @acl.roles_required("admin")
 def remove_api_token(api_token_id):
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     response = (
         delete_api_token_v1_system_settings_api_tokens_delete_api_token_id_delete.sync(
             client=client, api_token_id=api_token_id

@@ -18,11 +18,11 @@ from .. import oauth2
 from .. import forms
 from . import paginations
 
-from .. import dhara_api_clients
+from .. import sindhu_api_clients
 from .. import models as sindhu_web_models
 
-from dhara_client import models
-from dhara_client.api.v1 import (
+from sindhu_client import models
+from sindhu_client.api.v1 import (
     authentication_v1_auth_login_post,
     get_me_v1_users_me_get,
     refresh_token_v1_auth_refresh_token_get,
@@ -66,7 +66,7 @@ def get_token():
     # expires_at = datetime.datetime.fromisoformat(session["tokens"]["expires_at"])
     # if expires_at > datetime.datetime.now():
     #     print("token expired")
-    #     client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    #     client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     #     response = refresh_token_v1_auth_refresh_token_get.sync_detailed(
     #         client=client, credentials=session["tokens"]["refresh_token"]
     #     )
@@ -112,7 +112,7 @@ def authorized_sindhu():
         )
     )
 
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     response = authentication_v1_auth_login_post.sync(client=client, body=model)
 
     if not response:
@@ -120,7 +120,7 @@ def authorized_sindhu():
 
     session["tokens"] = response.to_dict()
 
-    client = dhara_api_clients.client.get_current_client()
+    client = sindhu_api_clients.client.get_current_client()
     response = get_me_v1_users_me_get.sync(client=client)
 
     user = sindhu_web_models.users.User(response.to_dict())
@@ -146,7 +146,7 @@ def management():
     username = request.args.get("username", None)
     page = int(request.args.get("page", default=1))
 
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     response = get_all_v1_users_get.sync(client=client, current_page=page)
 
     if email or username:
@@ -177,7 +177,7 @@ def management():
 def create_update():
     user = None
     user_id = request.args.get("user_id", "")
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     if user_id:
         user = get_v1_users_user_id_get.sync(client=client, user_id=user_id)
     form = forms.UserForm()
@@ -229,7 +229,7 @@ def create_update():
 def grant_role(user_id, role):
     user = None
     page = int(request.args.get("page", 1))
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     if user_id:
         user = get_v1_users_user_id_get.sync(client=client, user_id=user_id)
     if role in user.roles:
@@ -246,7 +246,7 @@ def grant_role(user_id, role):
 @module.route("/accounts/<user_id>/delete", methods=["GET", "POST"])
 def delete_user(user_id):
     page = int(request.args.get("page", 1))
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     if user_id:
         user = set_status_v1_users_user_id_set_status_put.sync(
             client=client, user_id=user_id, status="disactive"

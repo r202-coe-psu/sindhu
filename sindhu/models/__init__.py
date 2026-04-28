@@ -4,19 +4,10 @@ from typing import Sequence, Type, TypeVar
 from inspect import getmembers, isclass
 import beanie
 import pymongo
-
-from . import files
-
-from .users import User
-from .tokens import ApiToken
-from .system_settings import SystemSetting
-from .caches import Caches
+from pydantic_settings import BaseSettings
 
 
 DocumentType = TypeVar("DocumentType", bound=beanie.Document)
-
-
-from pydantic_settings import BaseSettings
 
 
 class AppSettings(BaseSettings):

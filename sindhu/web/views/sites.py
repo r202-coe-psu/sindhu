@@ -5,11 +5,11 @@ from sindhu import models
 from pathlib import Path
 from .. import caches
 
-from .. import dhara_api_clients
+from .. import sindhu_api_clients
 from .. import models as sindhu_web_models
 
-from dhara_client import models
-from dhara_client.api.v1 import all_v1_climate_formulas_get
+from sindhu_client import models
+from sindhu_client.api.v1 import all_v1_climate_formulas_get
 
 module = Blueprint("sites", __name__)
 
@@ -20,7 +20,7 @@ def home():
 
     return redirect(url_for("dashboard.new"))
     # climate_formulas = None
-    # client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    # client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
 
     # response = all_v1_climate_formulas_get.sync(
     #     client=client, status="active", source="PCD"
@@ -44,7 +44,7 @@ def home():
 def home_page():
 
     climate_formulas = None
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
 
     response = all_v1_climate_formulas_get.sync(
         client=client, status="active", source="PCD"
@@ -70,7 +70,7 @@ def index():
     if not current_user.is_authenticated:
         return redirect(url_for("sites.home"))
 
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     response = all_v1_climate_formulas_get.sync(
         client=client, status="active", source="PCD"
     )
@@ -105,7 +105,7 @@ def empirical_forecast():
     if not current_user.is_authenticated:
         return redirect(url_for("sites.home"))
 
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     response = all_v1_climate_formulas_get.sync(
         client=client, status="active", source="PCD"
     )
@@ -135,7 +135,7 @@ def fire_hotspots():
     if not current_user.is_authenticated:
         return redirect(url_for("accounts.login"))
 
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     source = "firms"
 
     return render_template(
@@ -151,7 +151,7 @@ def fire_reports():
     if not current_user.is_authenticated:
         return redirect(url_for("accounts.login"))
 
-    client = dhara_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
     source = "fire_reports"
     center = [100.025311, 8.016964]
     zoom = 11

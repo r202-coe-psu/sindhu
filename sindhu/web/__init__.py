@@ -7,7 +7,7 @@ from . import views
 from . import acl
 from . import oauth2
 from . import babels
-from . import dhara_api_clients
+from . import sindhu_api_clients
 
 app = Flask(__name__)
 
@@ -20,7 +20,7 @@ def create_app():
     views.register_blueprint(app)
     acl.init_acl(app)
     oauth2.init_oauth(app)
-    dhara_api_clients.init_client(app)
+    sindhu_api_clients.init_client(app)
 
     return app
 
