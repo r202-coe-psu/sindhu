@@ -7,6 +7,7 @@ import pymongo
 from pydantic_settings import BaseSettings
 
 from sindhu.models.stations import Station
+from sindhu.models.telemetrices.metric import Metric
 
 DocumentType = TypeVar("DocumentType", bound=beanie.Document)
 
