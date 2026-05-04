@@ -6,12 +6,11 @@ import beanie
 import pymongo
 from pydantic_settings import BaseSettings
 
-
 DocumentType = TypeVar("DocumentType", bound=beanie.Document)
 
 
 class AppSettings(BaseSettings):
-    MONGODB_URI: str = "mongodb://host.docker.internal:27017/dharadb"
+    MONGODB_URI: str = "mongodb://host.docker.internal:27017/sindhudb"
 
     class Config:
         env_file = ".env"
@@ -59,6 +58,10 @@ async def init_beanie(app, settings):
 
 
 async def init_default_beanie_client():
+    """
+    Initializes the Beanie client with default settings.
+    For MageAI integration
+    """
     settings = AppSettings()
     print("setings>>>", settings)
     await beanie_client.init_beanie(settings)
