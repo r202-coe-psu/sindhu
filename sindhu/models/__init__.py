@@ -6,6 +6,8 @@ import beanie
 import pymongo
 from pydantic_settings import BaseSettings
 
+from sindhu.models.stations import Station
+
 DocumentType = TypeVar("DocumentType", bound=beanie.Document)
 
 
