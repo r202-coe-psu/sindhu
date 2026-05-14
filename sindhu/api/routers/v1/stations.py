@@ -2,7 +2,8 @@ import math
 from typing import Annotated
 import datetime
 from enum import Enum
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import status as http_status
 from fastapi.responses import JSONResponse
 from fastapi_cache.decorator import cache
 from flask import json
@@ -15,7 +16,6 @@ import bson
 from loguru import logger
 
 
-from .... import schemas, models, services
 from sindhu.api.core import deps, caching
 from sindhu import schemas, models, services
 
@@ -127,6 +127,11 @@ async def update(
             models.Station.id == station_id,
             fetch_links=True,
         )
+        if not db_station:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Not found station",
+            )
     except Exception as e:
         logger.exception(e)
         raise HTTPException(
@@ -155,6 +160,11 @@ async def delete(
             models.Station.id == station_id,
             fetch_links=True,
         )
+        if not db_station:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Not found station",
+            )
     except Exception as e:
         logger.exception(e)
         raise HTTPException(
