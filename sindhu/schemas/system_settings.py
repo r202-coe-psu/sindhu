@@ -10,11 +10,11 @@ from . import tokens
 
 
 class BaseSystemSetting(BaseModel):
-    center: bases.GeoObject | None
+    center: bases.GeoObject | None = None
     interpolation_coordinate_1: bases.GeoObject | None = None
     interpolation_coordinate_2: bases.GeoObject | None = None
-    zoom: int | None
-    min_zoom: int | None
+    zoom: int | None = None
+    min_zoom: int | None = None
 
 
 class SystemSetting(BaseSystemSetting):
