@@ -1,4 +1,5 @@
 import datetime
+from typing import List
 
 from pydantic import BaseModel, EmailStr, Field
 from beanie import PydanticObjectId
@@ -18,7 +19,7 @@ class User(bases.BaseSchema, BaseUser):
     last_login_date: datetime.datetime | None = Field(
         example="2023-01-01T00:00:00.000000", default=None
     )
-    roles: list[str]
+    roles: List[str]
 
 
 class ReferenceUser(bases.BaseSchema):
@@ -28,7 +29,7 @@ class ReferenceUser(bases.BaseSchema):
 
 
 class UserList(BaseModel):
-    users: list[User]
+    users: List[User]
     count: int
     current_page: int = 0
     total_page: int = 0
@@ -55,7 +56,7 @@ class RegisteredUser(BaseUser):
 
 
 class UpdatedUser(BaseUser):
-    roles: list[str]
+    roles: List[str]
 
 
 class Token(BaseModel):
