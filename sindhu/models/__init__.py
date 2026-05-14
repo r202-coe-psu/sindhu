@@ -9,7 +9,7 @@ from pydantic_settings import BaseSettings
 from .users import User
 from .stations import Station
 from .system_settings import SystemSetting
-from tokens import ApiToken
+from .tokens import ApiToken
 
 from sindhu.models.stations import Station
 from sindhu.models.telemetrices.metric import Metric
