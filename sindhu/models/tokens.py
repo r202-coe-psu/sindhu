@@ -1,5 +1,5 @@
 from beanie import Document, PydanticObjectId
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import Field
 
 from sindhu import schemas
@@ -11,8 +11,8 @@ class ApiToken(schemas.tokens.ApiToken, Document):
         alias="_id",
     )
 
-    created_date: datetime | None = Field(default_factory=datetime.utcnow)
-    updated_date: datetime | None = Field(default_factory=datetime.utcnow)
+    created_date: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_date: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:
         name = "api_tokens"

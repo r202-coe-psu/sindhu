@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime, timezone
 
 from .. import schemas
 
@@ -20,17 +20,14 @@ class User(schemas.users.User, Document):
     roles: list[str] = ["user"]
     status: str = "active"
 
-    register_date: datetime.datetime = Field(default_factory=datetime.datetime.now)
-    updated_date: datetime.datetime = Field(default_factory=datetime.datetime.now)
+    register_date: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_date: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:
         name = "users"
 
     async def has_roles(self, roles):
-        for role in roles:
-            if role in self.roles:
-                return True
-        return False
+        return any(role in self.roles for role in roles)
 
     def set_password(self, password):
         from werkzeug.security import generate_password_hash
