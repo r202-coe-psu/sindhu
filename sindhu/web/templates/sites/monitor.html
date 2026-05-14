@@ -38,3 +38,11 @@
   map.start()
 </script>
 {% endblock content %}
+{% block additional_js %}
+
+<script type="text/javascript" src="{{ url_for('static', filename='brython_modules/brython.js') }}"></script>
+<script type="text/javascript" src="{{ url_for('static', filename='brython_modules/brython_stdlib.js') }}"></script>
+<script type="text/javascript" src="{{ url_for('static', filename='brython/maps.brython.js') }}"></script>
+<script type="text/javascript" src="{{ url_for('static', filename='brython/monitors.brython.js') }}"></script>
+
+{% endblock additional_js  %}
