@@ -44,7 +44,7 @@ class ChangedPassword(BaseModel):
     new_password: str
 
 
-class ResetedPassword(BaseModel):
+class ResetPassword(BaseModel):
     email: EmailStr
     citizen_id: str
 
@@ -74,8 +74,3 @@ class RefreshToken(BaseModel):
 
 class TokenData(BaseModel):
     user_id: str | None = None
-
-
-class ChangedPasswordUser(BaseModel):
-    current_password: str
-    new_password: str
