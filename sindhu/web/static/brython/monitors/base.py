@@ -4,7 +4,7 @@ import javascript as js
 import datetime
 from urllib.parse import urlencode
 
-from sindhu.web.static.brython.maps.base import BaseMap
+from maps.base import BaseMap
 
 
 class BaseMonitor:
@@ -12,7 +12,7 @@ class BaseMonitor:
         self,
         lang_code,
         api_url,
-        source,
+        source=None,
         center=None,
         zoom=None,
     ):
