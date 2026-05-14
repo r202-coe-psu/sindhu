@@ -22,6 +22,10 @@ class BaseStation(BaseModel):
     status: str = Field("active")
 
 
+class CreateUpdateStation(BaseStation):
+    create_update_metadata: dict | None = Field(None, alias="metadata")
+
+
 class StationMetaData(BaseModel):
     pass
 
@@ -34,3 +38,7 @@ class Station(bases.BaseSchema, BaseStation):
     created_date: datetime.datetime
     updated_date: datetime.datetime
     status: str
+
+
+class StationList(BaseModel):
+    stations: list[Station]
