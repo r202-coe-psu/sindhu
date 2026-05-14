@@ -1,5 +1,5 @@
 import datetime
-from typing import Dict
+from typing import Dict, List
 from pydantic import BaseModel, Field, ConfigDict
 from beanie import PydanticObjectId
 
@@ -41,4 +41,4 @@ class Station(bases.BaseSchema, BaseStation):
 
 
 class StationList(BaseModel):
-    stations: list[Station]
+    stations: List[Station]

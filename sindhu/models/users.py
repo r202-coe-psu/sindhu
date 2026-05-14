@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import datetime
+from typing import List
 
 from .. import schemas
 
@@ -17,7 +19,7 @@ class User(schemas.users.User, Document):
     # )
 
     password: str
-    roles: list[str] = ["user"]
+    roles: List[str] = ["user"]
     status: str = "active"
 
     register_date: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
