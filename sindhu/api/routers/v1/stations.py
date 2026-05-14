@@ -54,7 +54,7 @@ async def all(
     except Exception as e:
         print(e)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found any stations",
         )
     response = schemas.stations.StationList(stations=stations)
@@ -76,7 +76,7 @@ async def get(
     except Exception as e:
         logger.exception(e)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found station",
         )
     return station
@@ -97,13 +97,13 @@ async def create(
     except Exception as e:
         logger.exception(e)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found station",
         )
 
     if db_station:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=http_status.HTTP_409_CONFLICT,
             detail="This station already exist",
         )
 
@@ -129,13 +129,13 @@ async def update(
         )
         if not db_station:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Not found station",
             )
     except Exception as e:
         logger.exception(e)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found station",
         )
 
@@ -162,13 +162,13 @@ async def delete(
         )
         if not db_station:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Not found station",
             )
     except Exception as e:
         logger.exception(e)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found station",
         )
 
