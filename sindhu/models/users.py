@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-import datetime
 from typing import List
 
 from .. import schemas
