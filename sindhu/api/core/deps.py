@@ -17,7 +17,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login")
 
 async def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
-) -> models.users.User:
+) -> models.User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -35,24 +35,24 @@ async def get_current_user(
         raise credentials_exception
 
     # user = get_user(fake_users_db, username=token_data.username)
-    user = await models.users.User.get(token_data.user_id)
+    user = await models.User.get(token_data.user_id)
     if user is None:
         raise credentials_exception
     return user
 
 
 async def get_current_active_user(
-    current_user: Annotated[models.users.User, Depends(get_current_user)],
+    current_user: Annotated[models.User, Depends(get_current_user)],
     # current_user: models.users.User = Depends(get_current_user),
-) -> models.users.User:
+) -> models.User:
     if current_user.status != "active":
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
 
 async def get_current_active_superuser(
-    current_user: models.users.User = Depends(get_current_user),
-) -> models.users.User:
+    current_user: models.User = Depends(get_current_user),
+) -> models.User:
     if "admin" not in current_user.roles:
         raise HTTPException(
             status_code=400, detail="The user doesn't have enough privileges"
@@ -60,18 +60,18 @@ async def get_current_active_superuser(
     return current_user
 
 
-async def create_logs(action, request, current_user):
-    request_log = models.RequestLog(
-        user=current_user,
-        ip_address=request.client.host,
-        action=action,
-        user_agent=request.headers.get("user-agent", ""),
-    )
-    return request_log
+# async def create_logs(action, request, current_user):
+#     request_log = models.RequestLog(
+#         user=current_user,
+#         ip_address=request.client.host,
+#         action=action,
+#         user_agent=request.headers.get("user-agent", ""),
+#     )
+#     return request_log
 
 
-async def get_system_setting() -> models.system_settings.SystemSetting:
-    db_system_setting = await models.system_settings.SystemSetting.find_one(
+async def get_system_setting() -> models.SystemSetting:
+    db_system_setting = await models.SystemSetting.find_one(
         sort=[("_id", -1)], fetch_links=True
     )
     return db_system_setting
@@ -81,7 +81,7 @@ class RoleChecker:
     def __init__(self, *allowed_roles: list[str]):
         self.allowed_roles = allowed_roles
 
-    def __call__(self, user: models.users.User = Depends(get_current_active_user)):
+    def __call__(self, user: models.User = Depends(get_current_active_user)):
         for role in user.roles:
             if role in self.allowed_roles:
                 return
@@ -93,7 +93,7 @@ class DivisionChecker:
     def __init__(self, *allowed_divisions: list[str]):
         self.allowed_divisions = allowed_divisions
 
-    def __call__(self, user: models.users.User = Depends(get_current_active_user)):
+    def __call__(self, user: models.User = Depends(get_current_active_user)):
         if user.division not in self.allowed_divisions:
             logger.debug(
                 f"User with division {user.division} not in {self.allowed_divisions}"
