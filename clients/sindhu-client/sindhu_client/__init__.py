@@ -1,4 +1,4 @@
-"""A client library for accessing Sindhu"""
+"""A client library for accessing sindhu"""
 
 from .client import AuthenticatedClient, Client
 
