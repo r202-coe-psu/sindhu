@@ -30,3 +30,7 @@ __pycache__
 auto_test.sh
 *.css
 sindhu/web/static/brython/*.js
+
+.agents/debug/*
+
+
