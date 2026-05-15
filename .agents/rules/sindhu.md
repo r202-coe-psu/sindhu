@@ -13,3 +13,4 @@ trigger: always_on
   - **Dependency Management:** Poetry
   - **Code Formatting:** Black
 - **Language:** Communicate and explain code in English, as requested.
+- **Commenting:** Always use {# comment #} instead of {# #} and // in .html file 

@@ -5,7 +5,7 @@
 {% include 'base/map_header.html' %}
 {% block content %}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- Map Section (Left) -->
+    {# Map Section (Left) #}
     <div class="lg:col-span-2">
         <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden relative" style="height: 600px;">
             <div id="loading_map"
@@ -19,9 +19,9 @@
         </div>
     </div>
 
-    <!-- Data Panel Section (Right) -->
+    {# Data Panel Section (Right) #}
     <div class="lg:col-span-1 flex flex-col bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden" style="height: 600px;">
-        <!-- Header -->
+        {# Header #}
         <div class="bg-blue-600 text-white p-4">
             <h2 class="text-xl font-bold flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -32,7 +32,7 @@
             <p class="text-sm text-blue-100 mt-1">ข้อมูลอ่างเก็บน้ำขนาดใหญ่และขนาดกลาง</p>
         </div>
 
-        <!-- Filters -->
+        {# Filters #}
         <div class="p-3 border-b border-gray-100 bg-gray-50 flex gap-2">
             <select class="select select-bordered select-sm w-full bg-white text-gray-700">
                 <option disabled selected>ทุกภูมิภาค</option>
@@ -49,16 +49,16 @@
             </select>
         </div>
         
-        <!-- Tabs -->
+        {# Tabs #}
         <div class="flex border-b border-gray-200 bg-white shrink-0">
             <button class="flex-1 py-3 text-sm font-semibold text-blue-600 border-b-2 border-blue-600 bg-blue-50/50">อ่างฯ ขนาดใหญ่</button>
             <button class="flex-1 py-3 text-sm font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors">อ่างฯ ขนาดกลาง</button>
         </div>
 
-        <!-- Data List -->
+        {# Data List #}
         <div class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30 custom-scrollbar">
             
-            <!-- Mock Item 1 -->
+            {# Mock Item 1 #}
             <div class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
                 <div class="flex justify-between items-start mb-2">
                     <div>
@@ -74,7 +74,7 @@
                 <progress class="progress progress-error w-full bg-gray-100 h-2" value="31" max="100"></progress>
             </div>
 
-            <!-- Mock Item 2 -->
+            {# Mock Item 2 #}
             <div class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
                 <div class="flex justify-between items-start mb-2">
                     <div>
@@ -90,7 +90,7 @@
                 <progress class="progress progress-success w-full bg-gray-100 h-2" value="61" max="100"></progress>
             </div>
             
-            <!-- Mock Item 3 -->
+            {# Mock Item 3 #}
             <div class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
                 <div class="flex justify-between items-start mb-2">
                     <div>
@@ -106,7 +106,7 @@
                 <progress class="progress progress-info w-full bg-gray-100 h-2" value="88" max="100"></progress>
             </div>
             
-            <!-- Mock Item 4 -->
+            {# Mock Item 4 #}
             <div class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
                 <div class="flex justify-between items-start mb-2">
                     <div>
