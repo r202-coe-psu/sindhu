@@ -42,3 +42,12 @@ class Station(bases.BaseSchema, BaseStation):
 
 class StationList(BaseModel):
     stations: List[Station]
+
+
+class StationWithMetrics(Station):
+    metrics: list
+
+
+class StationWithMetricsList(BaseModel):
+    stations: list[StationWithMetrics]
+

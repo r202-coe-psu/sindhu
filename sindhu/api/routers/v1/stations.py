@@ -87,7 +87,7 @@ async def get(
 )
 async def create(
     station_form: schemas.stations.CreateUpdateStation,
-    current_user: models.users.User = Depends(deps.get_current_user),
+    current_user: models.User = Depends(deps.get_current_user),
 ) -> schemas.stations.Station:
     try:
         db_station = await models.Station.find_one(
@@ -107,7 +107,7 @@ async def create(
             detail="This station already exist",
         )
 
-    station = models.stations.Station(**station_form.model_dump())
+    station = models.Station(**station_form.model_dump())
 
     await station.insert()
 
@@ -120,7 +120,7 @@ async def create(
 async def update(
     station_id: PydanticObjectId,
     station: schemas.stations.CreateUpdateStation,
-    current_user: models.users.User = Depends(deps.get_current_user),
+    current_user: models.User = Depends(deps.get_current_user),
 ) -> schemas.stations.Station:
     try:
         db_station = await models.Station.find_one(
@@ -153,7 +153,7 @@ async def update(
 )
 async def delete(
     station_id: PydanticObjectId,
-    current_user: models.users.User = Depends(deps.get_current_user),
+    current_user: models.User = Depends(deps.get_current_user),
 ) -> schemas.stations.Station:
     try:
         db_station = await models.Station.find_one(
@@ -177,3 +177,67 @@ async def delete(
     await db_station.save()
 
     return db_station
+
+
+# api ที่ใช้สำหรับการดึงค่า ของ metric type ออกมาเพื่อนำข้อมูลไปแสดงเป็น marker
+@router.get("/metrics/metric_type/latest")
+async def get_latest_metrics_by_metric_type(
+    metric_type: str,
+    source: str = None,
+) -> schemas.stations.StationWithMetricsList:
+    station_with_metrics = await services.metrics.get_latest_metrics_by_metric_type(
+        metric_type, source=source
+    )
+    return schemas.stations.StationWithMetricsList(stations=station_with_metrics)
+
+
+@router.get("/metrics/latest")
+@cache(expire=300)
+async def get_latest_metrics(
+    source: str,
+) -> schemas.stations.StationWithMetricsList:
+    try:
+        result = await services.metrics.get_latest_metrics(source)
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Not found any stations",
+        )
+
+    return schemas.stations.StationWithMetricsList(stations=result)
+
+
+@router.get(
+    "/metrics/",
+)
+async def get_metrics(
+    source: str,
+    started_datetime: datetime.datetime,
+    ended_datetime: datetime.datetime,
+    metric_type: str = None,
+) -> schemas.stations.StationWithMetricsList:
+    try:
+        result = await services.metrics.get_metrics(
+            source, metric_type, started_datetime, ended_datetime
+        )
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Not found any stations",
+        )
+
+    return schemas.stations.StationWithMetricsList(stations=result)
+
+
+@router.get("/{station_id}/metrics")
+async def get_metrics_by_station(
+    station_id: PydanticObjectId,
+    started_datetime: datetime.datetime,
+    ended_datetime: datetime.datetime,
+) -> list[dict]:
+    response = await services.metrics.get_metrics_by_station(
+        station_id, started_datetime, ended_datetime
+    )
+    return response
