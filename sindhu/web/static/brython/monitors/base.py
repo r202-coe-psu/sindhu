@@ -31,6 +31,7 @@ class BaseMonitor:
         # hardcoded URL
         self.params = None
         self.apis = {
+            "system_settings": f"{self.api_url}/v1/system_settings/",
         }
 
     """
@@ -41,6 +42,7 @@ class BaseMonitor:
 
     def start(self):
         """Start function defined in child class"""
+        aio.run(self.monitor())
         pass
 
     async def monitor(self):

@@ -1,0 +1,211 @@
+{% extends '/base/default_page.html' %}
+{% import '/base/html-renderer.html' as renderer %}
+
+{% block title %}
+System Setting
+{% endblock title %}
+
+{% block content %}
+<div class="flex flex-col gap-6 w-full max-w-5xl mx-auto py-6">
+  {# System Setting Form #}
+  <div class="card bg-base-100 shadow-xl border border-base-200">
+    <div class="card-body">
+      <div class="flex items-center gap-3 mb-6">
+        <i class="ph-fill ph-gear text-3xl text-primary"></i>
+        <h2 class="card-title text-2xl font-bold">System Setting</h2>
+      </div>
+
+      <form method="POST" class="space-y-8">
+        {{ form.csrf_token }}
+        
+        {# Map Setting Section #}
+        <section class="space-y-4">
+          <div class="flex items-center gap-2 border-b border-base-200 pb-2">
+            <i class="ph ph-map-trifold text-xl text-primary"></i>
+            <h3 class="text-lg font-semibold">Map Setting</h3>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="md:col-span-2">
+              {{ renderer.render_field(form.center, placeholder="Latitude, Longitude") }}
+            </div>
+            {{ renderer.render_field(form.zoom, type="number") }}
+            {{ renderer.render_field(form.min_zoom, type="number") }}
+          </div>
+        </section>
+
+        {# Interpolations Section #}
+        <section class="space-y-4">
+          <div class="flex items-center gap-2 border-b border-base-200 pb-2">
+            <i class="ph ph-chart-scatter text-xl text-primary"></i>
+            <h3 class="text-lg font-semibold text-base-content">Interpolations summary setting</h3>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {{ renderer.render_field(form.interpolation_coordinate_1, placeholder="Latitude, Longitude") }}
+            {{ renderer.render_field(form.interpolation_coordinate_2, placeholder="Latitude, Longitude") }}
+          </div>
+        </section>
+
+        {# Actions #}
+        <div class="card-actions justify-end mt-6 pt-6 border-t border-base-200 gap-3">
+          <a href="{{ url_for('sites.index')}}" class="btn btn-ghost">
+            Cancel
+          </a>
+          <button class="btn btn-primary gap-2" type="submit">
+            <i class="ph ph-check"></i>
+            Confirm
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# API Setting Section #}
+  {% if system_setting %}
+  <div class="card bg-base-100 shadow-xl border border-base-200">
+    <div class="card-body">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div class="flex items-center gap-3">
+          <i class="ph-fill ph-api text-3xl text-primary"></i>
+          <h2 class="card-title text-2xl font-bold">API Setting</h2>
+        </div>
+        <a class="btn btn-primary btn-sm md:btn-md gap-2" href="{{ url_for('system_settings.add_api_token')}}">
+          <i class="ph ph-plus"></i>
+          Add API Token
+        </a>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="table table-zebra w-full">
+          <thead>
+            <tr>
+              <th>API URL</th>
+              <th>Tokens</th>
+              <th>Expirations</th>
+              <th class="text-center">Manage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for key in system_setting.api_tokens %}
+            <tr class="hover transition-colors">
+              <td class="font-medium align-top py-4">{{ key.source }}</td>
+              <td class="align-top py-4">
+                <div class="flex flex-col gap-1">
+                  <button onclick="access_token_modal_{{ key.id }}.showModal()" class="btn btn-xs btn-ghost text-primary justify-start px-0 font-semibold hover:bg-primary/10">
+                    <i class="ph ph-key"></i> Access Token
+                  </button>
+                  <button onclick="refresh_token_modal_{{ key.id }}.showModal()" class="btn btn-xs btn-ghost text-secondary justify-start px-0 font-semibold hover:bg-secondary/10">
+                    <i class="ph ph-arrows-clockwise"></i> Refresh Token
+                  </button>
+                </div>
+              </td>
+              <td class="text-sm text-base-content/70 align-top py-4">
+                <div class="flex flex-col gap-1">
+                  <div class="flex items-center gap-2">
+                    <span class="badge badge-outline badge-xs font-bold text-[10px]">AT</span>
+                    <span>{{ key.access_token_expires or '-' }}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="badge badge-outline badge-xs font-bold text-[10px]">RT</span>
+                    <span>{{ key.refresh_token_expires or '-' }}</span>
+                  </div>
+                </div>
+              </td>
+              <td class="align-top py-4">
+                <div class="flex justify-center gap-1">
+                  <a href="{{ url_for('system_settings.edit_api_token', api_token_id=key.id)}}" class="btn btn-square btn-sm btn-ghost hover:text-primary tooltip" data-tip="Edit">
+                    <i class="ph ph-pencil-simple text-lg"></i>
+                  </a>
+                  <button onclick="delete_modal_{{ key.id }}.showModal()" class="btn btn-square btn-sm btn-ghost hover:text-error tooltip" data-tip="Delete">
+                    <i class="ph ph-trash text-lg"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            {# Modals for each key #}
+            <dialog id="delete_modal_{{ key.id }}" class="modal modal-bottom sm:modal-middle">
+              <div class="modal-box">
+                <h3 class="font-bold text-lg text-error flex items-center gap-2">
+                  <i class="ph ph-warning-circle"></i> Delete API
+                </h3>
+                <p class="py-4">Do you want to remove <strong>{{ key.source }}</strong> from the system?</p>
+                <div class="modal-action">
+                  <form method="dialog">
+                    <button class="btn btn-ghost">No, Cancel</button>
+                  </form>
+                  <a href="{{ url_for('system_settings.remove_api_token', api_token_id=key.id)}}" class="btn btn-error text-white">
+                    Yes, Delete
+                  </a>
+                </div>
+              </div>
+              <form method="dialog" class="modal-backdrop">
+                <button>close</button>
+              </form>
+            </dialog>
+
+            <dialog id="access_token_modal_{{ key.id }}" class="modal modal-bottom sm:modal-middle">
+              <div class="modal-box w-11/12 max-w-2xl">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="font-bold text-lg">Access Token: {{ key.source }}</h3>
+                  <form method="dialog">
+                    <button class="btn btn-sm btn-circle btn-ghost">✕</button>
+                  </form>
+                </div>
+                <div class="bg-base-200 p-4 rounded-lg break-all font-mono text-xs leading-relaxed max-h-60 overflow-y-auto">
+                  {% if not key.access_token %}
+                  <span class="text-warning font-sans italic">No data available.</span>
+                  {% else %}
+                  {{ key.access_token }}
+                  {% endif %}
+                </div>
+                <div class="modal-action">
+                  <form method="dialog">
+                    <button class="btn btn-primary">Close</button>
+                  </form>
+                </div>
+              </div>
+              <form method="dialog" class="modal-backdrop">
+                <button>close</button>
+              </form>
+            </dialog>
+
+            <dialog id="refresh_token_modal_{{ key.id }}" class="modal modal-bottom sm:modal-middle">
+              <div class="modal-box w-11/12 max-w-2xl">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="font-bold text-lg text-secondary">Refresh Token: {{ key.source }}</h3>
+                  <form method="dialog">
+                    <button class="btn btn-sm btn-circle btn-ghost">✕</button>
+                  </form>
+                </div>
+                <div class="bg-base-200 p-4 rounded-lg break-all font-mono text-xs leading-relaxed max-h-60 overflow-y-auto">
+                  {% if not key.refresh_token %}
+                  <span class="text-error font-sans italic">No data available.</span>
+                  {% else %}
+                  {{ key.refresh_token }}
+                  {% endif %}
+                </div>
+                <div class="modal-action">
+                  <form method="dialog">
+                    <button class="btn btn-primary">Close</button>
+                  </form>
+                </div>
+              </div>
+              <form method="dialog" class="modal-backdrop">
+                <button>close</button>
+              </form>
+            </dialog>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block additional_js %}
+{# jQuery scripts for old Semantic UI modals are no longer needed as we use native DaisyUI/dialog #}
+{% endblock additional_js %}

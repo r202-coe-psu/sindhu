@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, current_app
 
 module = Blueprint("sites", __name__)
 
@@ -8,4 +8,8 @@ def index():
 
 @module.route("/monitor")
 def monitor():
-    return render_template("sites/monitor.html")
+    api_url = current_app.config.get("SINDHU_API_BASE_URL")
+    return render_template(
+        "sites/monitor.html",
+        api_url=api_url
+    )
