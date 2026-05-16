@@ -8,6 +8,7 @@ from fastapi.security import (
 
 import typing
 
+from sindhu.api.core.security import get_jwt_handler
 from sindhu.api.core import security, deps
 from sindhu.api.core.config import settings
 from sindhu import models, schemas
@@ -27,19 +28,32 @@ async def login_for_access_token(
     user = await models.users.User.find_one(
         models.users.User.username == form_data.username
     )
-    if not user:
+    if not user or not user.verify_password(form_data.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    user.last_login_date = datetime.datetime.now()
+    await user.save()
+
     access_token_expires = datetime.timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
-    access_token = security.create_access_token(
-        data={"sub": str(user.id)}, expires_delta=access_token_expires
+    return schemas.users.Token(
+        access_token=security.create_access_token(
+            data={"sub": str(user.id)}, expires_delta=access_token_expires
+        ),
+        refresh_token=security.create_refresh_token(
+            data={"sub": str(user.id)}, expires_delta=access_token_expires
+        ),
+        token_type="Bearer",
+        scope="",
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        expires_at=datetime.datetime.now() + access_token_expires,
+        issued_at=user.last_login_date,
     )
-    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.post(

@@ -22,9 +22,11 @@ from sindhu.web import sindhu_api_clients
 
 from sindhu_client import models as sindhu_client_models
 
-# from sindhu_client.api.v1 import (
-  
-# )
+from sindhu_client.api.v1 import (
+    authentication_v1_auth_login_post,
+    refresh_token_v1_auth_refresh_token_get,
+    get_me_v1_users_me_get,
+)
 
 
 module = Blueprint("accounts", __name__)
@@ -55,14 +57,14 @@ def get_token():
         "expires_at": session["tokens"]["expires_at"],
         "token_type": session["tokens"]["token_type"],
     }
-    # expires_at = datetime.datetime.fromisoformat(session["tokens"]["expires_at"])
-    # if expires_at > datetime.datetime.now():
-    #     print("token expired")
-    #     client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
-    #     response = refresh_token_v1_auth_refresh_token_get.sync_detailed(
-    #         client=client, credentials=session["tokens"]["refresh_token"]
-    #     )
-    #     token = response
+    expires_at = datetime.datetime.fromisoformat(session["tokens"]["expires_at"])
+    if expires_at > datetime.datetime.now():
+        print("token expired")
+        client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
+        response = refresh_token_v1_auth_refresh_token_get.sync_detailed(
+            client=client, credentials=session["tokens"]["refresh_token"]
+        )
+        token = response
 
     return jsonify(token)
 
@@ -114,7 +116,7 @@ def authorized_sindhu():
     client = sindhu_api_clients.client.get_current_client()
     response = get_me_v1_users_me_get.sync(client=client)
 
-    user = sindhu_client_models.users.User(response.to_dict())
+    user = sindhu_client_models.User(response.to_dict())
     login_user(user)
     session["me"] = response.to_dict()
 
@@ -128,121 +130,5 @@ def logout():
     session.clear()
 
     return redirect(url_for("sites.index"))
-
-
-@module.route("/accounts/management", methods=["GET", "POST"])
-def management():
-    form = forms.users.SearchUserForm()
-    email = request.args.get("email", None)
-    username = request.args.get("username", None)
-    page = int(request.args.get("page", default=1))
-
-    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
-    response = get_all_v1_users_get.sync(client=client, current_page=page)
-
-    if email or username:
-        response = get_all_v1_users_get.sync(
-            client=client,
-            current_page=page,
-            email=email,
-            username=username,
-        )
-
-    form.email.data = email
-    form.username.data = username
-
-    users = response.users
-    pagination = paginations.get_paginates(
-        data=users, count=response.count, current_page=response.current_page
-    )
-    return render_template(
-        "accounts/management.html",
-        form=form,
-        users=pagination["data"],
-        pagination=pagination,
-        page=page,
-    )
-
-
-@module.route("/create_update", methods=["GET", "POST"])
-def create_update():
-    user = None
-    user_id = request.args.get("user_id", "")
-    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
-    if user_id:
-        user = get_v1_users_user_id_get.sync(client=client, user_id=user_id)
-    form = forms.users.UserForm()
-
-    if not form.validate_on_submit():
-        if user:
-            form.username.data = user.username
-            form.first_name.data = user.first_name
-            form.last_name.data = user.last_name
-            form.email.data = user.email
-            form.password.data = user.password
-            form.confirm_password.data = user.confirm_password
-
-        return render_template(
-            "/accounts/create_update.html",
-            form=form,
-            user=user,
-        )
-    form_data = form.data
-
-    user_body = sindhu_client_models.RegisteredUser(
-        username=form_data["username"],
-        email=form_data["email"],
-        first_name=form_data["first_name"],
-        last_name=form_data["last_name"],
-        password=form_data["password"],
-        confirm_password=form_data["confirm_password"],
-    )
-
-    if user:
-        db_user = update_v1_users_user_id_update_put.sync_detailed(
-            client=client, user_id=user_id, body=user_body
-        )
-    else:
-        db_user = create_v1_users_create_post.sync_detailed(
-            client=client, body=user_body
-        )
-    if not db_user:
-        render_template(
-            "/accounts/create_update.html",
-            form=form,
-            user=user,
-            message="Error can't save station data.",
-        )
-    return redirect(url_for("accounts.management"))
-
-
-@module.route("/accounts/<user_id>/grant_role/<role>", methods=["GET", "POST"])
-def grant_role(user_id, role):
-    user = None
-    page = int(request.args.get("page", 1))
-    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
-    if user_id:
-        user = get_v1_users_user_id_get.sync(client=client, user_id=user_id)
-    if role in user.roles:
-        user = set_role_v1_users_user_id_set_role_put.sync(
-            client=client, user_id=user_id, role=role, action="remove"
-        )
-    else:
-        user = set_role_v1_users_user_id_set_role_put.sync(
-            client=client, user_id=user_id, role=role, action="add"
-        )
-    return redirect(url_for("accounts.management", page=page))
-
-
-@module.route("/accounts/<user_id>/delete", methods=["GET", "POST"])
-def delete_user(user_id):
-    page = int(request.args.get("page", 1))
-    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
-    if user_id:
-        user = set_status_v1_users_user_id_set_status_put.sync(
-            client=client, user_id=user_id, status="disactive"
-        )
-
-    return redirect(url_for("accounts.management", page=page))
 
 

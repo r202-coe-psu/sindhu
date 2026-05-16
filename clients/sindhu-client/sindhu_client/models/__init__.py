@@ -18,6 +18,7 @@ from .station_metadata_type_0 import StationMetadataType0
 from .system_setting_response import SystemSettingResponse
 from .token import Token
 from .update_system_setting import UpdateSystemSetting
+from .user import User
 from .validation_error import ValidationError
 
 __all__ = (
@@ -39,5 +40,6 @@ __all__ = (
     "SystemSettingResponse",
     "Token",
     "UpdateSystemSetting",
+    "User",
     "ValidationError",
 )
