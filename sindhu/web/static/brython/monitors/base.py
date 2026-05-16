@@ -42,13 +42,14 @@ class BaseMonitor:
 
     def start(self):
         """Start function defined in child class"""
+        self.running = True
         aio.run(self.monitor())
-        pass
 
     async def monitor(self):
         await self.setup()
 
         while self.running:
+            self.set_map_loading(True)
             print(f"monitor: wake up {datetime.datetime.now()}")
             print(f"monitor: {self.monitor_name} monitor")
             print(f"monitor: sleep {self.acquisition_interval}s")
@@ -59,6 +60,7 @@ class BaseMonitor:
             # )
             stations = {}
             await self.map.update(self.source, stations)
+            self.set_map_loading(False)
 
             # wait for next aquisition
             await aio.sleep(self.acquisition_interval)
@@ -72,6 +74,7 @@ class BaseMonitor:
         min_zoom = self.system_setting["min_zoom"]
 
         self.map = BaseMap([center[1], center[0]], zoom, min_zoom, self.lang_code)
+        self.set_map_loading(False)
 
     def on_filter_clicked(self, ev):
         timer.set_timeout(lambda: aio.run(self.on_filter(ev)), 50)
@@ -85,3 +88,10 @@ class BaseMonitor:
     Helper functions
     ===========================================================================
     """
+
+    def set_map_loading(self, is_loading: bool):
+        el = document["loading_map"]
+        if is_loading:
+            el.classList.remove("opacity-0", "pointer-events-none")
+        else:
+            el.classList.add("opacity-0", "pointer-events-none")

@@ -28,7 +28,7 @@ class BaseMap(Map):
     async def update(
         self, document_id, data, is_live_update=True, target_timestamp=None
     ):
-        document["loading_map"].className = "ui inactive inverted dimmer"
-
         # logic handler
+        await aio.sleep(0.5)  # Simulate some processing time for smooth transition
 
+    """Helper functions"""
