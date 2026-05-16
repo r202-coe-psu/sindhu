@@ -1,0 +1,1064 @@
+{% import '/base/error-handler.html' as eh %}
+
+{% macro render_field(
+  field,
+  type="input",
+  class_="",
+  placeholder="",
+  prefix_icon="",
+  suffix_icon="",
+  top_left_label="",
+  top_right_label="",
+  bottom_left_label="",
+  bottom_right_label="",
+  disabled=False,
+  disabled_optional_text=False,
+  readonly=False
+  ) -%}
+
+{% set style = "input items-center bg-base-200  w-full" %}
+{% if field.errors | count > 0 %}
+{% set style = style + " " + "%s-error" | format(type) %}
+{% endif %}
+
+{% if class_ %}
+{% set style = style + " " + class_ %}
+{% endif %}
+
+<fieldset class="w-full fieldset" id="field-{{ field.id }}">
+  <legend class="fieldset-legend">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+  </legend>
+  {% if readonly %}
+  {{ field(placeholder=placeholder, class_=style + " input-readonly", disabled="disabled", **kwargs) }}
+
+  {# เพิ่ม hidden field เพื่อให้ค่าสามารถส่งไปกับ form ได้ #}
+  <input type="hidden" name="{{ field.name }}" value="{{ field.data }}" />
+  {% else %}
+  {{ field(placeholder=placeholder, class_=style, **kwargs) }}
+  {% endif %}
+
+  <span class="validator-hint">
+    {% for error in field.errors %}
+    {% if 'This field is required' in error %}
+    กรุณากรอกข้อมูล
+    {% else %}
+    {{ error }}
+    {% endif %}
+    {% if not loop.last %}<br />{% endif %}
+    {% endfor %}
+  </span>
+</fieldset>
+{%- endmacro %}
+
+{# render_textare #}
+{% macro render_textarea(
+  field,
+  rows='4',
+  class_='',
+  style='',
+  placeholder="",
+  prefix_icon="",
+  suffix_icon="",
+  top_left_label="",
+  top_right_label="",
+  bottom_left_label="",
+  bottom_right_label="",
+  disabled=False,
+  disabled_optional_text=False,
+  readonly=False
+  ) -%}
+
+{%- set error_class = '%s' | format(eh.get_validate_class(field.errors)) -%}
+<div class="field {{ error_class }}">
+  {# {{ render_label(field) }} #}
+  <label class="text-base font-semibold mb-4" for="{{ field.id }}">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+
+  </label>
+  <div class="input-group ">
+    {% if prefix_icon %}<span class="prefix-icon"><i class="{{ prefix_icon }}"></i></span>{% endif %}
+    {% if suffix_icon %}<span class="suffix-icon"><i class="{{ suffix_icon }}"></i></span>{% endif %}
+  </div>
+
+  {{ field(placeholder=placeholder, rows=rows, class_='mt-2 textarea ' ~ class_, style=style, **kwargs) }}
+
+  {%- set error_class = '%s' | format(eh.get_validate_class(field.errors)) -%}
+</div>
+
+{%- endmacro %}
+
+{%- macro render_label(field) -%}
+{% if field.flags.required %}
+{% set requirement_label = " <span class=\"ui red text\">*</span> <span style=\"color: grey; font-weight: 400\">(required)</span>" %}
+{{ field.label(field.label.text +  requirement_label | safe) }}
+{% else %}
+{{ field.label }}
+{% endif %}
+
+{%- endmacro %}
+
+{% macro render_checkbox(field) -%}
+<div class="form-control flex items-center">
+  <label class="label cursor-pointer">
+    <input type="checkbox" class="checkbox checkbox-primary" id="{{ field.id }}" name="{{ field.name }}"
+      {% if field.data == True %}checked{% endif %} />
+    <span class="label-text ml-2">{{ field.label.text }}</span>
+  </label>
+  {% if field.errors %}
+  <span class="text-error text-sm mt-1">
+    {% for error in field.errors %}
+    {{ error }}
+    {% if not loop.last %}<br />{% endif %}
+    {% endfor %}
+  </span>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro render_fileinput(field) -%}
+<fieldset class="form-control w-full">
+  <legend class="text-xs py-2 font-bold">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+  </legend>
+  <div class="input-group">
+    <input type="file" placeholder="{{ field.label.text }}" class="file-input w-full attach-file-{{ field.name }}" />
+    {{ field(class_="hidden") }}
+  </div>
+</fieldset>
+{%- endmacro %}
+
+
+{% macro render_editor(field, class_='', style='', placeholder='') -%}
+<fieldset class="w-full fieldset !gap-0" id="field-{{ field.id }}">
+  <legend class="fieldset-legend">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+  </legend>
+
+  {# Hidden field for form submission (avoid auto validator generation) #}
+  <input type="hidden" name="{{ field.name }}" id="{{ field.id }}" value="{{ field.data or '' }}"
+    {% if placeholder %}data-placeholder="{{ placeholder }}" {% endif %} />
+
+  {# Quill editor container #}
+  <div id="{{ field.id }}-editor" class="{{ class_ }}" style="{{ style }}"></div>
+
+  {# Only show validator hints for actual errors, not field info #}
+  {% if field.errors %}
+  <span class="validator-hint text-error !mt-1">
+    {% for error in field.errors %}
+    {% if 'This field is required' in error %}
+    กรุณากรอกข้อมูล
+    {% else %}
+    {{ error }}
+    {% endif %}
+    {% if not loop.last %}<br />{% endif %}
+    {% endfor %}
+  </span>
+  {% endif %}
+</fieldset>
+{%- endmacro %}
+
+{% macro render_calendar(field, calendar_id='calendar') -%}
+<fieldset class="w-full fieldset">
+  <legend class="fieldset-legend">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+  </legend>
+  <div class="relative w-full" id="{{ calendar_id }}">
+    <input type="text" id="{{ field.id }}" name="{{ field.name }}" class="input bg-base-200 input-bordered w-full"
+      placeholder="Select a date" value="{{ field.data }}" autocomplete="off" />
+  </div>
+  <span class="validator-hint">
+    {% for error in field.errors %}
+    {% if 'This field is required' in error %}
+    กรุณากรอกข้อมูล
+    {% else %}
+    {{ error }}
+    {% endif %}
+    {% if not loop.last %}<br />{% endif %}
+    {% endfor %}
+  </span>
+</fieldset>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    flatpickr("#{{ field.id }}", {
+      enableTime: true, // Enable time selection
+      dateFormat: "Y-m-d H:i", // Format for date and time
+      maxDate: new Date(), // Prevent selecting future dates
+      defaultDate: "{{ field.data }}" // Pre-fill with existing value if available
+    });
+  });
+</script>
+
+{%- endmacro %}
+
+{% macro render_calendar_overdate(field, calendar_id='calendar') -%}
+<fieldset class="w-full fieldset">
+  <legend class="fieldset-legend">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+  </legend>
+  <div class="relative w-full" id="{{ calendar_id }}">
+    <input type="text" id="{{ field.id }}" name="{{ field.name }}" class="input items-center bg-base-200  w-full"
+      placeholder="Select a date" value="{{ field.data.strftime('%Y-%m-%d %H:%M') if field.data and field.data is not string else (field.data or '') }}"
+      autocomplete="off" />
+  </div>
+  <span class="validator-hint">
+    {% for error in field.errors %}
+    {% if 'This field is required' in error %}
+    กรุณากรอกข้อมูล
+    {% else %}
+    {{ error }}
+    {% endif %}
+    {% if not loop.last %}<br />{% endif %}
+    {% endfor %}
+  </span>
+</fieldset>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    flatpickr("#{{ field.id }}", {
+      enableTime: true, // Enable time selection
+      dateFormat: "Y-m-d H:i", // Format for date and time
+      defaultDate: "{{ field.data }}" // Pre-fill with existing value if available
+    });
+  });
+</script>
+
+{%- endmacro %}
+
+{% macro render_select_field(
+  field,
+  type="select",
+  class_="",
+  placeholder="",
+  prefix_icon="",
+  suffix_icon="",
+  top_left_label="",
+  top_right_label="",
+  bottom_left_label="",
+  bottom_right_label="",
+  disabled=False,
+  disabled_optional_text=False,
+  readonly=False) %}
+{% set style = "select flex bg-base-200 w-full items-center gap-2" %}
+
+{% if field.errors | count > 0 %}
+{% set style = style + " " + "%s-error" | format(type) %}
+{% endif %}
+
+{% if class_ %}
+{% set style = style + " " + class_ %}
+{% endif %}
+
+<fieldset class="w-full fieldset" id="field-{{ field.id }}">
+  <legend class="fieldset-legend">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+  </legend>
+  {% if readonly %}
+  {{ field(placeholder=placeholder, class_=style + " input-readonly", disabled="disabled", **kwargs) }}
+  {# เพิ่ม hidden field เพื่อให้ค่าสามารถส่งไปกับ form ได้ #}
+  <input type="hidden" name="{{ field.name }}" value="{{ field.data }}" />
+  {% else %}
+  {{ field(placeholder=placeholder, class_=style, **kwargs) }}
+  {% endif %}
+  <span class="validator-hint">
+    {% for error in field.errors %}
+    {% if 'This field is required' in error %}
+    กรุณากรอกข้อมูล
+    {% else %}
+    {{ error }}
+    {% endif %}
+    {% if not loop.last %}<br />{% endif %}
+    {% endfor %}
+  </span>
+</fieldset>
+{% endmacro %}
+
+{% macro render_select_multiple(field, columns=2) %}
+{% set selected = field.data if field.data else [] %}
+<fieldset class="w-full fieldset" id="field-{{ field.id }}">
+  <legend class="fieldset-legend">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+  </legend>
+
+  <div class="grid grid-cols-1 md:grid-cols-{{ columns }} gap-2 p-3 bg-base-200 rounded-box">
+    {% for value, label in field.choices %}
+    {% set is_checked = value in selected %}
+    <label class="flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-base-300 transition-colors
+                  {{ 'bg-primary/10 border border-primary/30' if is_checked else 'border border-transparent' }}">
+      <input type="checkbox"
+             name="{{ field.name }}"
+             value="{{ value }}"
+             class="checkbox checkbox-primary checkbox-sm"
+             {% if is_checked %}checked{% endif %} />
+      <span class="text-sm {{ 'font-medium text-primary' if is_checked else '' }}">{{ label }}</span>
+    </label>
+    {% endfor %}
+  </div>
+
+  {% if field.errors %}
+  <span class="validator-hint text-error">
+    {% for error in field.errors %}
+    {% if 'This field is required' in error %}กรุณาเลือกอย่างน้อย 1 รายการ
+    {% else %}{{ error }}{% endif %}
+    {% if not loop.last %}<br />{% endif %}
+    {% endfor %}
+  </span>
+  {% endif %}
+</fieldset>
+{% endmacro %}
+
+{% macro render_search_select_inputable_field(field, id_prefix='', disabled_optional_text=True, readonly=False, disabled=False, placeholder="", choices=[]) %}
+{% set field_id = id_prefix + field.id %}
+{% set selected_values = field.data if field.data else [] %}
+{% if not placeholder %}
+{% set placeholder = "" %}
+{% endif %}
+
+<fieldset class="w-full fieldset" id="field-{{ field.id }}">
+  <legend class="fieldset-legend" onclick="document.getElementById('{{ field_id }}-input').focus();">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+    {% if not field.flags.required and not disabled_optional_text %}<p class="fieldset-label">(ไม่บังคับ)</p>{% endif %}
+  </legend>
+
+
+  <div class="dropdown w-full">
+    {# Input with integrated dropdown #}
+    <div tabindex="0" class="input input-bordered bg-base-200 w-full flex flex-wrap items-center gap-2 px-2 py-1">
+      {# Tags container #}
+      <div id="{{ field_id }}-tags-container" class="flex flex-wrap gap-2 items-center">
+        {% for value in selected_values %}
+        <span class="badge badge-secondary flex items-center gap-1">{{ value }}</span>
+        {% endfor %}
+      </div>
+
+      <input type="text" id="{{ field_id }}-input" tabindex="0" placeholder="{{ placeholder }}"
+        class="min-w-[4rem] flex-grow w-20 bg-transparent outline-none" autocomplete="off"
+        oninput="filterDropdownChoices('{{ field_id }}')" onkeydown="handleTagInput(event, '{{ field_id }}')"
+        {% if disabled %}disabled{% endif %} {% if readonly %}readonly{% endif %} />
+    </div>
+
+
+    {# Dropdown #}
+    <ul tabindex="0" id="{{ field_id }}-dropdown"
+      class="dropdown-content menu mt-2 p-2 flex flex-col shadow bg-base-100 rounded-box max-w-max max-h-80 overflow-y-auto">
+
+      <li class="dropdown-item">
+        {% for choice in choices %}
+        <button type="button" class="w-full text-left px-4 py-2 hover:bg-red-500"
+          onclick="addTag('{{ field_id }}', '{{ choice }}')">{{ choice }}</button>
+        {% endfor %}
+      </li>
+
+    </ul>
+  </div>
+
+  {# Hidden input to store tags as a comma-separated string #}
+  <input type="hidden" id="{{ field_id }}" name="{{ field.name }}" value="{{ selected_values | join(',') }}" />
+
+  <p class="validator-hint text-error">
+    {% for error in field.errors %}
+    {% if 'This field is required' in error %}
+    กรุณากรอกข้อมูล
+    {% else %}
+    {{ error }}
+    {% endif %}
+    {% if not loop.last %}<br />{% endif %}
+    {% endfor %}
+  </p>
+</fieldset>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    function handleTagInput(event, fieldId) {
+      const input = document.getElementById(fieldId + '-input'); // Ensure input is defined
+      const hiddenInput = document.getElementById(fieldId); // Get the hidden input
+      const tagContainer = document.getElementById(fieldId + '-tags-container'); // Get the tag container
+
+      if (event.key === 'Enter' || event.key === ',') {
+        event.preventDefault();
+        const newTag = input.value.trim();
+
+        if (newTag) {
+          addTag(fieldId, newTag);
+          input.value = ''; // Clear the input
+        }
+      } else if (event.key === 'Backspace' || event.key == 'Delete' && input.value.trim() === '') {
+        // Handle backspace when input is empty
+        const currentTags = hiddenInput.value ? hiddenInput.value.split(',') : [];
+        if (currentTags.length > 0) {
+          const lastTag = currentTags.pop();
+          hiddenInput.value = currentTags.join(',');
+
+          // Remove the last tag visually
+          const badges = tagContainer.querySelectorAll('.badge');
+          if (badges.length > 0) {
+            badges[badges.length - 1].remove();
+          }
+
+          // Restore placeholder if no tags are left
+          if (currentTags.length === 0) {
+            input.placeholder = '';
+          }
+        }
+      }
+    }
+
+    function addTag(fieldId, tag) {
+      const hiddenInput = document.getElementById(fieldId);
+      const input = document.getElementById(fieldId + '-input');
+      const currentTags = hiddenInput.value ? hiddenInput.value.split(',') : [];
+      if (!currentTags.includes(tag)) {
+        currentTags.push(tag);
+        hiddenInput.value = currentTags.join(',');
+
+        // Add the tag visually
+        const tagContainer = document.getElementById(fieldId + '-tags-container');
+        const tagElement = document.createElement('span');
+        tagElement.className = 'badge badge-secondary flex items-center gap-1';
+        tagElement.innerHTML = `
+          ${tag}
+        `;
+        tagContainer.appendChild(tagElement);
+
+        // Remove placeholder if there are tags
+        input.placeholder = '';
+      }
+    }
+
+    function removeTag(fieldId, tag) {
+      const hiddenInput = document.getElementById(fieldId);
+      const input = document.getElementById(fieldId + '-input');
+      const currentTags = hiddenInput.value.split(',');
+      const updatedTags = currentTags.filter(t => t !== tag);
+      hiddenInput.value = updatedTags.join(',');
+
+      // Remove the tag visually
+      const tagContainer = document.getElementById(fieldId + '-tags-container');
+      const badges = tagContainer.querySelectorAll('.badge');
+      badges.forEach(badge => {
+        const badgeText = badge.textContent.trim().replace('✕', '').trim(); // Remove the "✕" and trim
+        if (badgeText === tag) {
+          badge.remove();
+        }
+      });
+
+      // Restore placeholder if no tags are left
+      if (updatedTags.length === 0) {
+        input.placeholder = 'Please add tag then press enter';
+      }
+    }
+
+    function filterDropdownChoices(fieldId) {
+      const input = document.getElementById(fieldId + '-input');
+      const dropdown = document.getElementById(fieldId + '-dropdown');
+      const choices = dropdown.querySelectorAll('button');
+      const filterText = input.value.toLowerCase().trim();
+      let hasMatch = false;
+
+      choices.forEach(choice => {
+        if (choice.textContent.toLowerCase().includes(filterText)) {
+          choice.style.display = 'block';
+          hasMatch = true;
+        } else {
+          choice.style.display = 'none';
+        }
+      });
+
+      // Show "No results match" if no choices match
+      let noResultElement = dropdown.querySelector('.no-results');
+      if (!hasMatch) {
+        if (!noResultElement) {
+          noResultElement = document.createElement('li');
+          noResultElement.className = 'no-results text-center text-gray-500 w-50';
+          noResultElement.textContent = 'No results match';
+          dropdown.appendChild(noResultElement);
+        }
+      } else if (noResultElement) {
+        noResultElement.remove();
+      }
+    }
+
+    // Attach event listener for dynamically created remove buttons
+    document.addEventListener('click', function (event) {
+      if (event.target.classList.contains('remove-tag')) {
+        const fieldId = event.target.getAttribute('data-field-id');
+        const tag = event.target.getAttribute('data-tag');
+        removeTag(fieldId, tag);
+      }
+    });
+
+    // Attach functions to the global window object
+    window.handleTagInput = handleTagInput;
+    window.addTag = addTag;
+    window.removeTag = removeTag;
+    window.filterDropdownChoices = filterDropdownChoices;
+  });
+</script>
+
+{% endmacro %}
+
+{% macro render_list_input(field, placeholder="Enter items separated by commas", class_="") -%}
+<fieldset class="w-full fieldset mb-4">
+  <legend class="fieldset-legend text-base">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+  </legend>
+  <div class="relative w-full">
+    {# Input field #}
+    <input type="text" id="{{ field.id }}" name="{{ field.name }}" class="input input-bordered w-full {{ class_ }}"
+      placeholder="{{ placeholder }}" value="{{ field.data }}" autocomplete="off" />
+  </div>
+
+  <span class="validator-hint">
+    {% for error in field.errors %}
+    {% if 'This field is required' in error %}
+    กรุณากรอกข้อมูล
+    {% else %}
+    {{ error }}
+    {% endif %}
+    {% if not loop.last %}<br />{% endif %}
+    {% endfor %}
+  </span>
+</fieldset>
+{%- endmacro %}
+
+{% macro render_file_dropzone(field, accept="application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/png,image/jpeg,.png,.jpg,.jpeg", max_files=10, help_text="Drag & drop PDF/XLSX/PNG/JPEG files here or click to select", class_="") -%}
+<fieldset class="form-control w-full mb-4">
+  <legend class="text-xs py-2 font-bold">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+  </legend>
+  <div id="dropzone-{{ field.id }}"
+    class="dropzone border-dashed border-2 border-gray-300 rounded-lg p-6 text-center cursor-pointer {{ class_ }}"
+    style="transition: border-color 0.2s" onclick="document.getElementById('fileinput-{{ field.id }}').click();"
+    ondragover="event.preventDefault(); this.style.borderColor='#3b82f6';"
+    ondragleave="event.preventDefault(); this.style.borderColor='#d1d5db';"
+    ondrop="handleDrop(event, '{{ field.id }}', {{ max_files }});">
+    <div class="dz-message text-gray-500">
+      <span class="block mb-2">{{ help_text }}</span>
+      <span class="text-xs text-gray-400">Accepted: PDF (.pdf), XLSX (.xlsx), PNG (.png), JPG/JPEG (.jpg/.jpeg)</span>
+    </div>
+    <ul id="file-list-{{ field.id }}" class="mt-4 text-left text-sm" onclick="event.stopPropagation();">
+    </ul>
+  </div>
+  {{ field(class_="hidden", id="fileinput-" ~ field.id, multiple=True, accept=accept) }}
+  <span class="validator-hint">
+    {% for error in field.errors %}
+    {{ error }}
+    {% if not loop.last %}<br />{% endif %}
+    {% endfor %}
+  </span>
+</fieldset>
+<script>
+  function handleDrop(event, fieldId, maxFiles) {
+    event.preventDefault();
+    const input = document.getElementById('fileinput-' + fieldId);
+    let files = Array.from(event.dataTransfer.files);
+    files = files.filter(file =>
+      file.type === 'application/pdf' ||
+      file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      file.type === 'image/png' ||
+      file.type === 'image/jpeg' ||
+      file.name.endsWith('.pdf') ||
+      file.name.endsWith('.xlsx') ||
+      file.name.endsWith('.png') ||
+      file.name.endsWith('.jpg') ||
+      file.name.endsWith('.jpeg')
+    );
+    if (files.length > maxFiles) {
+      alert('You can upload up to ' + maxFiles + ' files.');
+      files = files.slice(0, maxFiles);
+    }
+    input.files = createFileList(files);
+    updateFileList(fieldId, files);
+  }
+
+  function updateFileList(fieldId, files) {
+    const list = document.getElementById('file-list-' + fieldId);
+    list.innerHTML = '';
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const li = document.createElement('li');
+      li.className = 'flex items-center justify-between p-2 bg-gray-50 rounded mb-2';
+      li.onclick = function (e) {
+        e.stopPropagation();
+      }; // Prevent triggering dropzone click
+      li.innerHTML = `
+        <span class="flex-1">${file.name} (${Math.round(file.size / 1024)} KB)</span>
+        <button type="button" class="btn btn-sm btn-error ml-2" onclick="event.stopPropagation(); removeFile('${fieldId}', ${i})">
+          <i class="ph ph-trash"></i> Remove
+        </button>
+      `;
+      list.appendChild(li);
+    }
+  }
+
+  function removeFile(fieldId, fileIndex) {
+    const input = document.getElementById('fileinput-' + fieldId);
+    const files = Array.from(input.files);
+    files.splice(fileIndex, 1);
+    input.files = createFileList(files);
+    updateFileList(fieldId, files);
+  }
+
+  function createFileList(files) {
+    const dataTransfer = new DataTransfer();
+    files.forEach(file => dataTransfer.items.add(file));
+    return dataTransfer.files;
+  }
+  document.addEventListener('DOMContentLoaded', function () {
+    const dropzones = document.querySelectorAll('[id^="dropzone-"]');
+    dropzones.forEach(function (dropzone) {
+      const fieldId = dropzone.id.replace('dropzone-', '');
+      const input = document.getElementById('fileinput-' + fieldId);
+      input.addEventListener('change', function () {
+        let files = Array.from(input.files).filter(file =>
+          file.type === 'application/pdf' ||
+          file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+          file.type === 'image/png' ||
+          file.type === 'image/jpeg' ||
+          file.name.endsWith('.pdf') ||
+          file.name.endsWith('.xlsx') ||
+          file.name.endsWith('.png') ||
+          file.name.endsWith('.jpg') ||
+          file.name.endsWith('.jpeg')
+        );
+        input.files = createFileList(files);
+        updateFileList(fieldId, files);
+      });
+    });
+  });
+
+  // Make functions globally available
+  window.handleDrop = handleDrop;
+  window.updateFileList = updateFileList;
+  window.removeFile = removeFile;
+  window.createFileList = createFileList;
+</script>
+<style>
+  .dropzone:hover {
+    border-color: #3b82f6;
+  }
+
+  .dropzone ul {
+    margin: 0;
+    padding: 0;
+  }
+
+  .dropzone li {
+    list-style: none;
+  }
+</style>
+{%- endmacro %}
+
+{% macro render_cve_search_select(field, api_url="/api/cve/search", placeholder="Search CVEs...", class_="") -%}
+{% set field_id = field.id %}
+{% if field.data %}
+{% if field.data is string %}
+{% set selected_values = field.data.split(',') if field.data else [] %}
+{% elif field.data is iterable %}
+{% set selected_values = field.data | list %}
+{% else %}
+{% set selected_values = [field.data] %}
+{% endif %}
+{% else %}
+{% set selected_values = [] %}
+{% endif %}
+
+<fieldset class="w-full fieldset" id="field-{{ field.id }}">
+  <legend class="fieldset-legend">
+    {{ field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+  </legend>
+
+  <div class="dropdown dropdown-open w-full" id="{{ field_id }}-dropdown-container">
+    {# Input container with selected tags #}
+    <div
+      class="input input-bordered bg-base-200 w-full min-h-12 flex flex-wrap items-center gap-2 px-2 py-1 cursor-text"
+      onclick="document.getElementById('{{ field_id }}-search-input').focus();">
+
+      {# Selected CVE tags container #}
+      <div id="{{ field_id }}-tags-container" class="flex flex-wrap gap-1">
+        {% if selected_values %}
+        {% for cve_id in selected_values %}
+        <div class="badge badge-primary gap-2" data-cve="{{ cve_id }}">
+          {{ cve_id }}
+          <button type="button" class="btn btn-ghost btn-xs"
+            onclick="removeCVE('{{ field_id }}', '{{ cve_id }}')">×</button>
+        </div>
+        {% endfor %}
+        {% endif %}
+      </div>
+
+      {# Search input #}
+      <input type="text" id="{{ field_id }}-search-input" class="flex-1 min-w-32 bg-transparent outline-none"
+        placeholder="{{ placeholder if not selected_values else 'Search more CVEs...' }}" name="q" autocomplete="off" />
+    </div>
+
+    {# Dropdown results #}
+    <div
+      class="dropdown-content bg-base-100 rounded-box w-full max-h-60 overflow-y-auto z-50 shadow-lg border border-base-300 hidden {{ class_ }}"
+      id="{{ field_id }}-results">
+      {# Initial loading message #}
+      <div class="p-2">
+        <span class="text-base-content/50">Click to load CVEs...</span>
+      </div>
+    </div>
+  </div>
+
+  {# Hidden select field to store selected CVE IDs for SelectMultipleField #}
+  <select multiple style="display: none;" id="{{ field_id }}" name="{{ field.name }}">
+    {% if selected_values %}
+    {% for cve_id in selected_values %}
+    <option value="{{ cve_id }}" selected>{{ cve_id }}</option>
+    {% endfor %}
+    {% endif %}
+  </select>
+
+  <span class="validator-hint">
+    {% for error in field.errors %}
+    {% if 'This field is required' in error %}
+    กรุณากรอกข้อมูล
+    {% else %}
+    {{ error }}
+    {% endif %}
+    {% if not loop.last %}<br />{% endif %}
+    {% endfor %}
+  </span>
+</fieldset>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const fieldId = '{{ field_id }}';
+    const searchInput = document.getElementById(fieldId + '-search-input');
+    const resultsContainer = document.getElementById(fieldId + '-results');
+    const selectElement = document.getElementById(fieldId);
+
+    // AbortController for cancelling in-flight requests
+    let currentController = null;
+
+    // Show/hide dropdown on focus/blur
+    searchInput.addEventListener('focus', function () {
+      resultsContainer.classList.remove('hidden');
+      // Load recent CVEs if no search term and no results yet
+      if (!this.value && (!resultsContainer.innerHTML.trim() || resultsContainer.innerHTML.includes('Click to load CVEs') || resultsContainer.innerHTML.includes('Type to search'))) {
+        loadRecentCVEs();
+      }
+    });
+
+    // Hide dropdown when clicking outside
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#' + fieldId + '-dropdown-container')) {
+        resultsContainer.classList.add('hidden');
+      }
+    });
+
+    // Handle search input with debouncing
+    let searchTimeout;
+    searchInput.addEventListener('input', function () {
+      const query = this.value.trim();
+      resultsContainer.classList.remove('hidden');
+
+      // Clear previous timeout
+      clearTimeout(searchTimeout);
+
+      // Cancel any in-flight request
+      if (currentController) {
+        currentController.abort();
+        currentController = null;
+      }
+
+      // Debounce search for 400ms (increased for NVD API rate limits)
+      searchTimeout = setTimeout(() => {
+        if (query.length >= 3) {
+          // Create new abort controller for this request
+          currentController = new AbortController();
+          const apiUrl = '{{ api_url }}?format=html&field_id={{ field_id }}&q=' + encodeURIComponent(query);
+
+          // Show loading indicator
+          resultsContainer.innerHTML = '<div class="p-3 text-center"><span class="loading loading-spinner loading-sm"></span> Searching NVD...</div>';
+
+          fetch(apiUrl, { signal: currentController.signal })
+            .then(response => {
+              if (!response.ok) {
+                throw new Error(`API error: ${response.status}`);
+              }
+              return response.text();
+            })
+            .then(html => {
+              // Only update if this is still the current request
+              if (searchInput.value.trim() === query) {
+                resultsContainer.innerHTML = html;
+              }
+            })
+            .catch(err => {
+              if (err.name === 'AbortError') {
+                // Request was cancelled, ignore
+                return;
+              }
+              console.error('CVE search failed:', err);
+              resultsContainer.innerHTML = '<div class="p-3 text-center text-error">Search failed. Try again.</div>';
+            })
+            .finally(() => {
+              currentController = null;
+            });
+        } else if (query.length === 0) {
+          loadRecentCVEs();
+        } else {
+          resultsContainer.innerHTML = '<div class="p-3 text-center text-base-content/50">Type at least 3 characters to search...</div>';
+        }
+      }, 400);
+    });
+
+    // Function to load recent CVEs
+    function loadRecentCVEs() {
+      // Cancel any in-flight request
+      if (currentController) {
+        currentController.abort();
+      }
+      currentController = new AbortController();
+
+      const apiUrl = '{{ api_url }}?format=html&field_id={{ field_id }}&limit=10';
+      resultsContainer.innerHTML = '<div class="p-3 text-center"><span class="loading loading-spinner loading-sm"></span> Loading CVEs...</div>';
+
+      fetch(apiUrl, { signal: currentController.signal })
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+          }
+          return response.text();
+        })
+        .then(html => {
+          resultsContainer.innerHTML = html;
+        })
+        .catch(err => {
+          if (err.name === 'AbortError') return;
+          console.error('Failed to load CVEs:', err);
+          resultsContainer.innerHTML = '<div class="p-3 text-center text-error">Failed to load CVEs</div>';
+        })
+        .finally(() => {
+          currentController = null;
+        });
+    }
+  });
+
+  // Global functions for CVE selection
+  window.addCVE = function (fieldId, cveId, displayText) {
+    console.log('addCVE called:', fieldId, cveId, displayText);
+    const selectElement = document.getElementById(fieldId);
+    const tagsContainer = document.getElementById(fieldId + '-tags-container');
+    const searchInput = document.getElementById(fieldId + '-search-input');
+    const resultsContainer = document.getElementById(fieldId + '-results');
+
+    // Get current values from select options
+    const currentOptions = Array.from(selectElement.options).map(opt => opt.value);
+
+    // Check if CVE is already selected
+    if (currentOptions.includes(cveId)) {
+      return;
+    }
+
+    // Add new option to select element
+    const newOption = document.createElement('option');
+    newOption.value = cveId;
+    newOption.text = cveId;
+    newOption.selected = true;
+    selectElement.appendChild(newOption);
+
+    // Create tag element
+    const tagElement = document.createElement('div');
+    tagElement.className = 'badge badge-primary gap-2';
+    tagElement.setAttribute('data-cve', cveId);
+    tagElement.innerHTML = `
+        ${cveId}
+        <button type="button" class="btn btn-ghost btn-xs" onclick="removeCVE('${fieldId}', '${cveId}')">×</button>
+      `;
+
+    tagsContainer.appendChild(tagElement);
+
+    // Clear search input and hide results
+    searchInput.value = '';
+    resultsContainer.classList.add('hidden');
+    searchInput.placeholder = 'Search more CVEs...';
+  };
+
+  window.removeCVE = function (fieldId, cveId) {
+    console.log('removeCVE called:', fieldId, cveId);
+    const selectElement = document.getElementById(fieldId);
+    const tagElement = document.querySelector(`#${fieldId}-tags-container [data-cve="${cveId}"]`);
+    const searchInput = document.getElementById(fieldId + '-search-input');
+
+    // Remove option from select element
+    const optionToRemove = selectElement.querySelector(`option[value="${cveId}"]`);
+    if (optionToRemove) {
+      optionToRemove.remove();
+    }
+
+    // Remove tag element
+    if (tagElement) {
+      tagElement.remove();
+    }
+
+    // Update placeholder if no tags left
+    if (selectElement.options.length === 0) {
+      searchInput.placeholder = '{{ placeholder }}';
+    }
+  };
+</script>
+{%- endmacro %}
+
+{# leaflet_macros.html #}
+
+{% macro leaflet_map(id, center=[7.0, 100.5], zoom=16, currentMarker=None, longitude=None, latitude=None, map_label='', map_label_name='map_label', label_placeholder='Map') %}
+<div class="text-base font-semibold">
+  <fieldset class="w-full fieldset">
+    <legend class="fieldset-legend">
+      {{ map_label }}
+    </legend>
+  </fieldset>
+</div>
+<div id="{{ id|e }}" style="height: 400px; z-index: 0;"></div>
+<input type="hidden" id="{{ id|e }}-lng" name="longitude" value="{{ longitude if longitude is not none }}">
+<input type="hidden" id="{{ id|e }}-lat" name="latitude" value="{{ latitude if latitude is not none }}">
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const map = L.map('{{ id|e }}').setView([{{ center[0] }}, {{ center[1] }}], {{ zoom | int }});
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors'
+  }).addTo(map);
+
+  let currentMarker = null;
+
+  {% if currentMarker %}
+  const initialLatLng = [{{ currentMarker[0] }}, {{ currentMarker[1] }}];
+  currentMarker = L.marker(initialLatLng).addTo(map);
+  document.getElementById("{{ id|e }}-lat").value = initialLatLng[0];
+  document.getElementById("{{ id|e }}-lng").value = initialLatLng[1];
+
+  currentMarker.on("click", function () {
+    map.removeLayer(currentMarker);
+    currentMarker = null;
+    document.getElementById("{{ id|e }}-lat").value = "";
+    document.getElementById("{{ id|e }}-lng").value = "";
+  });
+  {% endif %}
+
+  map.on("click", function (e) {
+    if (e.originalEvent.target.tagName === "IMG" && currentMarker) return;
+
+    if (currentMarker) {
+      map.removeLayer(currentMarker);
+    }
+    currentMarker = L.marker(e.latlng).addTo(map);
+
+    currentMarker.on("click", function () {
+      map.removeLayer(currentMarker);
+      currentMarker = null;
+      document.getElementById("{{ id|e }}-lat").value = "";
+      document.getElementById("{{ id|e }}-lng").value = "";
+    });
+
+    document.getElementById("{{ id|e }}-lat").value = e.latlng.lat;
+    document.getElementById("{{ id|e }}-lng").value = e.latlng.lng;
+  });
+});
+</script>
+{% endmacro %}
+
+{% macro large_search_select(field, label=None, placeholder="ค้นหา...", api_url=None, dependency_id=None, min_search_length=3, selected_text="",
+label_class="font-semibold text-xs text-black", input_class="input input-bordered w-full pr-10", form_class="form-control w-full relative mb-4") %}
+{# Generate Unique IDs #}
+{% set unique_suffix = field.id ~ '_' ~ range(1, 10000) | random %}
+{% set wrapper_id = 'wrapper_' ~ unique_suffix %}
+{% set display_id = 'display_' ~ unique_suffix %}
+{% set options_id = 'options_' ~ unique_suffix %}
+{% set clear_btn_id = 'clear_' ~ unique_suffix %}
+
+<fieldset id="{{ wrapper_id }}" class="w-full fieldset relative mb-0">
+  <legend class="fieldset-legend">
+    {{ label if label else field.label.text }}
+    {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
+  </legend>
+
+  <div class="relative">
+    {{ field(class="hidden") }}
+
+    {# --- LOGIC การหา Text เริ่มต้น --- #}
+    {% set initial_text = '' %}
+
+    {# 1. ถ้าส่ง selected_text มาโดยตรง (สำหรับ API Case) ให้ใช้เลย #}
+    {% if selected_text %}
+    {% set initial_text = selected_text %}
+
+    {# 2. ถ้าไม่มี selected_text ให้ลองหาจาก choices (สำหรับ Local Case) #}
+    {% elif field.data %}
+    {% for value, text in field.choices %}
+    {% if value|string == field.data|string %}
+    {% set initial_text = text %}
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+    {# ------------------------------- #}
+    <input type="text" id="{{ display_id }}" class="input input-bordered bg-base-200 w-full pr-10" placeholder="{{ placeholder }}"
+      value="{{ initial_text }}" autocomplete="off">
+
+    <button type="button" id="{{ clear_btn_id }}"
+      class="absolute right-2 top-3 text-gray-400 hover:text-gray-600 z-20 {% if not field.data %}hidden{% endif %}">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path fill-rule="evenodd"
+          d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+          clip-rule="evenodd" />
+      </svg>
+    </button>
+  </div>
+
+  <ul id="{{ options_id }}"
+    class="menu hidden p-2 shadow-2xl bg-base-100 rounded-box max-h-60 overflow-y-auto border border-base-200 z-[9999]">
+  </ul>
+</fieldset>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    // 1. ดึง choices จาก WTForms (Local)
+    const localChoices = [
+      {% for value, text in field.choices %}
+                    { value: "{{ value }}", text: "{{ text }}" },
+    {% endfor %}
+            ];
+
+  // 2. (สำคัญ) กรณี API: ถ้ามีค่าเดิมติดมา (selected_text) ให้ยัดใส่ localChoices ด้วย
+  // เพื่อให้ JS รู้จักค่านี้โดยไม่ต้องยิง API หา ID นี้อีกรอบ
+  {% if field.data and selected_text %}
+  // เช็คกันเหนียวว่ายังไม่มีใน list
+  if (!localChoices.some(c => c.value == "{{ field.data }}")) {
+    localChoices.push({ value: "{{ field.data }}", text: "{{ selected_text }}" });
+  }
+  {% endif %}
+
+  new SearchSelectWidget({
+    wrapperId: "{{ wrapper_id }}",
+    fieldId: "{{ field.id }}",
+    displayId: "{{ display_id }}",
+    optionsId: "{{ options_id }}",
+    clearBtnId: "{{ clear_btn_id }}",
+    choices: localChoices,
+    apiUrl: {% if api_url %}"{{ api_url }}"{% else %}null{% endif %},
+    dependencyId: {% if dependency_id %}"{{ dependency_id }}"{% else %} null{% endif %},
+  minSearchLength: Number('{{ min_search_length }}'),
+    minSearchLengthText: "กรุณาพิมพ์อย่างน้อย {{ min_search_length }} ตัวอักษรเพื่อค้นหา"
+            });
+        });
+</script>
+{% endmacro %}

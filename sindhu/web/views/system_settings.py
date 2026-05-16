@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for
 from sindhu import models
 from sindhu.web import acl, sindhu_api_clients
-from sindhu.web.forms.system_settings import SystemSettingForm
+from sindhu.web import forms
 from datetime import datetime
 
 import sindhu_client.models as sindhu_client_models
@@ -23,7 +23,7 @@ def index():
     if response:
         system_setting = response.to_dict()
 
-    form = SystemSettingForm()
+    form = forms.system_settings.SystemSettingForm()
     if not form.validate_on_submit():
         if system_setting:
             form.center.data = system_setting["center"]["coordinates"]

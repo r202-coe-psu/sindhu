@@ -1,0 +1,66 @@
+{% extends '/base/base_layout.html' %}
+{% import '/base/html-renderer.html' as renderer %}
+
+{% block title %}
+Login
+{% endblock title %}
+
+{% block body %}
+<div class="hero min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+  <div class="hero-content flex-col w-full max-w-md">
+    <div class="card w-full shadow-2xl bg-white border border-gray-100 overflow-hidden">
+      {# Decorative top bar #}
+      <div class="h-2 bg-gradient-to-r from-blue-600 to-indigo-600 w-full"></div>
+      
+      <div class="card-body p-8 lg:p-10">
+        <div class="flex flex-col items-center mb-8">
+          <div class="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg mb-4 ring-4 ring-blue-50">
+            <i class="ph-fill ph-waves text-4xl"></i>
+          </div>
+          <h2 class="text-3xl font-bold text-gray-900 tracking-tight">เข้าสู่ระบบ</h2>
+          <p class="text-gray-500 mt-2 font-medium">Sindhu Management System</p>
+        </div>
+
+        <form action="{{ url_for('accounts.authorized_sindhu') }}" method="POST" class="space-y-4">
+          {{ form.hidden_tag() }}
+          
+          {{ renderer.render_field(form.username, placeholder="Username") }}
+          {{ renderer.render_field(form.password, placeholder="Password") }}
+
+          <div class="pt-4">
+            <button type="submit" class="btn btn-primary btn-block h-12 text-lg font-bold shadow-blue-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
+              ลงชื่อเข้าใช้งาน
+            </button>
+          </div>
+        </form>
+
+        <div class="divider my-8 text-gray-400 text-xs uppercase tracking-widest font-bold">หรือ</div>
+
+        <div class="text-center">
+            <a href="{{ url_for('sites.index') }}" class="btn btn-ghost btn-sm text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-all rounded-full px-6">
+                <i class="ph ph-arrow-left mr-1"></i> กลับหน้าหลัก
+            </a>
+        </div>
+      </div>
+    </div>
+    
+    <div class="mt-8 text-center text-gray-400 text-sm">
+      &copy; {{ now.year if now else '2024' }} Sindhu Project. All rights reserved.
+    </div>
+  </div>
+</div>
+
+<style>
+  /* Extra polish for the login page */
+  body {
+    background-color: #f8fafc;
+  }
+  .input:focus {
+    outline: none;
+  }
+  .fieldset-legend {
+    font-weight: 700;
+    color: #374151;
+  }
+</style>
+{% endblock body %}
