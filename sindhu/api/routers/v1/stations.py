@@ -77,6 +77,13 @@ async def get(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found station",
         )
+
+    if not station:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Not found station",
+        )
+
     return station
 
 
