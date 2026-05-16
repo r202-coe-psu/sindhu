@@ -1,4 +1,5 @@
 APP_TITLE = "sindhu"
+SECRET_KEY = "sindhu-default-secret-key"
 MONGODB_DB = "sindhudb"
 SINDHU_API_BASE_URL = "http://localhost:8000"
 SINDHU_API_PRIVATE_BASE_URL = ""

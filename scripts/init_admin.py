@@ -1,20 +1,20 @@
-import asyncio
 import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
+import os
+from dotenv import load_dotenv
 from sindhu import models
+import asyncio
+
+load_dotenv()
 
 
-async def create_user_admin():
+async def create_user_admin(password):
     class Setting:
         def __init__(self):
-            self.MONGODB_URI = "mongodb://localhost/sindhudb"
+            self.MONGODB_URI = os.getenv(
+                "MONGODB_URI", "mongodb://localhost:27017/sindhudb"
+            )
 
     settings = Setting()
-    if len(sys.argv) > 1:
-        settings.MONGODB_URI = "mongodb://mongodb/sindhudb"
 
     await models.init_beanie(None, settings)
 
@@ -36,10 +36,15 @@ async def create_user_admin():
         roles=["user", "admin"],
         status="active",
     )
-    user.set_password("p@ssw0rd")
+    user.set_password(password)
     await user.save()
     print("finish")
 
 
 if __name__ == "__main__":
-    asyncio.run(create_user_admin())
+    if len(sys.argv) < 2:
+        print(f"Usage: poetry run python {sys.argv[0]} <password>")
+        sys.exit(1)
+
+    password = sys.argv[1]
+    asyncio.run(create_user_admin(password))

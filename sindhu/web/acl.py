@@ -41,6 +41,8 @@ def roles_required(*roles):
 @login_manager.user_loader
 def load_user(user_id):
     me = session.get("me")
+    if not me:
+        return None
     user = models.users.User(me)
     return user
 

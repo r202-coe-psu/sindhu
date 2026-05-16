@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 from typing import Annotated
-from jose import jwt
+from jose import jwt, JWTError
 from pydantic import ValidationError
 
 from loguru import logger
@@ -27,11 +27,11 @@ async def get_current_user(
         payload = jwt.decode(
             token, security.settings.SECRET_KEY, algorithms=[security.ALGORITHM]
         )
-        user_id: str = payload.get("sub")
+        user_id: str | None = payload.get("sub")
         if user_id is None:
             raise credentials_exception
         token_data = schemas.users.TokenData(user_id=user_id)
-    except jwt.JWTError:
+    except JWTError:
         raise credentials_exception
 
     # user = get_user(fake_users_db, username=token_data.username)

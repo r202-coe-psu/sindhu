@@ -1,0 +1,102 @@
+{% extends "/base/base_layout.html" %}
+
+{% block body %}
+<div class="flex h-screen overflow-hidden bg-gray-50/50">
+  {# Sidebar #}
+  <aside id="app-sidebar" class="w-64 bg-white border-r border-gray-200 transition-all duration-300 transform -translate-x-full absolute z-30 h-full flex flex-col md:relative md:translate-x-0">
+    <div class="h-16 flex items-center justify-between px-4 border-b border-gray-200 shrink-0">
+      <a href="{{ url_for('sites.index') }}" class="text-2xl font-bold text-primary flex items-center gap-2 hover:opacity-80 transition-opacity">
+        <i class="ph-fill ph-waves text-3xl"></i>
+        <span>Sindhu</span>
+      </a>
+      <button id="close-sidebar-btn" class="md:hidden btn btn-sm btn-ghost btn-square">
+        <i class="ph ph-x text-xl"></i>
+      </button>
+    </div>
+    
+    <div class="flex-1 overflow-y-auto py-4">
+      <ul class="menu px-2 gap-1">
+        <li>
+          <a href="{{ url_for('sites.index') }}" class="{% if request.endpoint == 'sites.index' %}active{% endif %} text-base font-medium">
+            <i class="ph ph-house text-xl"></i> หน้าแรก
+          </a>
+        </li>
+        <li>
+          <a href="{{ url_for('sites.monitor') }}" class="{% if request.endpoint == 'sites.monitor' %}active{% endif %} text-base font-medium">
+            <i class="ph ph-chart-line text-xl"></i> ติดตามสถานการณ์
+          </a>
+        </li>
+      </ul>
+    </div>
+  </aside>
+
+  {# Mobile Overlay #}
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 hidden md:hidden transition-opacity"></div>
+
+  {# Main Content #}
+  <div class="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
+    {# Navbar #}
+    <header class="h-16 bg-white border-b border-gray-200 shrink-0 flex items-center px-4 z-10 shadow-sm">
+      <button id="toggle-sidebar-btn" class="btn btn-square btn-ghost mr-2">
+        <i class="ph ph-list text-2xl"></i>
+      </button>
+      
+      <div class="flex-1">
+        <h1 class="text-xl font-bold text-gray-800">
+          {% block header_title %}{% endblock %}
+        </h1>
+      </div>
+      
+      <div class="flex-none">
+        {# Future navbar items (e.g. Profile) can go here #}
+      </div>
+    </header>
+
+    {# Main Scrollable Area #}
+    <main class="flex-1 overflow-y-auto p-4 lg:p-6 w-full custom-scrollbar">
+      <div class="max-w-7xl mx-auto w-full h-full">
+        {% block content %}{% endblock content %}
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+  $(document).ready(function() {
+    const sidebar = $('#app-sidebar');
+    const overlay = $('#sidebar-overlay');
+    
+    function toggleSidebar() {
+      if (window.innerWidth < 768) {
+        // Mobile behavior
+        if (sidebar.hasClass('-translate-x-full')) {
+          sidebar.removeClass('-translate-x-full');
+          overlay.removeClass('hidden');
+        } else {
+          sidebar.addClass('-translate-x-full');
+          overlay.addClass('hidden');
+        }
+      } else {
+        // Desktop behavior
+        if (sidebar.hasClass('md:translate-x-0') && !sidebar.hasClass('md:hidden')) {
+          // Hide sidebar
+          sidebar.removeClass('md:translate-x-0').addClass('md:hidden');
+        } else {
+          // Show sidebar
+          sidebar.removeClass('md:hidden').addClass('md:translate-x-0');
+        }
+      }
+    }
+
+    $('#toggle-sidebar-btn').on('click', toggleSidebar);
+    $('#close-sidebar-btn').on('click', function() {
+      sidebar.addClass('-translate-x-full');
+      overlay.addClass('hidden');
+    });
+    $('#sidebar-overlay').on('click', function() {
+      sidebar.addClass('-translate-x-full');
+      overlay.addClass('hidden');
+    });
+  });
+</script>
+{% endblock body %}

@@ -11,6 +11,7 @@ services:
     environment:
       USER_CODE_PATH: /home/src/${PROJECT_NAME}
       ENV: ${ENV}
+      PROJECT_NAME: ${PROJECT_NAME}
       MONGODB_URI: ${MONGODB_URI}
       REDIS_URI: ${REDIS_URI}
       REQUIRE_USER_AUTHENTICATION: 1 # Sign-in required 
@@ -18,7 +19,7 @@ services:
     ports:
       - 6789:6789
     volumes:
-      - ./mageai_home:/home/src/${PROJECT_NAME}
+      - ./mageai_home:/home/src/
       - ../${PROJECT_NAME}/models/:/home/src/${PROJECT_NAME}/models
       - ../${PROJECT_NAME}/schemas/:/home/src/${PROJECT_NAME}/schemas
       - ../${PROJECT_NAME}/services/:/home/src/${PROJECT_NAME}/services

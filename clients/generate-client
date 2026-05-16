@@ -31,6 +31,7 @@ def generate(
         # os.system(
         #     f"openapi-python-client generate --path {openapi_json} --config {config}"
         # )
+        print(f"openapi-python-client generate --url {url} --config {config}")
         os.system(f"openapi-python-client generate --url {url} --config {config}")
     else:
         print("Update Client")

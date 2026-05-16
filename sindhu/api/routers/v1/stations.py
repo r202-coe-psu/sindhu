@@ -8,8 +8,6 @@ from fastapi.responses import JSONResponse
 from fastapi_cache.decorator import cache
 from flask import json
 
-
-
 from beanie import PydanticObjectId
 from beanie.operators import Set, In
 import bson
@@ -27,10 +25,10 @@ SOURCES = ["thaiwater", "rid", "dwr"]
 #@cache(expire=300)
 async def all(
     status: str = "active",
-    source: Annotated[list[str], Query()] = SOURCES,
-    station_code: Annotated[list[str], Query()] = None,
-    name: str = None,
-    name_th: str = None,
+    source: Annotated[list[str], Query()] | None = None,
+    station_code: Annotated[list[str], Query()] | None = None,
+    name: str | None = None,
+    name_th: str | None = None,
     # current_user: models.users.User = Depends(deps.get_current_user),
 ) ->schemas.stations.StationList:
     try:
@@ -79,6 +77,13 @@ async def get(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found station",
         )
+
+    if not station:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Not found station",
+        )
+
     return station
 
 

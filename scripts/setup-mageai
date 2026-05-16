@@ -2,7 +2,7 @@
 
 cd mageai
 
-docker compose up -d --build
+docker compose up -d --build --force-recreate
 
 sudo chown -R 1000:1000 mageai_home/ 
 

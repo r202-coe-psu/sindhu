@@ -1,0 +1,91 @@
+{% extends 'base/default_page.html' %}
+
+{% block header_title %}
+หน้าแรก
+{% endblock %}
+
+{% block content %}
+<div class="space-y-8 pb-12">
+    {# Hero Section #}
+    <div class="hero rounded-3xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 overflow-hidden shadow-sm relative">
+        <div class="absolute top-0 left-0 w-full h-full overflow-hidden opacity-30 pointer-events-none">
+            {# Decorative background elements #}
+            <div class="absolute -top-24 -right-24 w-96 h-96 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-50 animate-blob"></div>
+            <div class="absolute top-48 -left-24 w-72 h-72 bg-indigo-300 rounded-full mix-blend-multiply filter blur-3xl opacity-50 animate-blob animation-delay-2000"></div>
+        </div>
+        
+        <div class="hero-content text-center py-16 lg:py-24 relative z-10 w-full max-w-4xl">
+            <div class="flex flex-col items-center">
+                <div class="inline-flex items-center justify-center p-4 bg-white text-blue-600 rounded-2xl mb-8 shadow-sm border border-blue-50">
+                    <i class="ph-fill ph-waves text-5xl"></i>
+                </div>
+                <h1 class="text-4xl lg:text-5xl font-bold text-gray-900 tracking-tight leading-tight mb-6">
+                    ยินดีต้อนรับสู่ <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">Sindhu</span>
+                </h1>
+                <p class="py-4 text-lg lg:text-xl text-gray-600 mb-8 leading-relaxed max-w-2xl">
+                    ระบบติดตามและวิเคราะห์ข้อมูลสถานการณ์น้ำในอ่างเก็บน้ำแบบครบวงจร
+                    ช่วยให้คุณเข้าถึงข้อมูลที่แม่นยำเพื่อการบริหารจัดการน้ำอย่างมีประสิทธิภาพ
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center mt-2">
+                    <a href="{{ url_for('sites.monitor') }}" class="btn btn-primary btn-lg rounded-full px-8 shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                        <i class="ph ph-chart-line text-xl mr-1"></i>
+                        ดูสถานการณ์น้ำปัจจุบัน
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Features Section #}
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
+        {# Feature 1 #}
+        <div class="card bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-300">
+            <div class="card-body">
+                <div class="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
+                    <i class="ph-fill ph-map-trifold text-3xl"></i>
+                </div>
+                <h2 class="card-title text-gray-800 text-xl mb-2">แผนที่แบบ Interactive</h2>
+                <p class="text-gray-500 leading-relaxed">แสดงตำแหน่งอ่างเก็บน้ำและสถานะปริมาณน้ำในรูปแบบแผนที่ที่ใช้งานง่ายและเข้าใจทันที</p>
+            </div>
+        </div>
+
+        {# Feature 2 #}
+        <div class="card bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-300">
+            <div class="card-body">
+                <div class="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4">
+                    <i class="ph-fill ph-chart-bar text-3xl"></i>
+                </div>
+                <h2 class="card-title text-gray-800 text-xl mb-2">ข้อมูลอัปเดตล่าสุด</h2>
+                <p class="text-gray-500 leading-relaxed">ติดตามข้อมูลปริมาณน้ำ ความจุ และสถานการณ์น้ำที่อัปเดตอย่างต่อเนื่องจากเซนเซอร์</p>
+            </div>
+        </div>
+
+        {# Feature 3 #}
+        <div class="card bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-300">
+            <div class="card-body">
+                <div class="w-14 h-14 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-4">
+                    <i class="ph-fill ph-trend-up text-3xl"></i>
+                </div>
+                <h2 class="card-title text-gray-800 text-xl mb-2">การวิเคราะห์และคาดการณ์</h2>
+                <p class="text-gray-500 leading-relaxed">ดูแนวโน้มปริมาณน้ำล่วงหน้าด้วยโมเดลการพยากรณ์ เพื่อเตรียมพร้อมรับมือทุกสถานการณ์</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Custom animations for background blobs */
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+.animate-blob {
+  animation: blob 7s infinite;
+}
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+</style>
+{% endblock content %}

@@ -14,4 +14,4 @@ fi
 poetry run $(pwd)/scripts/auto-build-brython.py &
 
 
-sindhu_SETTINGS=$(pwd)/.env.dev DEBUG=1 poetry run sindhu-web -H 0.0.0.0 -d
+SINDHU_SETTINGS=$(pwd)/.env.dev DEBUG=1 poetry run sindhu-web -H 0.0.0.0 -d
