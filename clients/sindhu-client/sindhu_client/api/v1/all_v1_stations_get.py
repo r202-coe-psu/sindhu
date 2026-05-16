@@ -5,6 +5,7 @@ import httpx
 
 from ... import errors
 from ...client import AuthenticatedClient, Client
+from ...models.body_all_v1_stations_get import BodyAllV1StationsGet
 from ...models.http_validation_error import HTTPValidationError
 from ...models.station_list import StationList
 from ...types import UNSET, Response, Unset
@@ -12,32 +13,30 @@ from ...types import UNSET, Response, Unset
 
 def _get_kwargs(
     *,
+    body: BodyAllV1StationsGet | Unset = UNSET,
     status: str | Unset = "active",
-    source: list[str] | Unset = UNSET,
-    station_code: list[str] | Unset = UNSET,
-    name: str | Unset = UNSET,
-    name_th: str | Unset = UNSET,
+    name: None | str | Unset = UNSET,
+    name_th: None | str | Unset = UNSET,
 ) -> dict[str, Any]:
+    headers: dict[str, Any] = {}
 
     params: dict[str, Any] = {}
 
     params["status"] = status
 
-    json_source: list[str] | Unset = UNSET
-    if not isinstance(source, Unset):
-        json_source = source
+    json_name: None | str | Unset
+    if isinstance(name, Unset):
+        json_name = UNSET
+    else:
+        json_name = name
+    params["name"] = json_name
 
-    params["source"] = json_source
-
-    json_station_code: list[str] | Unset = UNSET
-    if not isinstance(station_code, Unset):
-        json_station_code = station_code
-
-    params["station_code"] = json_station_code
-
-    params["name"] = name
-
-    params["name_th"] = name_th
+    json_name_th: None | str | Unset
+    if isinstance(name_th, Unset):
+        json_name_th = UNSET
+    else:
+        json_name_th = name_th
+    params["name_th"] = json_name_th
 
     params = {k: v for k, v in params.items() if v is not UNSET and v is not None}
 
@@ -47,6 +46,12 @@ def _get_kwargs(
         "params": params,
     }
 
+    if not isinstance(body, Unset):
+        _kwargs["json"] = body.to_dict()
+
+    headers["Content-Type"] = "application/json"
+
+    _kwargs["headers"] = headers
     return _kwargs
 
 
@@ -83,20 +88,18 @@ def _build_response(
 def sync_detailed(
     *,
     client: AuthenticatedClient | Client,
+    body: BodyAllV1StationsGet | Unset = UNSET,
     status: str | Unset = "active",
-    source: list[str] | Unset = UNSET,
-    station_code: list[str] | Unset = UNSET,
-    name: str | Unset = UNSET,
-    name_th: str | Unset = UNSET,
+    name: None | str | Unset = UNSET,
+    name_th: None | str | Unset = UNSET,
 ) -> Response[HTTPValidationError | StationList]:
     """All
 
     Args:
         status (str | Unset):  Default: 'active'.
-        source (list[str] | Unset):
-        station_code (list[str] | Unset):
-        name (str | Unset):
-        name_th (str | Unset):
+        name (None | str | Unset):
+        name_th (None | str | Unset):
+        body (BodyAllV1StationsGet | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -107,9 +110,8 @@ def sync_detailed(
     """
 
     kwargs = _get_kwargs(
+        body=body,
         status=status,
-        source=source,
-        station_code=station_code,
         name=name,
         name_th=name_th,
     )
@@ -124,20 +126,18 @@ def sync_detailed(
 def sync(
     *,
     client: AuthenticatedClient | Client,
+    body: BodyAllV1StationsGet | Unset = UNSET,
     status: str | Unset = "active",
-    source: list[str] | Unset = UNSET,
-    station_code: list[str] | Unset = UNSET,
-    name: str | Unset = UNSET,
-    name_th: str | Unset = UNSET,
+    name: None | str | Unset = UNSET,
+    name_th: None | str | Unset = UNSET,
 ) -> HTTPValidationError | StationList | None:
     """All
 
     Args:
         status (str | Unset):  Default: 'active'.
-        source (list[str] | Unset):
-        station_code (list[str] | Unset):
-        name (str | Unset):
-        name_th (str | Unset):
+        name (None | str | Unset):
+        name_th (None | str | Unset):
+        body (BodyAllV1StationsGet | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -149,9 +149,8 @@ def sync(
 
     return sync_detailed(
         client=client,
+        body=body,
         status=status,
-        source=source,
-        station_code=station_code,
         name=name,
         name_th=name_th,
     ).parsed
@@ -160,20 +159,18 @@ def sync(
 async def asyncio_detailed(
     *,
     client: AuthenticatedClient | Client,
+    body: BodyAllV1StationsGet | Unset = UNSET,
     status: str | Unset = "active",
-    source: list[str] | Unset = UNSET,
-    station_code: list[str] | Unset = UNSET,
-    name: str | Unset = UNSET,
-    name_th: str | Unset = UNSET,
+    name: None | str | Unset = UNSET,
+    name_th: None | str | Unset = UNSET,
 ) -> Response[HTTPValidationError | StationList]:
     """All
 
     Args:
         status (str | Unset):  Default: 'active'.
-        source (list[str] | Unset):
-        station_code (list[str] | Unset):
-        name (str | Unset):
-        name_th (str | Unset):
+        name (None | str | Unset):
+        name_th (None | str | Unset):
+        body (BodyAllV1StationsGet | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -184,9 +181,8 @@ async def asyncio_detailed(
     """
 
     kwargs = _get_kwargs(
+        body=body,
         status=status,
-        source=source,
-        station_code=station_code,
         name=name,
         name_th=name_th,
     )
@@ -199,20 +195,18 @@ async def asyncio_detailed(
 async def asyncio(
     *,
     client: AuthenticatedClient | Client,
+    body: BodyAllV1StationsGet | Unset = UNSET,
     status: str | Unset = "active",
-    source: list[str] | Unset = UNSET,
-    station_code: list[str] | Unset = UNSET,
-    name: str | Unset = UNSET,
-    name_th: str | Unset = UNSET,
+    name: None | str | Unset = UNSET,
+    name_th: None | str | Unset = UNSET,
 ) -> HTTPValidationError | StationList | None:
     """All
 
     Args:
         status (str | Unset):  Default: 'active'.
-        source (list[str] | Unset):
-        station_code (list[str] | Unset):
-        name (str | Unset):
-        name_th (str | Unset):
+        name (None | str | Unset):
+        name_th (None | str | Unset):
+        body (BodyAllV1StationsGet | Unset):
 
     Raises:
         errors.UnexpectedStatus: If the server returns an undocumented status code and Client.raise_on_unexpected_status is True.
@@ -225,9 +219,8 @@ async def asyncio(
     return (
         await asyncio_detailed(
             client=client,
+            body=body,
             status=status,
-            source=source,
-            station_code=station_code,
             name=name,
             name_th=name_th,
         )
