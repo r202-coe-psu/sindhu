@@ -13,6 +13,7 @@ from flask import (
     jsonify,
 )
 from flask_login import login_user, logout_user, login_required, current_user
+from ..models.users import User as WebUser
 
 from .. import oauth2
 from .. import forms
@@ -119,7 +120,7 @@ def authorized_sindhu():
     if not response:
         return redirect(url_for("accounts.login"))
 
-    user = response
+    user = WebUser(response.to_dict())
     login_user(user)
     session["me"] = response.to_dict()
 
