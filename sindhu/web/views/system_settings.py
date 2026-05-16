@@ -6,6 +6,9 @@ from datetime import datetime
 import sindhu_client.models as sindhu_client_models
 
 from sindhu_client.api.v1 import (
+    get_v1_system_settings_get,
+    create_v1_system_settings_create_post,
+    update_v1_system_settings_update_put,
 )
 
 module = Blueprint("system_settings", __name__, url_prefix="/system_settings")
@@ -14,12 +17,12 @@ module = Blueprint("system_settings", __name__, url_prefix="/system_settings")
 @acl.roles_required("admin")
 def index():
     system_setting = None
-    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
+    client = sindhu_api_clients.client.get_current_client(is_anonymous=False)
     response = get_v1_system_settings_get.sync(client=client)
     if response:
         system_setting = response.to_dict()
 
-    form = forms.SystemSettingForm()
+    form = forms.system_settings.SystemSettingForm()
     if not form.validate_on_submit():
         if system_setting:
             form.center.data = system_setting["center"]["coordinates"]
@@ -39,16 +42,16 @@ def index():
             system_setting=system_setting,
         )
 
-    center = models.GeoObject(type_="Point", coordinates=form.center.data)
-    interpolation_coordinate_1 = models.GeoObject(
+    center = sindhu_client_models.GeoObject(type_="Point", coordinates=form.center.data)
+    interpolation_coordinate_1 = sindhu_client_models.GeoObject(
         type_="Point", coordinates=form.interpolation_coordinate_1.data
     )
-    interpolation_coordinate_2 = models.GeoObject(
+    interpolation_coordinate_2 = sindhu_client_models.GeoObject(
         type_="Point", coordinates=form.interpolation_coordinate_2.data
     )
 
     if not system_setting:
-        system_setting_body = models.CreateSystemSetting(
+        system_setting_body = sindhu_client_models.CreateSystemSetting(
             center=center,
             zoom=form.zoom.data,
             min_zoom=form.min_zoom.data,
@@ -60,7 +63,7 @@ def index():
             client=client, body=system_setting_body
         )
     else:
-        system_setting_body = models.UpdateSystemSetting(
+        system_setting_body = sindhu_client_models.UpdateSystemSetting(
             center=center,
             zoom=form.zoom.data,
             min_zoom=form.min_zoom.data,

@@ -1,5 +1,6 @@
 {
   "extraPaths": [
+    "./clients/sindhu-client"
   ],
   "exclude": [
     "**/node_modules",
