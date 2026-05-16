@@ -20,7 +20,7 @@ from . import paginations
 
 from sindhu.web import sindhu_api_clients
 
-from sindhu_client import models as sindhu_client_models
+from sindhu_client import models as sindhu_client_models, AuthenticatedClient
 
 from sindhu_client.api.v1 import (
     authentication_v1_auth_login_post,
@@ -58,13 +58,16 @@ def get_token():
         "token_type": session["tokens"]["token_type"],
     }
     expires_at = datetime.datetime.fromisoformat(session["tokens"]["expires_at"])
-    if expires_at > datetime.datetime.now():
+    if expires_at < datetime.datetime.now():
         print("token expired")
-        client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
-        response = refresh_token_v1_auth_refresh_token_get.sync_detailed(
-            client=client, credentials=session["tokens"]["refresh_token"]
+        client = AuthenticatedClient(
+            base_url=str(current_app.config.get("SINDHU_API_BASE_URL")), 
+            token=str(session["tokens"]["refresh_token"]),  
         )
-        token = response
+        response = refresh_token_v1_auth_refresh_token_get.sync_detailed(client=client)
+        if response.parsed:
+            session["tokens"] = response.parsed.to_dict()
+            token = session["tokens"]
 
     return jsonify(token)
 
@@ -99,14 +102,11 @@ def authorized_sindhu():
     username = form.username.data
     password = form.password.data
 
-    model = (
-        sindhu_client_models.body_authentication_v1_auth_login_post.BodyAuthenticationV1AuthLoginPost(
-            username=username, password=password
-        )
-    )
-
     client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
-    response = authentication_v1_auth_login_post.sync(client=client, body=model)
+    body = sindhu_client_models.BodyAuthenticationV1AuthLoginPost.from_dict(
+        {"username": username, "password": password}
+    )
+    response = authentication_v1_auth_login_post.sync(client=client, body=body)
 
     if not response:
         return redirect(url_for("accounts.login"))
@@ -116,7 +116,10 @@ def authorized_sindhu():
     client = sindhu_api_clients.client.get_current_client()
     response = get_me_v1_users_me_get.sync(client=client)
 
-    user = sindhu_client_models.User(response.to_dict())
+    if not response:
+        return redirect(url_for("accounts.login"))
+
+    user = response
     login_user(user)
     session["me"] = response.to_dict()
 
