@@ -10,6 +10,7 @@ from sindhu.models.users import User
 from sindhu.models.stations import Station
 from sindhu.models.system_settings import SystemSetting
 from sindhu.models.tokens import ApiToken
+from sindhu.models.logs import RequestLog
 
 from sindhu.models.telemetrices.metric import Metric
 
@@ -24,7 +25,7 @@ class AppSettings(BaseSettings):
         extra = "allow"
 
 
-async def gather_documents() -> Sequence[Type[DocumentType]]:
+async def gather_documents() -> Sequence[Type[beanie.Document]]:
     """Returns a list of all MongoDB document models defined in `models` module."""
 
     class_models = getmembers(sys.modules[__name__], isclass)
