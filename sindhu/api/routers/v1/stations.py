@@ -185,10 +185,10 @@ async def delete(
 
 
 # api ที่ใช้สำหรับการดึงค่า ของ metric type ออกมาเพื่อนำข้อมูลไปแสดงเป็น marker
-@router.get("/metrics/metric_type/latest")
+@router.get("/metrics/{metric_type}/latest")
 async def get_latest_metrics_by_metric_type(
     metric_type: str,
-    source: str = None,
+    source: str | None = None,
 ) -> schemas.stations.StationWithMetricsList:
     station_with_metrics = await services.metrics.get_latest_metrics_by_metric_type(
         metric_type, source=source
@@ -214,13 +214,13 @@ async def get_latest_metrics(
 
 
 @router.get(
-    "/metrics/",
+    "/metrics",
 )
 async def get_metrics(
     source: str,
     started_datetime: datetime.datetime,
     ended_datetime: datetime.datetime,
-    metric_type: str = None,
+    metric_type: str | None= None,
 ) -> schemas.stations.StationWithMetricsList:
     try:
         result = await services.metrics.get_metrics(
