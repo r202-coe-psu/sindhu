@@ -1,0 +1,30 @@
+{# Sidebar #}
+<aside id="app-sidebar" class="w-64 bg-white border-r border-gray-200 transition-all duration-300 transform -translate-x-full absolute z-30 h-full flex flex-col md:relative md:translate-x-0">
+  <div class="h-16 flex items-center justify-between px-4 border-b border-gray-200 shrink-0">
+    <a href="{{ url_for('sites.index') }}" class="text-2xl font-bold text-primary flex items-center gap-2 hover:opacity-80 transition-opacity">
+      <i class="ph-fill ph-waves text-3xl"></i>
+      <span>Sindhu</span>
+    </a>
+    <button id="close-sidebar-btn" class="md:hidden btn btn-sm btn-ghost btn-square">
+      <i class="ph ph-x text-xl"></i>
+    </button>
+  </div>
+  
+  <div class="flex-1 overflow-y-auto py-4">
+    <ul class="menu px-2 gap-1">
+      <li>
+        <a href="{{ url_for('sites.index') }}" class="{% if request.endpoint == 'sites.index' %}active{% endif %} text-base font-medium">
+          <i class="ph ph-house text-xl"></i> หน้าแรก
+        </a>
+      </li>
+      <li>
+        <a href="{{ url_for('sites.monitor') }}" class="{% if request.endpoint == 'sites.monitor' %}active{% endif %} text-base font-medium">
+          <i class="ph ph-chart-line text-xl"></i> ติดตามสถานการณ์
+        </a>
+      </li>
+    </ul>
+  </div>
+</aside>
+
+{# Mobile Overlay #}
+<div id="sidebar-overlay" class="fixed inset-0 bg-black/20 backdrop-blur-sm z-20 hidden md:hidden transition-opacity"></div>

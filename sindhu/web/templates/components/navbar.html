@@ -1,0 +1,16 @@
+{# Navbar #}
+<header class="h-16 bg-white border-b border-gray-200 shrink-0 flex items-center px-4 z-10 shadow-sm">
+  <button id="toggle-sidebar-btn" class="btn btn-square btn-ghost mr-2">
+    <i class="ph ph-list text-2xl"></i>
+  </button>
+  
+  <div class="flex-1">
+    <h1 class="text-xl font-bold text-gray-800">
+      {{ header_title_content | safe }}
+    </h1>
+  </div>
+  
+  <div class="flex-none">
+    {# Future navbar items (e.g. Profile) can go here #}
+  </div>
+</header>
