@@ -33,4 +33,4 @@ sindhu/web/static/brython/*.js
 
 .agents/debug/*
 
-
+!setup.css
