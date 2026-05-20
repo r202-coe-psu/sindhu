@@ -19,7 +19,7 @@ async def create_user_admin(password):
     await models.init_beanie(None, settings)
 
     print("start check admin")
-    user = await models.users.User.find_one(models.users.User.username == "admin")
+    user = await models.User.find_one(models.User.username == "admin")
 
     if user:
         print("Found admin user", user)
@@ -27,7 +27,7 @@ async def create_user_admin(password):
     print("end check admin")
 
     print("start create admin")
-    user = models.users.User(
+    user = models.User(
         email="admin@example.com",
         username="admin",
         first_name="admin",
