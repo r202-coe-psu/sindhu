@@ -28,8 +28,8 @@ __pycache__
 /sindhu/web/static/node_modules
 /sindhu/web/static/brython_modules
 auto_test.sh
-*.css
-sindhu/web/static/brython/*.js
+/sindhu/web/static/css/app.css
+/sindhu/web/static/brython/*.js
 
 .agents/debug/*
 

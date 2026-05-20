@@ -1,0 +1,77 @@
+.leaflet-pulsing-icon {
+    border-radius: 100%;
+}
+
+.leaflet-pulsing-icon:after {
+    content: "";
+    border-radius: 100%;
+    height: 300%;
+    width: 300%;
+    position: absolute;
+    margin: -100% 0 0 -100%;
+    -webkit-animation: pulsate 1.5s ease-out;
+    -moz-animation: pulsate 1.5s ease-out;
+    -o-animation: pulsate 1.5s ease-out;
+    animation: pulsate 1.5s ease-out;
+    -webkit-animation-iteration-count: infinite;
+    -moz-animation-iteration-count: infinite;
+    -o-animation-iteration-count: infinite;
+    animation-iteration-count: infinite;
+    opacity: 0;
+}
+
+@-webkit-keyframes pulsate {
+    0% {
+        -webkit-transform: scale(0.1, 0.1);
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        -webkit-transform: scale(1.2, 1.2);
+        opacity: 0;
+    }
+}
+
+@-moz-keyframes pulsate {
+    0% {
+        -moz-transform: scale(0.1, 0.1);
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        -moz-transform: scale(1.2, 1.2);
+        opacity: 0;
+    }
+}
+
+@-o-keyframes pulsate {
+    0% {
+        -o-transform: scale(0.1, 0.1);
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        -o-transform: scale(1.2, 1.2);
+        opacity: 0;
+    }
+}
+
+@keyframes pulsate {
+    0% {
+        transform: scale(0.1, 0.1);
+        opacity: 0;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1.2, 1.2);
+        opacity: 0;
+    }
+}

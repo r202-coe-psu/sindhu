@@ -1,0 +1,51 @@
+@import "tailwindcss";
+@source "../../templates";
+@plugin "daisyui" {
+  themes: sindhu --default;
+}
+
+@plugin "daisyui/theme" {
+  name: "sindhu";
+  default: true;
+  prefersdark: false;
+  color-scheme: light;
+
+  /* Brand: blue 70% — vivid, calm, professional */
+  --color-primary: oklch(54.6% 0.245 262.881);          /* blue-600 */
+  --color-primary-content: oklch(97% 0.014 254.604);    /* near-white */
+
+  /* Accent: amber 10% — complementary, for warnings & emphasis */
+  --color-secondary: oklch(76.9% 0.188 70.08);          /* amber-500 */
+  --color-secondary-content: oklch(20% 0.01 70);
+  --color-accent: oklch(76.9% 0.188 70.08);
+  --color-accent-content: oklch(20% 0.01 70);
+
+  /* Neutral text */
+  --color-neutral: oklch(27.8% 0.033 256.848);          /* gray-800 */
+  --color-neutral-content: oklch(98% 0.002 247.839);
+
+  /* Surfaces: white 20% */
+  --color-base-100: oklch(100% 0 0);                    /* pure white */
+  --color-base-200: oklch(98.2% 0.008 247);             /* near-white w/ blue tint */
+  --color-base-300: oklch(94.5% 0.018 254);             /* soft blue-gray */
+  --color-base-content: oklch(21% 0.034 264.665);       /* gray-900 */
+
+  /* Status */
+  --color-info: oklch(62.3% 0.214 259.815);             /* blue-500 */
+  --color-info-content: oklch(98% 0 0);
+  --color-success: oklch(64% 0.16 158);
+  --color-success-content: oklch(98% 0 0);
+  --color-warning: oklch(76.9% 0.188 70.08);            /* amber */
+  --color-warning-content: oklch(20% 0.01 70);
+  --color-error: oklch(63.7% 0.237 25.331);
+  --color-error-content: oklch(98% 0 0);
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.625rem;
+  --radius-box: 1rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 1;
+  --noise: 0;
+}
