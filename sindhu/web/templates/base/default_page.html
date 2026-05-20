@@ -32,6 +32,18 @@
           </a>
         </li>
       </ul>
+
+      {% if current_user.is_authenticated %}
+      <div class="px-5 mt-6 mb-2 text-xs font-semibold uppercase tracking-widest text-gray-400">การจัดการ</div>
+      <ul class="menu px-2 gap-1 w-full">
+        <li>
+          <a href="{{ url_for('system_settings.index') }}"
+             class="text-base font-medium {% if request.endpoint and request.endpoint.startswith('system_settings.') %}bg-primary text-primary-content hover:bg-primary{% else %}text-gray-700 hover:bg-blue-50 hover:text-primary{% endif %}">
+            <i class="ph ph-gear text-xl"></i> ตั้งค่าระบบ
+          </a>
+        </li>
+      </ul>
+      {% endif %}
     </div>
 
     {# Sidebar footer — small status cue #}
@@ -58,11 +70,49 @@
         </h1>
       </div>
 
-      <div class="flex-none flex items-center gap-2">
+      <div class="flex-none flex items-center gap-3">
         {# Status pill — amber accent only when something needs attention #}
         <span class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 text-xs font-medium border border-amber-100">
           <i class="ph-fill ph-warning-circle"></i> 14 อ่างฯ ต้องเฝ้าระวัง
         </span>
+
+        {% if current_user.is_authenticated %}
+        {# Authenticated user — dropdown with profile and logout #}
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="flex items-center gap-2 px-2 py-1.5 rounded-full hover:bg-blue-50 transition-colors cursor-pointer">
+            {% set _display = current_user.data.get('first_name') or current_user.data.get('username') or current_user.data.get('email') or 'User' %}
+            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-content font-semibold text-sm shadow-sm">
+              {{ _display[0]|upper }}
+            </span>
+            <span class="hidden md:inline text-sm font-medium text-gray-700">
+              {{ _display }}
+            </span>
+            <i class="ph ph-caret-down text-gray-400 text-sm hidden md:inline"></i>
+          </div>
+          <ul tabindex="0" class="dropdown-content menu bg-white rounded-2xl z-30 mt-2 w-56 p-2 shadow-lg border border-gray-100">
+            <li class="menu-title px-3 pt-2 pb-1">
+              <span class="text-xs text-gray-400">ลงชื่อเข้าใช้เป็น</span>
+              <span class="text-sm font-semibold text-gray-800 normal-case">{{ _display }}</span>
+            </li>
+            <li>
+              <a href="{{ url_for('system_settings.index') }}" class="text-gray-700 hover:bg-blue-50 hover:text-primary">
+                <i class="ph ph-gear text-lg"></i> ตั้งค่าระบบ
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('accounts.logout') }}" class="text-error hover:bg-red-50">
+                <i class="ph ph-sign-out text-lg"></i> ออกจากระบบ
+              </a>
+            </li>
+          </ul>
+        </div>
+        {% else %}
+        {# Guest — primary login CTA #}
+        <a href="{{ url_for('accounts.login') }}" class="btn btn-primary btn-sm rounded-full px-4 shadow-sm">
+          <i class="ph ph-sign-in text-lg"></i>
+          <span class="hidden sm:inline">เข้าสู่ระบบ</span>
+        </a>
+        {% endif %}
       </div>
     </header>
 
