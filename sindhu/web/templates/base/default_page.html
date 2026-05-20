@@ -1,32 +1,43 @@
 {% extends "/base/base_layout.html" %}
 
 {% block body %}
-<div class="flex h-screen overflow-hidden bg-gray-50/50">
+<div class="flex h-screen overflow-hidden bg-base-200">
   {# Sidebar #}
   <aside id="app-sidebar" class="w-64 bg-white border-r border-gray-200 transition-all duration-300 transform -translate-x-full absolute z-30 h-full flex flex-col md:relative md:translate-x-0">
-    <div class="h-16 flex items-center justify-between px-4 border-b border-gray-200 shrink-0">
+    <div class="h-16 flex items-center justify-between px-4 border-b border-gray-100 shrink-0">
       <a href="{{ url_for('sites.index') }}" class="text-2xl font-bold text-primary flex items-center gap-2 hover:opacity-80 transition-opacity">
-        <i class="ph-fill ph-waves text-3xl"></i>
-        <span>Sindhu</span>
+        <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-primary text-primary-content shadow-sm">
+          <i class="ph-fill ph-waves text-xl"></i>
+        </span>
+        <span class="text-gray-900">Sindhu</span>
       </a>
       <button id="close-sidebar-btn" class="md:hidden btn btn-sm btn-ghost btn-square">
         <i class="ph ph-x text-xl"></i>
       </button>
     </div>
-    
+
     <div class="flex-1 overflow-y-auto py-4">
-      <ul class="menu px-2 gap-1">
+      <div class="px-5 mb-2 text-xs font-semibold uppercase tracking-widest text-gray-400">เมนูหลัก</div>
+      <ul class="menu px-2 gap-1 w-full">
         <li>
-          <a href="{{ url_for('sites.index') }}" class="{% if request.endpoint == 'sites.index' %}active{% endif %} text-base font-medium">
+          <a href="{{ url_for('sites.index') }}"
+             class="text-base font-medium {% if request.endpoint == 'sites.index' %}bg-primary text-primary-content hover:bg-primary{% else %}text-gray-700 hover:bg-blue-50 hover:text-primary{% endif %}">
             <i class="ph ph-house text-xl"></i> หน้าแรก
           </a>
         </li>
         <li>
-          <a href="{{ url_for('sites.monitor') }}" class="{% if request.endpoint == 'sites.monitor' %}active{% endif %} text-base font-medium">
+          <a href="{{ url_for('sites.monitor') }}"
+             class="text-base font-medium {% if request.endpoint == 'sites.monitor' %}bg-primary text-primary-content hover:bg-primary{% else %}text-gray-700 hover:bg-blue-50 hover:text-primary{% endif %}">
             <i class="ph ph-chart-line text-xl"></i> ติดตามสถานการณ์
           </a>
         </li>
       </ul>
+    </div>
+
+    {# Sidebar footer — small status cue #}
+    <div class="px-4 py-3 border-t border-gray-100 text-xs text-gray-400 flex items-center gap-2">
+      <span class="inline-block w-1.5 h-1.5 rounded-full bg-success"></span>
+      ระบบทำงานปกติ
     </div>
   </aside>
 
@@ -36,19 +47,22 @@
   {# Main Content #}
   <div class="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
     {# Navbar #}
-    <header class="h-16 bg-white border-b border-gray-200 shrink-0 flex items-center px-4 z-10 shadow-sm">
-      <button id="toggle-sidebar-btn" class="btn btn-square btn-ghost mr-2">
+    <header class="h-16 bg-white border-b border-gray-100 shrink-0 flex items-center px-4 z-10">
+      <button id="toggle-sidebar-btn" class="btn btn-square btn-ghost mr-2 text-gray-600 hover:text-primary hover:bg-blue-50">
         <i class="ph ph-list text-2xl"></i>
       </button>
-      
+
       <div class="flex-1">
         <h1 class="text-xl font-bold text-gray-800">
           {% block header_title %}{% endblock %}
         </h1>
       </div>
-      
-      <div class="flex-none">
-        {# Future navbar items (e.g. Profile) can go here #}
+
+      <div class="flex-none flex items-center gap-2">
+        {# Status pill — amber accent only when something needs attention #}
+        <span class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 text-xs font-medium border border-amber-100">
+          <i class="ph-fill ph-warning-circle"></i> 14 อ่างฯ ต้องเฝ้าระวัง
+        </span>
       </div>
     </header>
 
