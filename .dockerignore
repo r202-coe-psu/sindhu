@@ -1,0 +1,5 @@
+*.pyc
+__pycache__
+.git
+sindhu/web/satatic/node_modules
+mageai

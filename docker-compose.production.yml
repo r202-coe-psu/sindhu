@@ -1,0 +1,124 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: sindhu-mongodb
+    volumes:
+      - ../deployment/sindhu/mongodb/data/db:/data/db
+      - /etc/localtime:/etc/localtime:ro
+    restart: always
+    networks:
+      - default
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis/redis-stack-server
+    container_name: sindhu-redis
+    volumes:
+      - ../deployment/sindhu/redis/data:/data
+    restart: always
+    networks:
+      - default
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  mageai:
+    image: mageai-sindhu-image
+    command: mage start ${PROJECT_NAME}
+    env_file:
+      - .env
+    build:
+      context: mageai
+      dockerfile: Dockerfile
+    environment:
+      USER_CODE_PATH: /home/src/${PROJECT_NAME}
+      ENV: ${ENV}
+      REQUIRE_USER_AUTHENTICATION: 1 # Sign-in required 
+      MAGE_ACCESS_TOKEN_EXPIRY_TIME: 86400 # 24 hrs.
+    ports:
+      - 9082:6789
+    volumes:
+      - ../deployment/sindhu/mageai:/home/src/
+      - ./sindhu/models/:/home/src/${PROJECT_NAME}/models
+      - ./sindhu/schemas/:/home/src/${PROJECT_NAME}/schemas
+      - ./sindhu/services/:/home/src/${PROJECT_NAME}/services
+      - ../sindhu/credentials/:/home/src/${PROJECT_NAME}/credentials
+      - ./sindhu/web/static/resources:/home/src/${PROJECT_NAME}/web/static/resources
+      - ./sindhu/web/static/forecast_models:/home/src/${PROJECT_NAME}/web/static/forecast_models
+      - /etc/localtime:/etc/localtime:ro
+
+    restart: on-failure:5
+    links:
+      - mongodb
+      - redis
+    depends_on:
+      - mongodb
+      - redis
+
+    networks:
+      - default
+
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    build: .
+    image: sindhu/sindhu:latest
+    container_name: sindhu-web
+    volumes:
+      - ../deployment:/deployment
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - 9080:9080
+    links:
+      - api
+      - mongodb
+    depends_on:
+      - api
+      - mongodb
+    networks:
+      - default
+    restart: on-failure:5
+    environment:
+      sindhu_SETTINGS: /app/.env
+    command: /venv/bin/gunicorn  -w 5 --bind 0.0.0.0:9080  --timeout 600 --keep-alive 10 "sindhu.web:create_app()"
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    build: .
+    image: sindhu/sindhu:latest
+    container_name: sindhu-api
+    volumes:
+      - ../deployment:/deployment
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - 9081:9081
+    links:
+      - mongodb
+    depends_on:
+      - mongodb
+    networks:
+      - default
+    restart: on-failure:5
+    environment:
+      - APP_ENV:"prod"
+    env_file:
+      - .env
+    command: /venv/bin/gunicorn  -w 5 --bind 0.0.0.0:9081 --worker-class uvicorn.workers.UvicornWorker --timeout 600 --keep-alive 10 "sindhu.api:create_application()"
+
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
