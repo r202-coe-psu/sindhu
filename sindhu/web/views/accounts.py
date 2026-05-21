@@ -28,6 +28,9 @@ from sindhu_client.api.v1 import (
     refresh_token_v1_auth_refresh_token_get,
     get_me_v1_users_me_get,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 module = Blueprint("accounts", __name__)
@@ -110,7 +113,7 @@ def authorized_sindhu():
         )
         response = authentication_v1_auth_login_post.sync(client=client, body=body)
     except Exception as e:
-        print(e)
+        logger.exception(f"Login failed: {e}")
         return redirect(url_for("accounts.login"))
 
     if not response:
