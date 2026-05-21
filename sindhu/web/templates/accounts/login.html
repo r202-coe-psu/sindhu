@@ -18,10 +18,10 @@ Login
             <i class="ph-fill ph-waves text-4xl"></i>
           </div>
           <h2 class="text-3xl font-bold text-gray-900 tracking-tight">เข้าสู่ระบบ</h2>
-          <p class="text-gray-500 mt-2 font-medium">Sindhu Management System</p>
+          <p class="text-gray-500 mt-2 font-medium">config['APP_TITLE'] Management System</p>
         </div>
 
-        <form action="{{ url_for('accounts.authorized_sindhu') }}" method="POST" class="space-y-4">
+        <form action="{{ url_for('accounts.authorized_config['APP_TITLE']') }}" method="POST" class="space-y-4">
           {{ form.hidden_tag() }}
           
           {{ renderer.render_field(form.username, placeholder="Username") }}
@@ -45,7 +45,7 @@ Login
     </div>
     
     <div class="mt-8 text-center text-gray-400 text-sm">
-      &copy; {{ now.year if now else '2024' }} Sindhu Project. All rights reserved.
+      &copy; {{ now.year if now else '2024' }} config['APP_TITLE'] Project. All rights reserved.
     </div>
   </div>
 </div>
