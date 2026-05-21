@@ -3,7 +3,7 @@ import javascript as js
 import datetime
 from urllib.parse import urlencode
 
-from monitors.base import BaseMonitor
+from .base import BaseMonitor
 
 class WaterMonitor(BaseMonitor):
     def __init__(

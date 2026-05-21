@@ -5,6 +5,8 @@ from browser import ajax, document, html, window, timer, aio
 import javascript as js
 
 from .map import Map
+from stations import metric_infos
+from stations.metric_colors import get_metric_color as _get_metric_color
 
 class BaseMap(Map):
     def __init__(
@@ -19,9 +21,14 @@ class BaseMap(Map):
 
         self.lang_code = lang_code
         # self.project_id = project_id
-        self.metrics_markers_layers = {}
-        self.metrics_legends = {}
+        self.metric_markers_layers = {}
+        self.metric_legends = {}
         self.interpolate_layers = {}
+        
+        self.metric_markers = {}
+        self.metric_markers_layer = {}
+        self.metric_types = []
+        self.panel_plus_sensors = []
 
     """
     ===========================================================================
@@ -197,8 +204,9 @@ class BaseMap(Map):
             marker_option = {}
 
             if has_wind:
+                wind_speed_val = metrics.get("wind_speed", 0)
                 metric_color = await self.get_metric_color(
-                    "wind_speed", metrics[metric_type]
+                    "wind_speed", wind_speed_val
                 )
                 metric_marker = self.leaflet.icon(
                     {
@@ -227,7 +235,7 @@ class BaseMap(Map):
             # ใช้สำหรับเช็ค marker สำหรับสร้าง Marker
 
             # create new marker
-            if document_id not in self.metric_markers_layer:
+            if marker is None:
                 coordinates = station["coordinates"]["coordinates"]
                 marker = (
                     self.leaflet.marker(
@@ -279,3 +287,12 @@ class BaseMap(Map):
     Helper functions
     ===========================================================================
     """
+
+    async def get_metric_color(self, type_, value):
+        return _get_metric_color(type_, value)
+
+    async def update_metric_legend(self, document_id):
+        self.metric_legends[document_id] = True
+
+    def on_click_station(self, station_id):
+        print(f"Station clicked: {station_id}")
