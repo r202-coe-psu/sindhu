@@ -67,7 +67,7 @@ class BaseMap(Map):
         ]
 
         for station in data["stations"]:
-            animate = True
+            animate = False
             metric_color = "DeepSkyBlue"
             tooltip_detail = ""
             has_wind = False
@@ -129,7 +129,9 @@ class BaseMap(Map):
                     value_str = (
                         f"{value:.2f}" if isinstance(value, float) else str(value)
                     )
-                    if sensor["value"] is None or sensor["value"] < 0:
+                    if sensor["value"] is None or (
+                        sensor["value"] < 0 and metric_type not in ["diff_wl_bank", "waterlevel_msl"]
+                    ):
                         animate = False
 
                         if metric_type == "PM_0_1_forecast".lower():

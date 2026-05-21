@@ -49,11 +49,11 @@ class StoragePercentColor(MetricColor):
         super().__init__("storage_percent")
 
         self.color_ranks = [
-            (0, 30, "#FF0000"),
-            (30, 50, "#FF8000"),
-            (50, 80, "#01DF3A"),
-            (80, 100, "#00BFFF"),
-            (100, 1_000_000, "#0000FF"),
+            (0, 30, "#FFFFFF"),
+            (30, 50, "#B3E5FC"),
+            (50, 80, "#4FC3F7"),
+            (80, 100, "#0288D1"),
+            (100, 1_000_000, "#01579B"),
         ]
 
 class DiffWLBankColor(MetricColor):
