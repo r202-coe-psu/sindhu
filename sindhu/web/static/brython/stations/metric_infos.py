@@ -21,6 +21,9 @@ HTML_METRIC_NAMES = dict(
     dew_point="Dew Point",
     visible="Visible",
     water_level="Water Level",
+    waterlevel_msl="Water Level (MSL)",
+    storage_percent="Storage Percent",
+    diff_wl_bank="Diff WL Bank",
 )
 
 HTML_METRIC_UNITS = dict(
@@ -47,6 +50,9 @@ HTML_METRIC_UNITS = dict(
     o3="ppb",
     no2="ppb",
     water_level="m",
+    waterlevel_msl="m(MSL)",
+    storage_percent="%",
+    diff_wl_bank="m",
 )
 
 HTML_CLIMATE_LEGENDS = dict(
@@ -240,6 +246,27 @@ HTML_CLIMATE_LEGENDS = dict(
         {"DES": "120-250 m(MSL)", "fill": "#0288D1"},
         {"DES": ">250 m(MSL)", "fill": "#01579B"},
     ],
+    waterlevel_msl=[
+        {"DES": "<5 m(MSL)", "fill": "#FFFFFF"},
+        {"DES": "5-30 m(MSL)", "fill": "#B3E5FC"},
+        {"DES": "30-120 m(MSL)", "fill": "#4FC3F7"},
+        {"DES": "120-250 m(MSL)", "fill": "#0288D1"},
+        {"DES": ">250 m(MSL)", "fill": "#01579B"},
+    ],
+    storage_percent=[
+        {"DES": "< 30%", "fill": "#FF0000"},
+        {"DES": "30-50%", "fill": "#FF8000"},
+        {"DES": "50-80%", "fill": "#01DF3A"},
+        {"DES": "80-100%", "fill": "#00BFFF"},
+        {"DES": "> 100%", "fill": "#0000FF"},
+    ],
+    diff_wl_bank=[
+        {"DES": "ปลอดภัย (<-3m)", "fill": "#00BFFF"},
+        {"DES": "ปกติ (-3 ถึง -1m)", "fill": "#01DF3A"},
+        {"DES": "เฝ้าระวัง (-1 ถึง 0m)", "fill": "#FFE319"},
+        {"DES": "ล้นตลิ่ง (0 ถึง 1m)", "fill": "#FF8000"},
+        {"DES": "น้ำท่วม (>1m)", "fill": "#FF0000"},
+    ],
 )
 
 
@@ -264,6 +291,9 @@ HTML_CLIMATE_LEGEND_TITLES = dict(
     SO2="SO<sub>2</sub> Concentration (ppb)",
     NO2="NO<sub>2</sub> Concentration (ppb)",
     water_level="Water Level",
+    waterlevel_msl="Water Level (MSL)",
+    storage_percent="Storage Percent",
+    diff_wl_bank="Diff WL Bank",
 )
 
 INTERPOLATION_METRIC_TYPES_WITH_LEGEND = dict(
