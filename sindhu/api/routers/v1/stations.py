@@ -186,6 +186,7 @@ async def delete(
 
 # api ที่ใช้สำหรับการดึงค่า ของ metric type ออกมาเพื่อนำข้อมูลไปแสดงเป็น marker
 @router.get("/metrics/{metric_type}/latest")
+@cache(expire=1800)
 async def get_latest_metrics_by_metric_type(
     metric_type: str,
     source: str | None = None,
@@ -197,7 +198,7 @@ async def get_latest_metrics_by_metric_type(
 
 
 @router.get("/metrics/latest")
-@cache(expire=300)
+@cache(expire=1800)
 async def get_latest_metrics(
     source: str,
 ) -> schemas.stations.StationWithMetricsList:
