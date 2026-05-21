@@ -29,6 +29,7 @@ class AppSettings(BaseAppSettings):
     SECRET_KEY: str = "secret"
 
     API_PREFIX: str = ""
+    ROOT_PATH: str = ""
 
     JWT_TOKEN_PREFIX: str = "Token"
 
@@ -53,6 +54,7 @@ class AppSettings(BaseAppSettings):
             "redoc_url": self.REDOC_URL,
             "title": self.TITLE,
             "version": self.VERSION,
+            "root_path": self.ROOT_PATH,
         }
 
     def configure_logging(self) -> None:
