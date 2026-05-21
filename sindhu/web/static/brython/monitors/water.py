@@ -69,6 +69,7 @@ class WaterMonitor(BaseMonitor):
                 self.map.metric_types.append("storage_percent")
                 
             await self.map.update("storage_percent", data)
+            self.render_data_list()
         except Exception as e:
             print(f"monitor: error {e}")
         finally:
@@ -79,3 +80,111 @@ class WaterMonitor(BaseMonitor):
             style = ev.target.value
             self.map.marker_style = style
             aio.run(self.map.update("storage_percent", self.latest_data))
+
+    def render_data_list(self):
+        if "reservoir_data_list" not in document:
+            return
+            
+        stations = self.latest_data.get("stations", [])
+        html_content = ""
+        
+        for station in stations:
+            metrics = station.get("metrics", [])
+            if not metrics:
+                continue
+                
+            storage_percent = None
+            other_metrics = []
+            
+            for m in metrics:
+                if m["metric_type"].lower() == "storage_percent":
+                    storage_percent = m.get("value")
+                else:
+                    other_metrics.append(m)
+            
+            if storage_percent is None:
+                continue
+                
+            percent_val = float(storage_percent)
+            
+            if percent_val < 30:
+                hex_color = "#FFFFFF"
+                text_color = "#374151" # gray-700
+                label = "น้ำน้อย"
+            elif percent_val < 50:
+                hex_color = "#B3E5FC"
+                text_color = "#0369a1" # light blue on white bg -> use darker text
+                label = "น้ำน้อย"
+            elif percent_val < 80:
+                hex_color = "#4FC3F7"
+                text_color = "#0c4a6e"
+                label = "น้ำปกติ"
+            elif percent_val <= 100:
+                hex_color = "#0288D1"
+                text_color = "#FFFFFF"
+                label = "น้ำมาก"
+            else:
+                hex_color = "#01579B"
+                text_color = "#FFFFFF"
+                label = "เฝ้าระวัง"
+                
+            name = station.get("name_th") or station.get("name")
+            prov = station.get("province", "ไม่ระบุจังหวัด")
+            location = f"จ.{prov}"
+            
+            # format other metrics
+            other_html = ""
+            for om in other_metrics:
+                m_name = om["metric_type"]
+                val = om.get("value")
+                if val is None:
+                    continue
+                
+                if m_name == "waterlevel_msl": 
+                    display_text = f'ระดับน้ำ: <span class="font-medium text-gray-700">{val} ม.รทก.</span>'
+                elif m_name == "diff_wl_bank": 
+                    try:
+                        v = float(val)
+                        if v < 0:
+                            display_text = f'ระดับน้ำ: <span class="font-medium text-gray-700">ต่ำกว่าตลิ่ง {abs(v):.2f} ม.</span>'
+                        elif v > 0:
+                            display_text = f'ระดับน้ำ: <span class="font-medium text-red-600">ล้นตลิ่ง {v:.2f} ม.</span>'
+                        else:
+                            display_text = f'ระดับน้ำ: <span class="font-medium text-yellow-600">เสมอระดับตลิ่งพอดี</span>'
+                    except:
+                        display_text = f'ระดับน้ำกับตลิ่ง: <span class="font-medium text-gray-700">{val} ม.</span>'
+                else:
+                    display_text = f'{m_name}: <span class="font-medium text-gray-700">{val}</span>'
+                    
+                other_html += f'<div class="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">{display_text}</div>'
+                
+            html_content += f"""
+            <div class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <h3 class="font-bold text-gray-800 text-base">{name}</h3>
+                        <div class="text-xs text-gray-500 mt-0.5">{location}</div>
+                    </div>
+                    <span class="badge gap-1 px-2 py-3 shadow-sm border border-gray-200" style="background-color: {hex_color}; color: {text_color};">
+                        <span class="w-2 h-2 rounded-full border border-gray-300" style="background-color: {'#e5e7eb' if percent_val < 30 else 'white'};"></span>{label}
+                    </span>
+                </div>
+                <div class="flex justify-between text-sm mb-1.5 mt-3">
+                    <span class="text-gray-500">ปริมาณน้ำ</span>
+                    <span class="font-semibold text-gray-800">
+                        <span class="ml-1" style="color: {hex_color if percent_val >= 80 else text_color}">{percent_val:.1f}%</span>
+                    </span>
+                </div>
+                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden border border-gray-200">
+                    <div class="h-full rounded-full transition-all duration-300" style="width: {min(100, percent_val)}%; background-color: {hex_color};"></div>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2">
+                    {other_html}
+                </div>
+            </div>
+            """
+            
+        if not html_content:
+            html_content = '<div class="flex justify-center items-center h-full text-gray-500">ไม่พบข้อมูลอ่างเก็บน้ำ</div>'
+            
+        document["reservoir_data_list"].html = html_content
