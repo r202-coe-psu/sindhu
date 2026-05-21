@@ -31,7 +31,7 @@ class BaseMonitor:
         # hardcoded URL
         self.params = None
         self.apis = {
-            "system_settings": f"{self.api_url}/v1/system_settings/",
+            "system_settings": f"{self.api_url}/v1/system_settings",
         }
 
     """

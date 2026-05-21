@@ -17,6 +17,9 @@ from beanie.operators import Or
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 @router.post(
     "/token",

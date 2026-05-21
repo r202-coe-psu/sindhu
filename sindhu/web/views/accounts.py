@@ -101,11 +101,11 @@ def login_oauth(name):
 def authorized_sindhu():
     form = forms.users.LoginForm()
     if not form.validate_on_submit():
+        logger.error(f"Login failed: {form.errors}")
         return redirect(url_for("accounts.login"))
 
     username = form.username.data
     password = form.password.data
-
     try:
         client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
         body = sindhu_client_models.BodyAuthenticationV1AuthLoginPost.from_dict(
