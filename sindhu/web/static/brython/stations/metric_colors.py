@@ -1,7 +1,9 @@
+from typing import Any, List, Tuple, Union
+
 class MetricColor:
-    def __init__(self, type_="default"):
+    def __init__(self, type_: str = "default"):
         self.type = type_
-        self.color_ranks = [
+        self.color_ranks: List[Tuple[Union[float, int], Union[float, int], str]] = [
             (0, 15, "#00BFFF"),
             (15, 25, "#01DF3A"),
             (25, 37.5, "#FFE319"),
@@ -9,7 +11,7 @@ class MetricColor:
             (75, 1_000_000, "#FF0000"),
         ]
 
-    def get_color(self, value):
+    def get_color(self, value: Union[float, int, None]) -> str:
         if value is None:
             return "#808080"
         for min_value, max_value, color in self.color_ranks:
@@ -101,11 +103,13 @@ class WindSpeedColor(MetricColor):
             (63, 100000, "hurricane"),
         ]
 
-        def get_color(self, value):
-            for min_value, max_value, color in self.color_ranks:
-                if min_value <= value <= max_value:
-                    return color
+    def get_color(self, value: Union[float, int, None]) -> str:
+        if value is None:
             return ""
+        for min_value, max_value, color in self.color_ranks:
+            if min_value <= value <= max_value:
+                return color
+        return ""
 
 
 class PM10Color(MetricColor):
@@ -269,7 +273,7 @@ class WaterLevelColor(MetricColor):
             (250, 1_000_000, "#01579B"),
         ]
 
-METRIC_COLORS = [
+METRIC_COLORS: List[MetricColor] = [
     PM01Color(),
     EmpiricalForecastPM01Color(),
     PM1Color(),
@@ -294,7 +298,7 @@ METRIC_COLORS = [
 # don't have "rain, pressure, co, o3, so3, no2"
 
 
-def get_metric_color_rank(type_):
+def get_metric_color_rank(type_: str) -> List[Tuple[Union[float, int], Union[float, int], str]]:
     type_ = type_.lower()
     for metric_color in METRIC_COLORS:
         if type_ == metric_color.type:
@@ -303,7 +307,7 @@ def get_metric_color_rank(type_):
     return []
 
 
-def get_metric_color(type_, value):
+def get_metric_color(type_: str, value: Union[float, int, None]) -> str:
     type_ = type_.lower()
     for metric_color in METRIC_COLORS:
         if type_ == metric_color.type:
@@ -311,3 +315,4 @@ def get_metric_color(type_, value):
 
     grey = "#808080"
     return grey
+
