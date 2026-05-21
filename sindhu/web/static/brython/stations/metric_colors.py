@@ -273,6 +273,43 @@ class WaterLevelColor(MetricColor):
             (250, 1_000_000, "#01579B"),
         ]
 
+
+class WaterLevelMSLColor(MetricColor):
+    def __init__(self):
+        super().__init__("waterlevel_msl")
+
+        self.color_ranks = [
+            (-1_000_000, 5, "#FFFFFF"),
+            (5, 30, "#B3E5FC"),
+            (30, 120, "#4FC3F7"),
+            (120, 250, "#0288D1"),
+            (250, 1_000_000, "#01579B"),
+        ]
+
+class StoragePercentColor(MetricColor):
+    def __init__(self):
+        super().__init__("storage_percent")
+
+        self.color_ranks = [
+            (0, 30, "#FF0000"),
+            (30, 50, "#FF8000"),
+            (50, 80, "#01DF3A"),
+            (80, 100, "#00BFFF"),
+            (100, 1_000_000, "#0000FF"),
+        ]
+
+class DiffWLBankColor(MetricColor):
+    def __init__(self):
+        super().__init__("diff_wl_bank")
+
+        self.color_ranks = [
+            (-1_000_000, -3, "#00BFFF"),
+            (-3, -1, "#01DF3A"),
+            (-1, 0, "#FFE319"),
+            (0, 1, "#FF8000"),
+            (1, 1_000_000, "#FF0000"),
+        ]
+
 METRIC_COLORS: List[MetricColor] = [
     PM01Color(),
     EmpiricalForecastPM01Color(),
@@ -294,6 +331,9 @@ METRIC_COLORS: List[MetricColor] = [
     SO2Color(),
     NO2Color(),
     WaterLevelColor(),
+    WaterLevelMSLColor(),
+    StoragePercentColor(),
+    DiffWLBankColor(),
 ]
 # don't have "rain, pressure, co, o3, so3, no2"
 
