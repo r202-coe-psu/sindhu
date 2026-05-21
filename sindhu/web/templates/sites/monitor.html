@@ -155,7 +155,7 @@
   map = WaterMonitor(
     "{{ g.lang_code }}",
     "{{ api_url }}",
-    "{{ thaiwater }}"
+    "{{ source }}"
     )
   map.start()
 </script>
@@ -164,5 +164,6 @@
 
 <script type="text/javascript" src="{{ url_for('static', filename='brython/maps.brython.js') }}"></script>
 <script type="text/javascript" src="{{ url_for('static', filename='brython/monitors.brython.js') }}"></script>
+<script type="text/javascript" src="{{ url_for('static', filename='brython/stations.brython.js') }}"></script>
 
 {% endblock additional_js  %}

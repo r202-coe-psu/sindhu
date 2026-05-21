@@ -9,7 +9,9 @@ def index():
 @module.route("/monitor")
 def monitor():
     api_url = current_app.config.get("SINDHU_API_BASE_URL")
+    default_source = "thaiwater"
     return render_template(
         "sites/monitor.html",
-        api_url=api_url
+        api_url=api_url,
+        source=default_source,
     )

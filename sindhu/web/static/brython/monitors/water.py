@@ -50,12 +50,14 @@ class WaterMonitor(BaseMonitor):
             await aio.sleep(self.acquisition_interval)
 
     async def get_stations_metrics(self):
+        from urllib.parse import urlencode
+        
         url = f"{self.api_url}/v1/stations/metrics/latest"
-        params = dict(source=self.source)
+        query_data = urlencode({"source": self.source})
         
         self.set_map_loading(True)
         try:
-            response = await aio.get(url, params=params)
+            response = await aio.get(url, data=query_data, cache=True)
             data = js.JSON.parse(response.data)
             await self.map.update("latest", data)
         except Exception as e:
