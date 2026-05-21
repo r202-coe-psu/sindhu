@@ -33,4 +33,4 @@ auto_test.sh
 
 .agents/debug/*
 
-
+!setup.css
