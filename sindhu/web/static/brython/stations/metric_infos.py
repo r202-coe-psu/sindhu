@@ -1,4 +1,4 @@
-HTML_SENSOR_NAMES = dict(
+HTML_METRIC_NAMES = dict(
     pm_2_5="PM<sub>2.5</sub>",
     pm_2_5_prediction="PM<sub>2.5</sub> (Prediction)",
     pm_0_1="PM<sub>0.1</sub> (linear regression)",
@@ -22,7 +22,7 @@ HTML_SENSOR_NAMES = dict(
     visible="Visible",
 )
 
-HTML_SENSOR_UNITS = dict(
+HTML_METRIC_UNITS = dict(
     pm_0_1="μg/m<sup>3</sup>",
     pm_0_1_forecast="μg/m<sup>3</sup>",
     pm_2_5="μg/m<sup>3</sup>",
@@ -256,7 +256,7 @@ HTML_CLIMATE_LEGEND_TITLES = dict(
     NO2="NO<sub>2</sub> Concentration (ppb)",
 )
 
-INTERPOLATION_SENSOR_TYPES_WITH_LEGEND = dict(
+INTERPOLATION_METRIC_TYPES_WITH_LEGEND = dict(
     PM_2_5={
         "get_colors_config": lambda upper_bound: [
             (0, "#00BFFF"),

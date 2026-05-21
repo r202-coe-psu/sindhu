@@ -1,4 +1,4 @@
-class SensorColor:
+class MetricColor:
     def __init__(self, type_="default"):
         self.type = type_
         self.color_ranks = [
@@ -18,7 +18,7 @@ class SensorColor:
         return "#808080"
 
 
-class PM01Color(SensorColor):
+class PM01Color(MetricColor):
     def __init__(self):
         super().__init__("pm_0_1")
 
@@ -38,7 +38,7 @@ class PM01Color(SensorColor):
         ]
 
 
-class EmpiricalForecastPM01Color(SensorColor):
+class EmpiricalForecastPM01Color(MetricColor):
     def __init__(self):
         super().__init__("pm_0_1_forecast")
 
@@ -51,7 +51,7 @@ class EmpiricalForecastPM01Color(SensorColor):
         ]
 
 
-class PM1Color(SensorColor):
+class PM1Color(MetricColor):
     def __init__(self):
         super().__init__("pm_1")
 
@@ -71,17 +71,17 @@ class PM1Color(SensorColor):
         ]
 
 
-class PM25Color(SensorColor):
+class PM25Color(MetricColor):
     def __init__(self):
         super().__init__("pm_2_5")
 
 
-class PM25predictionColor(SensorColor):
+class PM25predictionColor(MetricColor):
     def __init__(self):
         super().__init__("pm_2_5_prediction")
 
 
-class WindSpeedColor(SensorColor):
+class WindSpeedColor(MetricColor):
     def __init__(self):
         super().__init__("wind_speed")
 
@@ -108,7 +108,7 @@ class WindSpeedColor(SensorColor):
             return ""
 
 
-class PM10Color(SensorColor):
+class PM10Color(MetricColor):
     def __init__(self, type_="pm_10"):
         super().__init__(type_)
 
@@ -126,7 +126,7 @@ class PM100Color(PM10Color):
         super().__init__("pm_100")
 
 
-class TemperatureColor(SensorColor):
+class TemperatureColor(MetricColor):
     def __init__(self):
         super().__init__("temperature")
 
@@ -141,7 +141,7 @@ class TemperatureColor(SensorColor):
         ]
 
 
-class HumidityColor(SensorColor):
+class HumidityColor(MetricColor):
     def __init__(self):
         super().__init__("humidity")
 
@@ -153,7 +153,7 @@ class HumidityColor(SensorColor):
         ]
 
 
-class VOCColor(SensorColor):
+class VOCColor(MetricColor):
     def __init__(self):
         super().__init__("voc")
 
@@ -166,7 +166,7 @@ class VOCColor(SensorColor):
         ]
 
 
-class COColor(SensorColor):
+class COColor(MetricColor):
     def __init__(self):
         super().__init__("co")
 
@@ -180,7 +180,7 @@ class COColor(SensorColor):
         ]
 
 
-class RainColor(SensorColor):
+class RainColor(MetricColor):
     def __init__(self):
         super().__init__("rain")
 
@@ -193,7 +193,7 @@ class RainColor(SensorColor):
         ]
 
 
-class PressureColor(SensorColor):
+class PressureColor(MetricColor):
     def __init__(self):
         super().__init__("pressure")
 
@@ -206,7 +206,7 @@ class PressureColor(SensorColor):
         ]
 
 
-class O3Color(SensorColor):
+class O3Color(MetricColor):
     def __init__(self):
         super().__init__("o3")
 
@@ -218,7 +218,7 @@ class O3Color(SensorColor):
         ]
 
 
-class SO2Color(SensorColor):
+class SO2Color(MetricColor):
     def __init__(self):
         super().__init__("so2")
 
@@ -230,7 +230,7 @@ class SO2Color(SensorColor):
         ]
 
 
-class NO2Color(SensorColor):
+class NO2Color(MetricColor):
     def __init__(self):
         super().__init__("no2")
 
@@ -243,7 +243,7 @@ class NO2Color(SensorColor):
         ]
 
 
-class AODColor(SensorColor):
+class AODColor(MetricColor):
     def __init__(self):
         super().__init__("aod")
 
@@ -257,7 +257,7 @@ class AODColor(SensorColor):
         ]
 
 
-SENSOR_COLORS = [
+METRIC_COLORS = [
     PM01Color(),
     EmpiricalForecastPM01Color(),
     PM1Color(),
@@ -281,20 +281,20 @@ SENSOR_COLORS = [
 # don't have "rain, pressure, co, o3, so3, no2"
 
 
-def get_sensor_color_rank(type_):
+def get_metric_color_rank(type_):
     type_ = type_.lower()
-    for sensor_color in SENSOR_COLORS:
-        if type_ == sensor_color.type:
-            return sensor_color.color_ranks
+    for metric_color in METRIC_COLORS:
+        if type_ == metric_color.type:
+            return metric_color.color_ranks
 
     return []
 
 
-def get_sensor_color(type_, value):
+def get_metric_color(type_, value):
     type_ = type_.lower()
-    for sensor_color in SENSOR_COLORS:
-        if type_ == sensor_color.type:
-            return sensor_color.get_color(value)
+    for metric_color in METRIC_COLORS:
+        if type_ == metric_color.type:
+            return metric_color.get_color(value)
 
     grey = "#808080"
     return grey

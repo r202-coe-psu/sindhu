@@ -34,33 +34,30 @@ class WaterMonitor(BaseMonitor):
 
     def start(self):
         self.running = True
-
-        # bind self.interpolates from base
-        bindings = self.forecasts + self.interpolates
-
-        for name in bindings:
-            if name in document:
-                document[name].bind("click", self.on_filter_clicked)
-
         aio.run(self.monitor())
 
+    async def monitor(self):
+        await self.setup()
+
+        while self.running:
+            print(f"monitor: wake up {datetime.datetime.now()}")
+            print(f"monitor: {self.monitor_name} monitor")
+            print(f"monitor: sleep {self.acquisition_interval}s")
+
+            await self.get_stations_metrics()
+
+            # wait for next aquisition
+            await aio.sleep(self.acquisition_interval)
 
     async def get_stations_metrics(self):
-        url = f"{self.api_url}/v1/stations/metrics"
+        url = f"{self.api_url}/v1/stations/metrics/latest"
         params = dict(source=self.source)
-        def _on_response(req):
-            response = js.JSON.parse(req.text)
-            aio.run(
-                self.map.update(
-                    "latest",
-                    response,
-                )
-            )
-            return True
-
+        
         self.set_map_loading(True)
         try:
-            ajax.get(url, params=urlencode(params), oncomplete=_on_response)
+            response = await aio.get(url, params=params)
+            data = js.JSON.parse(response.data)
+            await self.map.update("latest", data)
         except Exception as e:
             print(f"monitor: error {e}")
         finally:

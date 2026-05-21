@@ -35,14 +35,14 @@ class BaseMap(Map):
         # logic handler
         print("Updating climate marker...")
         print(f"Document ID: {document_id}")
-        await self.update_climate_marker(
+        await self.update_metric_marker(
             document_id, data, target_timestamp=target_timestamp
         )
         await aio.sleep(0.5)
 
-    async def update_climate_marker(self, document_id, data, target_timestamp=None):
+    async def update_metric_marker(self, document_id, data, target_timestamp=None):
         print(
-            f"update_climate_marker: {document_id}, target_timestamp: {target_timestamp}"
+            f"update_metric_marker: {document_id}, target_timestamp: {target_timestamp}"
         )
         markers = []
         bangkok_timezone = timezone(timedelta(hours=7), name="Asia/Bangkok")
@@ -50,18 +50,18 @@ class BaseMap(Map):
         # if source in self.empirical_forecasts:
         # source = source.replace("empirical_", "")
 
-        if document_id not in self.climate_legends:
-            await self.update_climate_legend(document_id)
+        if document_id not in self.metric_legends:
+            await self.update_metric_legend(document_id)
 
-        sensor_type_mapped_key = document_id.replace("empirical_", "")
+        metric_type_mapped_key = document_id.replace("empirical_", "")
 
         DISPLAY_ORDERS = [
-            sensor_type.lower() for sensor_type in sensor_infos.HTML_SENSOR_NAMES.keys()
+            metric_type.lower() for metric_type in metric_infos.HTML_METRIC_NAMES.keys()
         ]
 
         for station in data["stations"]:
             animate = True
-            sensor_color = "DeepSkyBlue"
+            metric_color = "DeepSkyBlue"
             tooltip_detail = ""
             has_wind = False
             rotate_direction = 0
@@ -69,10 +69,10 @@ class BaseMap(Map):
             if station["name"] in self.panel_plus_sensors:
                 continue
 
-            climates = station.get("climates", [])
-            if not climates:
+            metrics = station.get("metrics", [])
+            if not metrics:
                 animate = False
-                sensor_color = "DarkGrey"
+                metric_color = "DarkGrey"
                 disactive_txt = {"th": "ขาดการเชื่อมต่อ", "en": "lost connection"}
                 tooltip_detail = f"""
                 <div align="left" style="font-size: 15px;">
@@ -81,16 +81,16 @@ class BaseMap(Map):
                 </div>
                 """
             else:
-                climates_dict = {}
-                for sensor in climates:
-                    if sensor["sensor_type"].lower() == "pm_2_5_prediction" and (
+                metrics_dict = {}
+                for sensor in metrics:
+                    if sensor["metric_type"].lower() == "pm_2_5_prediction" and (
                         datetime.fromisoformat(sensor["timestamp"]) != target_timestamp
                     ):
                         continue
 
-                    climates_dict[sensor["sensor_type"].lower()] = sensor
+                    metrics_dict[sensor["metric_type"].lower()] = sensor
 
-                wind_sensor = climates_dict.get("wind_direction")
+                wind_sensor = metrics_dict.get("wind_direction")
                 if wind_sensor and station.get("source") != "air4thai":
                     has_wind = True
                     rotate_direction = wind_sensor["value"]
@@ -98,22 +98,22 @@ class BaseMap(Map):
                 # Build sensor display order
                 display_order = DISPLAY_ORDERS.copy()
                 if (
-                    sensor_type_mapped_key.lower() in display_order
-                    and sensor_type_mapped_key in self.sensor_types
+                    metric_type_mapped_key.lower() in display_order
+                    and metric_type_mapped_key in self.metric_types
                 ):
-                    display_order.remove(sensor_type_mapped_key.lower())
-                    display_order.insert(0, sensor_type_mapped_key.lower())
+                    display_order.remove(metric_type_mapped_key.lower())
+                    display_order.insert(0, metric_type_mapped_key.lower())
 
                 # Add any new sensor types not in display list
-                for s_type in climates_dict.keys():
+                for s_type in metrics_dict.keys():
                     if s_type not in display_order:
                         display_order.append(s_type)
 
                 # Build sensor display text
-                sensor_texts = []
+                metric_texts = []
                 timestamp = target_timestamp if target_timestamp else None
-                for sensor_type in display_order:
-                    sensor = climates_dict.get(sensor_type)
+                for metric_type in display_order:
+                    sensor = metrics_dict.get(metric_type)
                     if not sensor:
                         continue
 
@@ -124,21 +124,21 @@ class BaseMap(Map):
                     if sensor["value"] is None or sensor["value"] < 0:
                         animate = False
 
-                        if sensor_type == "PM_0_1_forecast".lower():
+                        if metric_type == "PM_0_1_forecast".lower():
                             msg = "<b>ไม่พบข้อมูลการพยากรณ์ </b><br/><em><b>หมายเหตุ:</b> สถานีนี้อาจจะมีข้อมูลไม่เพียงพอสำหรับการพยากรณ์<br/><br/>"
                         else:
                             msg = "<b>ไม่พบข้อมูล</b><br/>"
-                        sensor_texts.append(
+                        metric_texts.append(
                             f"""
-                            {sensor_infos.HTML_SENSOR_NAMES.get(sensor_type, sensor_type)}:
+                            {metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}:
                             {msg}
                             """
                         )
                     else:
-                        sensor_texts.append(
+                        metric_texts.append(
                             f"""
-                            {sensor_infos.HTML_SENSOR_NAMES.get(sensor_type, sensor_type)}:
-                            <b>{value_str}</b> {sensor_infos.HTML_SENSOR_UNITS.get(sensor_type, "")}<br/>
+                            {metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}:
+                            <b>{value_str}</b> {metric_infos.HTML_METRIC_UNITS.get(metric_type, "")}<br/>
                             """
                         )
 
@@ -157,77 +157,77 @@ class BaseMap(Map):
                         <b>{station["name_th"]}</b><br/>
                         <b>หมายเหตุ</b> ค่าที่แสดงเป็นข้อมูลรายชั่วโมง แต่การใช้สีอ้างอิงจากค่าเฉลี่ย 24 ชั่วโมง<br/>
                         อ้างอิงข้อมูลสีตาม AQI จากกรมควบคุมมลพิษ<br/>
-                        {"".join(sensor_texts)}
+                        {"".join(metric_texts)}
                         {utc_ts.strftime("%d/%m/%Y %H:%M:%S %Z")}<br/>
                         {ict_ts.strftime("%d/%m/%Y %H:%M:%S %Z")}<br/>
                     </div>
                     """
 
             # Sensor color
-            # sensors = {k: v["value"] for k, v in climates_dict.items()}
-            sensors = {
-                sensor["sensor_type"].lower(): sensor["value"]
-                for sensor in climates
+            # metrics = {k: v["value"] for k, v in metrics_dict.items()}
+            metrics = {
+                sensor["metric_type"].lower(): sensor["value"]
+                for sensor in metrics
                 if not (
-                    sensor["sensor_type"].lower() == "pm_2_5_prediction"
+                    sensor["metric_type"].lower() == "pm_2_5_prediction"
                     and target_timestamp
                     and datetime.fromisoformat(sensor["timestamp"]) != target_timestamp
                 )
             }
 
-            sensor_types = self.sensor_types.copy()
+            metric_types = self.metric_types.copy()
             if document_id == "wind_direction":
-                sensor_types.remove(document_id)
+                metric_types.remove(document_id)
 
             if (
-                sensor_type_mapped_key in sensor_types
-                and sensor_type_mapped_key.lower() in sensors
+                metric_type_mapped_key in metric_types
+                and metric_type_mapped_key.lower() in metrics
             ):
-                sensor_color = await self.get_sensor_color(
-                    sensor_type_mapped_key, sensors[sensor_type_mapped_key.lower()]
+                metric_color = await self.get_metric_color(
+                    metric_type_mapped_key, metrics[metric_type_mapped_key.lower()]
                 )
             else:
-                for s_type in sensor_infos.HTML_SENSOR_NAMES:
-                    if s_type in sensors:
-                        sensor_color = await self.get_sensor_color(
-                            s_type, sensors[s_type]
+                for s_type in metric_infos.HTML_METRIC_NAMES:
+                    if s_type in metrics:
+                        metric_color = await self.get_metric_color(
+                            s_type, metrics[s_type]
                         )
                         break
 
             marker_option = {}
 
             if has_wind:
-                sensor_color = await self.get_sensor_color(
-                    "wind_speed", sensors[sensor_type]
+                metric_color = await self.get_metric_color(
+                    "wind_speed", metrics[metric_type]
                 )
-                sensor_marker = self.leaflet.icon(
+                metric_marker = self.leaflet.icon(
                     {
-                        "iconUrl": f"/static/resources/marks/up_arrow_{sensor_color}.svg",
+                        "iconUrl": f"/static/resources/marks/up_arrow_{metric_color}.svg",
                         "iconSize": [15, 15],
-                        "color": sensor_color,
-                        "fillColor": sensor_color,
+                        "color": metric_color,
+                        "fillColor": metric_color,
                     }
                 )
                 marker_option["rotationAngle"] = rotate_direction
             else:
-                sensor_marker = self.leaflet.icon.pulse(
+                metric_marker = self.leaflet.icon.pulse(
                     {
                         "iconSize": [15, 15],
-                        "color": sensor_color,
-                        "fillColor": sensor_color,
+                        "color": metric_color,
+                        "fillColor": metric_color,
                         "animate": animate,
                     }
                 )
 
             marker_option["customId"] = station["id"]
-            marker_option["icon"] = sensor_marker
+            marker_option["icon"] = metric_marker
 
             # ดึง marker เก่าจาก cache ถ้าไม่มี default
-            marker = self.sensor_markers.get(station["id"], None)
+            marker = self.metric_markers.get(station["id"], None)
             # ใช้สำหรับเช็ค marker สำหรับสร้าง Marker
 
             # create new marker
-            if document_id not in self.sensor_markers_layer:
+            if document_id not in self.metric_markers_layer:
                 coordinates = station["coordinates"]["coordinates"]
                 marker = (
                     self.leaflet.marker(
@@ -256,21 +256,21 @@ class BaseMap(Map):
                 )
 
                 markers.append(marker)
-                self.sensor_markers[station["id"]] = marker
+                self.metric_markers[station["id"]] = marker
             # Update marker
             else:
-                marker.setIcon(sensor_marker)
+                marker.setIcon(metric_marker)
                 marker.setTooltipContent(tooltip_detail)
 
             if marker not in markers:
                 markers.append(marker)
 
         # Create layer group for sensors and add to map
-        self.sensor_markers_layer[document_id] = markers
+        self.metric_markers_layer[document_id] = markers
 
         # Pack markers into layer group for better performance when adding/removing from map
-        self.climate_markers_layers[document_id] = self.leaflet.layerGroup(
-            self.sensor_markers_layer[document_id]
+        self.metric_markers_layers[document_id] = self.leaflet.layerGroup(
+            self.metric_markers_layer[document_id]
         ).addTo(self.map)
 
     
