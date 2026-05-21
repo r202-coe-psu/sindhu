@@ -103,11 +103,15 @@ def authorized_sindhu():
     username = form.username.data
     password = form.password.data
 
-    client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
-    body = sindhu_client_models.BodyAuthenticationV1AuthLoginPost.from_dict(
-        {"username": username, "password": password}
-    )
-    response = authentication_v1_auth_login_post.sync(client=client, body=body)
+    try:
+        client = sindhu_api_clients.client.get_current_client(is_anonymous=True)
+        body = sindhu_client_models.BodyAuthenticationV1AuthLoginPost.from_dict(
+            {"username": username, "password": password}
+        )
+        response = authentication_v1_auth_login_post.sync(client=client, body=body)
+    except Exception as e:
+        print(e)
+        return redirect(url_for("accounts.login"))
 
     if not response:
         return redirect(url_for("accounts.login"))
