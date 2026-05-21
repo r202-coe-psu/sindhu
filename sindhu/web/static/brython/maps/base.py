@@ -29,6 +29,7 @@ class BaseMap(Map):
         self.metric_markers_layer = {}
         self.metric_types = []
         self.panel_plus_sensors = []
+        self.marker_style = "donut"
 
     """
     ===========================================================================
@@ -221,14 +222,53 @@ class BaseMap(Map):
                 )
                 marker_option["rotationAngle"] = rotate_direction
             else:
-                metric_marker = self.leaflet.icon.pulse(
-                    {
-                        "iconSize": [15, 15],
-                        "color": metric_color,
-                        "fillColor": metric_color,
-                        "animate": animate,
-                    }
-                )
+                style = getattr(self, "marker_style", "donut")
+                percent = metrics.get("storage_percent", 0)
+                if percent is None: percent = 0
+                percent = min(max(percent, 0), 100)
+                
+                if style == "donut":
+                    html_content = f'<div style="width: 24px; height: 24px; border-radius: 50%; background: conic-gradient({metric_color} {percent}%, #e5e7eb 0); border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>'
+                    metric_marker = self.leaflet.divIcon({
+                        "className": "custom-div-icon",
+                        "html": html_content,
+                        "iconSize": [24, 24],
+                        "iconAnchor": [12, 12]
+                    })
+                elif style == "drop":
+                    html_content = f'<div style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));"><svg viewBox="0 0 24 24" fill="{metric_color}" width="24" height="24"><path d="M12 21.5c-3.3 0-6-2.7-6-6 0-3.1 3.5-8.5 5.5-11.3.3-.4.8-.4 1 0 2 2.8 5.5 8.2 5.5 11.3 0 3.3-2.7 6-6 6z"/></svg></div>'
+                    metric_marker = self.leaflet.divIcon({
+                        "className": "custom-div-icon",
+                        "html": html_content,
+                        "iconSize": [24, 24],
+                        "iconAnchor": [12, 12]
+                    })
+                elif style == "tank":
+                    html_content = f'<div style="width: 14px; height: 28px; border-radius: 6px; border: 2px solid #cbd5e1; background: white; position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"><div style="position: absolute; bottom: 0; left: 0; width: 100%; height: {percent}%; background-color: {metric_color}; transition: height 0.3s ease;"></div></div>'
+                    metric_marker = self.leaflet.divIcon({
+                        "className": "custom-div-icon",
+                        "html": html_content,
+                        "iconSize": [14, 28],
+                        "iconAnchor": [7, 14]
+                    })
+                elif style == "bubble":
+                    size = max(12, min(percent / 2.5, 40))
+                    html_content = f'<div style="width: {size}px; height: {size}px; border-radius: 50%; background-color: {metric_color}; border: 2px solid white; opacity: 0.85; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>'
+                    metric_marker = self.leaflet.divIcon({
+                        "className": "custom-div-icon",
+                        "html": html_content,
+                        "iconSize": [size, size],
+                        "iconAnchor": [size/2, size/2]
+                    })
+                else:
+                    metric_marker = self.leaflet.icon.pulse(
+                        {
+                            "iconSize": [15, 15],
+                            "color": metric_color,
+                            "fillColor": metric_color,
+                            "animate": False,
+                        }
+                    )
 
             marker_option["customId"] = station["id"]
             marker_option["icon"] = metric_marker

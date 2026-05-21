@@ -40,6 +40,10 @@ class WaterMonitor(BaseMonitor):
 
     async def monitor(self):
         await self.setup()
+        
+        # Bind UI events
+        if "marker_style_selector" in document:
+            document["marker_style_selector"].bind("change", self.on_marker_style_change)
 
         if self.running:
             print(f"monitor: wake up {datetime.datetime.now()}")
@@ -59,6 +63,7 @@ class WaterMonitor(BaseMonitor):
         try:
             response = await aio.get(url, cache=True)
             data = json.loads(response.data)
+            self.latest_data = data
             
             if "storage_percent" not in self.map.metric_types:
                 self.map.metric_types.append("storage_percent")
@@ -68,3 +73,9 @@ class WaterMonitor(BaseMonitor):
             print(f"monitor: error {e}")
         finally:
             self.set_map_loading(False)
+
+    def on_marker_style_change(self, ev):
+        if hasattr(self, "map") and hasattr(self, "latest_data"):
+            style = ev.target.value
+            self.map.marker_style = style
+            aio.run(self.map.update("storage_percent", self.latest_data))
