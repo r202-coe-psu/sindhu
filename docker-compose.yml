@@ -102,7 +102,7 @@ services:
     env_file:
       - .env.dev
     environment:
-      sindhu_SETTINGS: /app/.env.dev
+      SINDHU_SETTINGS: /app/.env.dev
     command: /app/scripts/run-web-develop-docker
     logging:
       options:

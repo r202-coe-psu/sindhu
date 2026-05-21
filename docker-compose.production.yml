@@ -86,7 +86,7 @@ services:
       - default
     restart: on-failure:5
     environment:
-      sindhu_SETTINGS: /app/.env
+      SINDHU_SETTINGS: /app/.env
     command: /venv/bin/gunicorn  -w 5 --bind 0.0.0.0:9080  --timeout 600 --keep-alive 10 "sindhu.web:create_app()"
     logging:
       options:
