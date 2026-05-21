@@ -257,6 +257,18 @@ class AODColor(MetricColor):
         ]
 
 
+class WaterLevelColor(MetricColor):
+    def __init__(self):
+        super().__init__("water_level")
+
+        self.color_ranks = [
+            (0, 5, "#FFFFFF"),
+            (5, 30, "#B3E5FC"),
+            (30, 120, "#4FC3F7"),
+            (120, 250, "#0288D1"),
+            (250, 1_000_000, "#01579B"),
+        ]
+
 METRIC_COLORS = [
     PM01Color(),
     EmpiricalForecastPM01Color(),
@@ -277,6 +289,7 @@ METRIC_COLORS = [
     O3Color(),
     SO2Color(),
     NO2Color(),
+    WaterLevelColor(),
 ]
 # don't have "rain, pressure, co, o3, so3, no2"
 

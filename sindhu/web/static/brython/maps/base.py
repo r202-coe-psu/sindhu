@@ -83,6 +83,7 @@ class BaseMap(Map):
                 disactive_txt = {"th": "ขาดการเชื่อมต่อ", "en": "lost connection"}
                 tooltip_detail = f"""
                 <div align="left" style="font-size: 15px;">
+                    <b>{station.get("name_th", "")}</b><br/>
                     <b>{station["name"]}</b><br/>
                     {disactive_txt[self.lang_code]}
                 </div>
@@ -160,8 +161,8 @@ class BaseMap(Map):
 
                     tooltip_detail = f"""
                     <div align="left" style="font-size: 15px;">
-                        <b>{station["name"]}</b><br/>
                         <b>{station["name_th"]}</b><br/>
+                        <b>{station["name"]}</b><br/>
                         <b>หมายเหตุ</b> ค่าที่แสดงเป็นข้อมูลรายชั่วโมง แต่การใช้สีอ้างอิงจากค่าเฉลี่ย 24 ชั่วโมง<br/>
                         อ้างอิงข้อมูลสีตาม AQI จากกรมควบคุมมลพิษ<br/>
                         {"".join(metric_texts)}

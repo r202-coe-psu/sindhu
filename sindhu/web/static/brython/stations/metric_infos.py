@@ -20,6 +20,7 @@ HTML_METRIC_NAMES = dict(
     pressure="Pressure",
     dew_point="Dew Point",
     visible="Visible",
+    water_level="Water Level",
 )
 
 HTML_METRIC_UNITS = dict(
@@ -45,6 +46,7 @@ HTML_METRIC_UNITS = dict(
     so2="ppb",
     o3="ppb",
     no2="ppb",
+    water_level="m",
 )
 
 HTML_CLIMATE_LEGENDS = dict(
@@ -231,6 +233,13 @@ HTML_CLIMATE_LEGENDS = dict(
         {"DES": "เริ่มมีผลกระทบต่อสุขภาพ 37.5-75mg/m<sup>3</sup>", "fill": "#FF8000"},
         {"DES": "มีผลกระทบต่อสุขภาพ >75mg/m<sup>3</sup>", "fill": "#FF0000"},
     ],
+    water_level=[
+        {"DES": "0-5 m(MSL)", "fill": "#FFFFFF"},
+        {"DES": "5-30 m(MSL)", "fill": "#B3E5FC"},
+        {"DES": "30-120 m(MSL)", "fill": "#4FC3F7"},
+        {"DES": "120-250 m(MSL)", "fill": "#0288D1"},
+        {"DES": ">250 m(MSL)", "fill": "#01579B"},
+    ],
 )
 
 
@@ -254,6 +263,7 @@ HTML_CLIMATE_LEGEND_TITLES = dict(
     O3="Ozone Concentration (ppb)",
     SO2="SO<sub>2</sub> Concentration (ppb)",
     NO2="NO<sub>2</sub> Concentration (ppb)",
+    water_level="Water Level",
 )
 
 INTERPOLATION_METRIC_TYPES_WITH_LEGEND = dict(
