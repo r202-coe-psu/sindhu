@@ -101,7 +101,7 @@ def login_oauth(name):
 def authorized_sindhu():
     form = forms.users.LoginForm()
     if not form.validate_on_submit():
-        return redirect("accounts.login")
+        return redirect(url_for("accounts.login"))
 
     username = form.username.data
     password = form.password.data
