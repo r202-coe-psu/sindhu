@@ -59,7 +59,11 @@ class WaterMonitor(BaseMonitor):
         try:
             response = await aio.get(url, cache=True)
             data = json.loads(response.data)
-            await self.map.update("latest", data)
+            
+            if "storage_percent" not in self.map.metric_types:
+                self.map.metric_types.append("storage_percent")
+                
+            await self.map.update("storage_percent", data)
         except Exception as e:
             print(f"monitor: error {e}")
         finally:
