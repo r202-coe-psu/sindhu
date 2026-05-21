@@ -54,10 +54,6 @@ class BaseMonitor:
             print(f"monitor: {self.monitor_name} monitor")
             print(f"monitor: sleep {self.acquisition_interval}s")
 
-            # params = dict(source=self.source)
-            # stations = await self.fetch_stations(
-            #     self.apis["stations"]["climates"]["latest"], params
-            # )
             stations = {}
             await self.map.update(self.source, stations)
             self.set_map_loading(False)
