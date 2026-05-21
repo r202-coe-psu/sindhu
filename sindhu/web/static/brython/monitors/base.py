@@ -4,7 +4,7 @@ import javascript as js
 import datetime
 from urllib.parse import urlencode
 
-from ..maps.base import BaseMap
+from maps.base import BaseMap
 
 
 class BaseMonitor:

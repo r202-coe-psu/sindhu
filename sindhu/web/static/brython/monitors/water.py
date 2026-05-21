@@ -4,6 +4,8 @@ import datetime
 from urllib.parse import urlencode
 
 from .base import BaseMonitor
+import json
+from urllib.parse import urlencode
 
 class WaterMonitor(BaseMonitor):
     def __init__(
@@ -39,7 +41,7 @@ class WaterMonitor(BaseMonitor):
     async def monitor(self):
         await self.setup()
 
-        while self.running:
+        if self.running:
             print(f"monitor: wake up {datetime.datetime.now()}")
             print(f"monitor: {self.monitor_name} monitor")
             print(f"monitor: sleep {self.acquisition_interval}s")
@@ -50,15 +52,13 @@ class WaterMonitor(BaseMonitor):
             await aio.sleep(self.acquisition_interval)
 
     async def get_stations_metrics(self):
-        from urllib.parse import urlencode
-        
-        url = f"{self.api_url}/v1/stations/metrics/latest"
         query_data = urlencode({"source": self.source})
+        url = f"{self.api_url}/v1/stations/metrics/latest?{query_data}"
         
         self.set_map_loading(True)
         try:
-            response = await aio.get(url, data=query_data, cache=True)
-            data = js.JSON.parse(response.data)
+            response = await aio.get(url, cache=True)
+            data = json.loads(response.data)
             await self.map.update("latest", data)
         except Exception as e:
             print(f"monitor: error {e}")
