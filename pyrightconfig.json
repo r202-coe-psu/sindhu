@@ -1,6 +1,7 @@
 {
   "extraPaths": [
-    "./clients/sindhu-client"
+    "./clients/sindhu-client",
+    "./sindhu/web/static/brython"
   ],
   "exclude": [
     "**/node_modules",

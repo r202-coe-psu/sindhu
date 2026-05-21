@@ -47,6 +47,12 @@
                 <option>ลุ่มน้ำปิง</option>
                 <option>ลุ่มน้ำมูล</option>
             </select>
+            <select id="marker_style_selector" class="select select-bordered select-sm w-full bg-white text-gray-700">
+                <option value="donut" selected>รูปแบบ: Mini Donut</option>
+                <option value="drop">รูปแบบ: Water Drop</option>
+                <option value="tank">รูปแบบ: Dynamic Tank</option>
+                <option value="bubble">รูปแบบ: Bubble Map</option>
+            </select>
         </div>
         
         {# Tabs #}
@@ -56,72 +62,13 @@
         </div>
 
         {# Data List #}
-        <div class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30 custom-scrollbar">
-            
-            {# Mock Item 1 #}
-            <div class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
-                <div class="flex justify-between items-start mb-2">
-                    <div>
-                        <h3 class="font-bold text-gray-800 text-base">เขื่อนภูมิพล</h3>
-                        <div class="text-xs text-gray-500 mt-0.5">จ.ตาก | ลุ่มน้ำปิง</div>
-                    </div>
-                    <span class="badge badge-error gap-1 px-2 py-3 shadow-sm"><span class="w-2 h-2 rounded-full bg-white animate-pulse"></span>น้ำน้อย</span>
-                </div>
-                <div class="flex justify-between text-sm mb-1.5 mt-3">
-                    <span class="text-gray-500">ปริมาณน้ำ</span>
-                    <span class="font-semibold text-gray-800">4,200 ลบ.ม. <span class="text-error ml-1">(31%)</span></span>
-                </div>
-                <progress class="progress progress-error w-full bg-gray-100 h-2" value="31" max="100"></progress>
+        <div id="reservoir_data_list" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30 custom-scrollbar">
+            <div class="flex justify-center items-center h-full">
+                <span class="text-sm text-gray-500">กำลังโหลดข้อมูล...</span>
             </div>
-
-            {# Mock Item 2 #}
-            <div class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
-                <div class="flex justify-between items-start mb-2">
-                    <div>
-                        <h3 class="font-bold text-gray-800 text-base">เขื่อนสิริกิติ์</h3>
-                        <div class="text-xs text-gray-500 mt-0.5">จ.อุตรดิตถ์ | ลุ่มน้ำน่าน</div>
-                    </div>
-                    <span class="badge badge-success gap-1 px-2 py-3 shadow-sm"><span class="w-2 h-2 rounded-full bg-white"></span>น้ำปกติ</span>
-                </div>
-                <div class="flex justify-between text-sm mb-1.5 mt-3">
-                    <span class="text-gray-500">ปริมาณน้ำ</span>
-                    <span class="font-semibold text-gray-800">5,800 ลบ.ม. <span class="text-success ml-1">(61%)</span></span>
-                </div>
-                <progress class="progress progress-success w-full bg-gray-100 h-2" value="61" max="100"></progress>
-            </div>
-            
-            {# Mock Item 3 #}
-            <div class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
-                <div class="flex justify-between items-start mb-2">
-                    <div>
-                        <h3 class="font-bold text-gray-800 text-base">เขื่อนป่าสักชลสิทธิ์</h3>
-                        <div class="text-xs text-gray-500 mt-0.5">จ.ลพบุรี | ลุ่มน้ำป่าสัก</div>
-                    </div>
-                    <span class="badge badge-info gap-1 px-2 py-3 shadow-sm"><span class="w-2 h-2 rounded-full bg-white"></span>น้ำมาก</span>
-                </div>
-                <div class="flex justify-between text-sm mb-1.5 mt-3">
-                    <span class="text-gray-500">ปริมาณน้ำ</span>
-                    <span class="font-semibold text-gray-800">850 ลบ.ม. <span class="text-info ml-1">(88%)</span></span>
-                </div>
-                <progress class="progress progress-info w-full bg-gray-100 h-2" value="88" max="100"></progress>
-            </div>
-            
-            {# Mock Item 4 #}
-            <div class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
-                <div class="flex justify-between items-start mb-2">
-                    <div>
-                        <h3 class="font-bold text-gray-800 text-base">เขื่อนอุบลรัตน์</h3>
-                        <div class="text-xs text-gray-500 mt-0.5">จ.ขอนแก่น | ลุ่มน้ำชี</div>
-                    </div>
-                    <span class="badge badge-warning gap-1 px-2 py-3 shadow-sm"><span class="w-2 h-2 rounded-full bg-white"></span>เฝ้าระวัง</span>
-                </div>
-                <div class="flex justify-between text-sm mb-1.5 mt-3">
-                    <span class="text-gray-500">ปริมาณน้ำ</span>
-                    <span class="font-semibold text-gray-800">1,900 ลบ.ม. <span class="text-warning ml-1">(78%)</span></span>
-                </div>
-                <progress class="progress progress-warning w-full bg-gray-100 h-2" value="78" max="100"></progress>
-            </div>
-
+        </div>
+        <div class="p-3 text-center text-xs text-gray-400 bg-white border-t border-gray-100">
+            * การประเมินสถานะน้ำและสีเป็นการประเมินเบื้องต้นแบบไม่เป็นทางการ
         </div>
     </div>
 </div>
@@ -150,11 +97,12 @@
 
 </script>
 <script type="text/python">
-  from monitors import BaseMonitor
+  from monitors import WaterMonitor 
   from browser import aio
-  map = BaseMonitor(
+  map = WaterMonitor(
     "{{ g.lang_code }}",
     "{{ api_url }}",
+    "{{ source }}"
     )
   map.start()
 </script>
@@ -163,5 +111,6 @@
 
 <script type="text/javascript" src="{{ url_for('static', filename='brython/maps.brython.js') }}"></script>
 <script type="text/javascript" src="{{ url_for('static', filename='brython/monitors.brython.js') }}"></script>
+<script type="text/javascript" src="{{ url_for('static', filename='brython/stations.brython.js') }}"></script>
 
 {% endblock additional_js  %}
