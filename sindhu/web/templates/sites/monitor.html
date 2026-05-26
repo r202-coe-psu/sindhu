@@ -103,12 +103,12 @@
 <script type="text/python">
   from monitors import WaterMonitor 
   from browser import aio
-  map = WaterMonitor(
+  monitors = WaterMonitor(
     "{{ g.lang_code }}",
     "{{ api_url }}",
     "{{ source }}"
     )
-  map.start()
+  monitors.start()
 </script>
 {% endblock content %}
 {% block additional_js %}
