@@ -17,3 +17,8 @@ class BaseSchema(BaseModel):
 class GeoObject(BaseModel):
     type: str = "Point"
     coordinates: List[float] = Field(example=[0.0, 0.0], default=[0.0, 0.0])
+
+
+class GeoPolygon(BaseModel):
+    type: str = "Polygon"
+    coordinates: List[List[List[float]]] = Field(default_factory=lambda: [[]])

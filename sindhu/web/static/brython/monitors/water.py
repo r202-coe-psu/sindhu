@@ -40,7 +40,7 @@ class WaterMonitor(BaseMonitor):
 
     async def monitor(self):
         await self.setup()
-        
+
         # Bind UI events
         if "marker_style_selector" in document:
             document["marker_style_selector"].bind("change", self.on_marker_style_change)
@@ -81,11 +81,28 @@ class WaterMonitor(BaseMonitor):
             self.map.marker_style = style
             aio.run(self.map.update("storage_percent", self.latest_data))
 
-    def render_data_list(self):
+    def on_zone_stations_found(self, nearby_stations):
+        if not hasattr(self, "latest_data"):
+            return
+        zone_codes = set()
+        for s in nearby_stations:
+            code = s.get("code", None)
+            if code:
+                zone_codes.add(code)
+        if zone_codes:
+            self.render_data_list(zone_codes)
+
+    def on_zone_stations_cleared(self):
+        if hasattr(self, "latest_data"):
+            self.render_data_list()
+
+    def render_data_list(self, filter_codes=None):
         if "reservoir_data_list" not in document:
             return
-            
+
         stations = self.latest_data.get("stations", [])
+        if filter_codes:
+            stations = [s for s in stations if s.get("code") in filter_codes]
         html_content = ""
         
         for station in stations:

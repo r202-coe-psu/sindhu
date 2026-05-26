@@ -16,6 +16,14 @@
                 </div>
             </div>
             <div id="mapid" style="z-index:1; height: 100%; width:100%;"></div>
+
+            {# Pin hint — floating on map #}
+            <div class="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-white/90 backdrop-blur-sm border border-gray-200 shadow-md rounded-full px-4 py-1.5 pointer-events-none">
+                <span class="text-xs text-gray-600 flex items-center gap-1.5">
+                    <i class="ph-fill ph-map-pin text-blue-600"></i>
+                    คลิกบนแผนที่เพื่อปักหมุดและค้นหาสถานีใกล้เคียง
+                </span>
+            </div>
         </div>
     </div>
 
@@ -34,21 +42,6 @@
 
         {# Filters #}
         <div class="p-3 border-b border-gray-100 bg-gray-50 flex gap-2">
-        {#
-            <select class="select select-bordered select-sm w-full bg-white text-gray-700">
-                <option disabled selected>ทุกภูมิภาค</option>
-                <option>ภาคเหนือ</option>
-                <option>ภาคกลาง</option>
-                <option>ภาคตะวันออกเฉียงเหนือ</option>
-                <option>ภาคใต้</option>
-            </select>
-            <select class="select select-bordered select-sm w-full bg-white text-gray-700">
-                <option disabled selected>ทุกลุ่มน้ำ</option>
-                <option>ลุ่มน้ำเจ้าพระยา</option>
-                <option>ลุ่มน้ำปิง</option>
-                <option>ลุ่มน้ำมูล</option>
-            </select>
-        #}
             <select id="marker_style_selector" class="select select-bordered select-sm w-full bg-white text-gray-700">
                 <option value="donut" selected>รูปแบบ: Mini Donut</option>
                 <option value="drop">รูปแบบ: Water Drop</option>
@@ -56,14 +49,14 @@
                 <option value="bubble">รูปแบบ: Bubble Map</option>
             </select>
         </div>
-        
-        {# Tabs #}
-        {#
-        <div class="flex border-b border-gray-200 bg-white shrink-0">
-            <button class="flex-1 py-3 text-sm font-semibold text-blue-600 border-b-2 border-blue-600 bg-blue-50/50">อ่างฯ ขนาดใหญ่</button>
-            <button class="flex-1 py-3 text-sm font-semibold text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors">อ่างฯ ขนาดกลาง</button>
+
+        {# Zone & Nearby Stations Result Panel #}
+        <div id="locate_result_panel" class="p-4 border-b border-gray-100 bg-white shrink-0">
+            <div class="text-center text-sm text-gray-400 py-2">
+                <i class="ph ph-map-pin text-lg"></i>
+                <p class="mt-1">คลิกบนแผนที่เพื่อดูลุ่มน้ำและสถานีใกล้เคียง</p>
+            </div>
         </div>
-        #}
 
         {# Data List #}
         <div id="reservoir_data_list" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30 custom-scrollbar">

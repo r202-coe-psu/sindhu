@@ -26,6 +26,7 @@ class BaseMap(Map):
         self.interpolate_layers = {}
         
         self.metric_markers = {}
+        self.metric_markers_by_code = {}
         self.metric_markers_layer = {}
         self.metric_types = []
         self.panel_plus_sensors = []
@@ -308,6 +309,8 @@ class BaseMap(Map):
 
                 markers.append(marker)
                 self.metric_markers[station["id"]] = marker
+                if station.get("code"):
+                    self.metric_markers_by_code[station["code"]] = marker
             # Update marker
             else:
                 marker.setIcon(metric_marker)
@@ -336,6 +339,25 @@ class BaseMap(Map):
 
     async def update_metric_legend(self, document_id):
         self.metric_legends[document_id] = True
+
+    def filter_markers_by_codes(self, station_codes):
+        code_set = set(station_codes)
+        visible = set()
+        for code in code_set:
+            m = self.metric_markers_by_code.get(code)
+            if m:
+                visible.add(code)
+                if not self.map.hasLayer(m):
+                    m.addTo(self.map)
+        for code, marker in self.metric_markers_by_code.items():
+            if code not in visible:
+                if self.map.hasLayer(marker):
+                    self.map.removeLayer(marker)
+
+    def show_all_markers(self):
+        for station_id, marker in self.metric_markers.items():
+            if not self.map.hasLayer(marker):
+                marker.addTo(self.map)
 
     def on_click_station(self, station_id):
         print(f"Station clicked: {station_id}")

@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings
 
 from sindhu.models.users import User
 from sindhu.models.stations import Station
+from sindhu.models.zones import Zone
 from sindhu.models.system_settings import SystemSetting
 from sindhu.models.tokens import ApiToken
 from sindhu.models.logs import RequestLog

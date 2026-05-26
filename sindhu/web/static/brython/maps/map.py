@@ -98,41 +98,152 @@ class Map:
 
         self.leaflet.control.layers(self.base_maps).addTo(self.map)
 
+        self.zone_layer = None
+        self.station_lines = []
+        self.station_markers = []
+        self._on_pin_callback = None
+        self._pin_mode_active = False
+        self._pin_btn = None
+
     def __del__(self):
         self.map.remove()
 
-    def fly_to_user(self):
-        self.map.locate()
+    def enable_pin_mode(self, callback):
+        self._on_pin_callback = callback
+        self._add_pin_control()
 
-        def on_location_found(e):
-            self.user_coord = (e.latlng.lat, e.latlng.lng)
+    def _add_pin_control(self):
+        from browser import document as doc
 
-            self.map.flyTo(self.user_coord, 16)
+        zoom_bar = doc.select_one(".leaflet-top.leaflet-right .leaflet-bar")
+        if not zoom_bar:
+            return
 
-            if hasattr(self, "user_mark") and self.user_mark:
-                if not isinstance(self.user_mark, list):
-                    self.user_mark.setLatLng(self.user_coord)
-                else:
-                    self.user_mark = (
-                        self.leaflet.marker(
-                            self.user_coord,
-                            {
-                                "icon": self.get_icon("my_location"),
-                                "zIndexOffset": 1000,
-                            },
-                        )
-                        .addTo(self.map)
-                        .bindPopup("ตำแหน่งของคุณ")
-                    )
+        btn = doc.createElement("a")
+        btn.href = "#"
+        btn.title = "ปักหมุดบนแผนที่"
+        btn.attrs["role"] = "button"
+        btn.html = '<svg width="14" height="18" viewBox="0 0 30 40"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="#6b7280"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg>'
+        btn.style.cssText = "display:flex;align-items:center;justify-content:center;width:30px;height:30px;cursor:pointer;border-top:1px solid #ccc;"
+        self._pin_btn = btn
 
-            self.map.off("locationfound", on_location_found)
+        def toggle(e):
+            e.preventDefault()
+            e.stopPropagation()
+            self._pin_mode_active = not self._pin_mode_active
+            svg_path = btn.select_one("path")
+            if self._pin_mode_active:
+                btn.style.backgroundColor = "#dbeafe"
+                if svg_path:
+                    svg_path.attrs["fill"] = "#2563eb"
+                self.map.getContainer().style.cursor = "crosshair"
+            else:
+                btn.style.backgroundColor = ""
+                if svg_path:
+                    svg_path.attrs["fill"] = "#6b7280"
+                self.map.getContainer().style.cursor = ""
 
-        def on_location_error(e):
-            alert(f"ไม่สามารถระบุตำแหน่งได้: {e.message}")
+        btn.bind("click", toggle)
+        zoom_bar <= btn
 
-        # ผูกเหตุการณ์
-        self.map.on("locationfound", on_location_found)
-        self.map.on("locationerror", on_location_error)
+        self.map.on("click", self._handle_map_click)
+
+    def _handle_map_click(self, e):
+        if not self._pin_mode_active:
+            return
+        lat = e.latlng.lat
+        lng = e.latlng.lng
+        self.place_pin(lat, lng)
+        if self._on_pin_callback:
+            self._on_pin_callback(lat, lng)
+
+    def place_pin(self, lat, lng):
+        self.user_coord = (lat, lng)
+        if hasattr(self, "user_mark") and self.user_mark and not isinstance(self.user_mark, list):
+            self.user_mark.setLatLng(self.user_coord)
+        else:
+            pin_icon = self.leaflet.divIcon({
+                "className": "",
+                "html": '<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><svg width="30" height="40" viewBox="0 0 30 40"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="#dc2626"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg></div>',
+                "iconSize": [30, 40],
+                "iconAnchor": [15, 40],
+                "popupAnchor": [0, -36],
+            })
+            self.user_mark = (
+                self.leaflet.marker(
+                    self.user_coord,
+                    {"icon": pin_icon, "zIndexOffset": 1000},
+                )
+                .addTo(self.map)
+                .bindPopup("ตำแหน่งที่เลือก")
+            )
+
+    def clear_zone_display(self):
+        if self.zone_layer:
+            self.map.removeLayer(self.zone_layer)
+            self.zone_layer = None
+        for line in self.station_lines:
+            self.map.removeLayer(line)
+        self.station_lines = []
+        for marker in self.station_markers:
+            self.map.removeLayer(marker)
+        self.station_markers = []
+
+    def show_zone(self, zone_geojson):
+        if self.zone_layer:
+            self.map.removeLayer(self.zone_layer)
+
+        self.zone_layer = self.leaflet.geoJson(
+            zone_geojson,
+            {
+                "style": lambda feature: {
+                    "fillColor": "#3b82f6",
+                    "fillOpacity": 0.15,
+                    "color": "#2563eb",
+                    "weight": 2,
+                    "dashArray": "5, 5",
+                },
+            },
+        ).addTo(self.map)
+
+    def show_station_paths(self, user_latlng, stations):
+        for line in self.station_lines:
+            self.map.removeLayer(line)
+        self.station_lines = []
+        for marker in self.station_markers:
+            self.map.removeLayer(marker)
+        self.station_markers = []
+
+        for i, station in enumerate(stations):
+            coords = station["coordinates"]["coordinates"]
+            station_latlng = [coords[1], coords[0]]
+
+            line = self.leaflet.polyline(
+                [list(user_latlng), station_latlng],
+                {
+                    "color": "#ef4444" if i == 0 else "#6b7280",
+                    "weight": 2 if i == 0 else 1,
+                    "opacity": 0.8 if i == 0 else 0.4,
+                    "dashArray": "8, 4",
+                },
+            ).addTo(self.map)
+            self.station_lines.append(line)
+
+            name = station.get("name_th") or station.get("name", "")
+            dist_km = station.get("distance", 0) / 1000
+            popup_html = f"<b>{name}</b><br>ระยะทาง: {dist_km:.1f} km"
+
+            marker = self.leaflet.circleMarker(
+                station_latlng,
+                {
+                    "radius": 8 if i == 0 else 6,
+                    "fillColor": "#ef4444" if i == 0 else "#3b82f6",
+                    "color": "#ffffff",
+                    "weight": 2,
+                    "fillOpacity": 0.9,
+                },
+            ).addTo(self.map).bindPopup(popup_html)
+            self.station_markers.append(marker)
 
     # def fly_to_user(self):
     #     self.map.flyTo(self.user_coord, 16)
