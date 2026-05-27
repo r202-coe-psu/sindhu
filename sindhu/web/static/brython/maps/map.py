@@ -236,8 +236,6 @@ class Map:
         if self.zone_layer:
             self.map.removeLayer(self.zone_layer)
 
-        zone_name = zone_geojson.get("properties", {}).get("name", "")
-
         self.zone_layer = self.leaflet.geoJson(
             zone_geojson,
             {
@@ -248,10 +246,6 @@ class Map:
                     "weight": 2,
                     "dashArray": "5, 5",
                 },
-                "onEachFeature": lambda feature, layer: layer.bindTooltip(
-                    f'<b>{zone_name}</b>',
-                    {"permanent": True, "direction": "center", "className": "zone-label"},
-                ) if zone_name else None,
             },
         ).addTo(self.map)
 
@@ -263,36 +257,26 @@ class Map:
             self.map.removeLayer(marker)
         self.station_markers = []
 
-        for i, station in enumerate(stations):
-            coords = station["coordinates"]["coordinates"]
-            station_latlng = [coords[1], coords[0]]
+        first = True
+        for station in stations:
+            code = station.get("code")
+            if not code or code not in self.metric_markers_by_code:
+                continue
+
+            marker = self.metric_markers_by_code[code]
+            station_latlng = marker.getLatLng()
+
+            if first:
+                style = {"color": "#dc2626", "weight": 2.5, "opacity": 0.8, "dashArray": "6, 4"}
+                first = False
+            else:
+                style = {"color": "#3b82f6", "weight": 1.5, "opacity": 0.4, "dashArray": "6, 4"}
 
             line = self.leaflet.polyline(
-                [list(user_latlng), station_latlng],
-                {
-                    "color": "#ef4444" if i == 0 else "#6b7280",
-                    "weight": 2 if i == 0 else 1,
-                    "opacity": 0.8 if i == 0 else 0.4,
-                    "dashArray": "8, 4",
-                },
+                [list(user_latlng), [station_latlng.lat, station_latlng.lng]],
+                style,
             ).addTo(self.map)
             self.station_lines.append(line)
-
-            name = station.get("name_th") or station.get("name", "")
-            dist_km = station.get("distance", 0) / 1000
-            popup_html = f"<b>{name}</b><br>ระยะทาง: {dist_km:.1f} km"
-
-            marker = self.leaflet.circleMarker(
-                station_latlng,
-                {
-                    "radius": 8 if i == 0 else 6,
-                    "fillColor": "#ef4444" if i == 0 else "#3b82f6",
-                    "color": "#ffffff",
-                    "weight": 2,
-                    "fillOpacity": 0.9,
-                },
-            ).addTo(self.map).bindPopup(popup_html)
-            self.station_markers.append(marker)
 
     # def fly_to_user(self):
     #     self.map.flyTo(self.user_coord, 16)

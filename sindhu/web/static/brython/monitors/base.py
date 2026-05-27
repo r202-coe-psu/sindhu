@@ -89,14 +89,20 @@ class BaseMonitor:
             self.map.clear_zone_display()
 
             if zone:
+                zone_name = zone.get("name_th") or zone.get("name", "")
                 zone_geojson = {
                     "type": "Feature",
-                    "properties": {"name": zone.get("name_th") or zone.get("name", "")},
+                    "properties": {"name": zone_name},
                     "geometry": zone["boundary"],
                 }
                 self.map.show_zone(zone_geojson)
 
+                mark = self.map.user_mark
+                if mark and not isinstance(mark, list):
+                    mark.setPopupContent(f'<div class="text-sm font-semibold text-blue-700"><i class="ph ph-map-pin"></i> {zone_name}</div>').openPopup()
+
                 if nearby_stations and len(nearby_stations) > 0:
+                    self.map.show_station_paths((lat, lng), nearby_stations)
                     codes = []
                     for s in nearby_stations:
                         code = s.get("code", None)
