@@ -64,13 +64,16 @@ class BaseMonitor:
         self.map = BaseMap([center[1], center[0]], zoom, min_zoom, self.lang_code)
         self.set_map_loading(False)
 
-        self.map.enable_pin_mode(self.on_map_pinned)
+        self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
+
+    def on_pin_mode_off(self):
+        self.map.show_all_markers()
+        self.on_zone_stations_cleared()
 
     def on_map_pinned(self, lat, lng):
         aio.run(self.on_location_received(lat, lng))
 
     async def on_location_received(self, lat, lng):
-
         try:
             body = js.JSON.stringify({"latitude": lat, "longitude": lng})
             response = await aio.post(
@@ -102,59 +105,22 @@ class BaseMonitor:
                     if codes:
                         self.map.filter_markers_by_codes(codes)
 
-                self.update_locate_panel("success", zone=zone, stations=nearby_stations)
                 self.on_zone_stations_found(nearby_stations)
             else:
+                self.map.show_all_markers()
+                self.on_zone_stations_cleared()
+                if self.map._reset_btn_container:
+                    self.map._reset_btn_container.style.display = "none"
                 mark = self.map.user_mark
                 if mark and not isinstance(mark, list):
                     mark.setPopupContent('<div class="text-sm text-amber-700 font-semibold"><i class="ph ph-warning"></i> ไม่พบลุ่มน้ำสำหรับตำแหน่งนี้</div>').openPopup()
         except Exception as e:
             print(f"locate error: {e}")
-            self.update_locate_panel("error", error_msg=str(e))
 
         self.set_map_loading(False)
 
-    def update_locate_panel(self, state, zone=None, stations=None, error_msg=None):
-        panel = document.getElementById("locate_result_panel")
-        if not panel:
-            return
-
-        if state == "loading":
-            panel.innerHTML = """
-                <div class="flex items-center gap-2 text-gray-500 p-4">
-                    <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span class="text-sm">กำลังค้นหาตำแหน่ง...</span>
-                </div>
-            """
-        elif state == "error":
-            panel.innerHTML = f"""
-                <div class="p-4 text-sm text-red-600 bg-red-50 rounded-xl">
-                    <i class="ph ph-warning-circle"></i> ไม่สามารถระบุตำแหน่งได้: {error_msg or 'Unknown error'}
-                </div>
-            """
-        elif state == "success":
-            panel.innerHTML = """
-            <button id="btn_show_all_stations" class="btn btn-sm btn-ghost text-blue-600 hover:bg-blue-50 w-full mb-2">
-                <i class="ph ph-arrow-counter-clockwise"></i> แสดงสถานีทั้งหมด
-            </button>
-            """
-            btn = document.getElementById("btn_show_all_stations")
-            if btn:
-                btn.bind("click", self.on_show_all_stations)
-
     def on_zone_stations_found(self, nearby_stations):
         pass
-
-    def on_show_all_stations(self, ev):
-        self.map.show_all_markers()
-        self.map.clear_zone_display()
-        if hasattr(self, "user_mark") and self.map.user_mark and not isinstance(self.map.user_mark, list):
-            self.map.map.removeLayer(self.map.user_mark)
-            self.map.user_mark = []
-        panel = document.getElementById("locate_result_panel")
-        if panel:
-            panel.innerHTML = ""
-        self.on_zone_stations_cleared()
 
     def on_zone_stations_cleared(self):
         pass

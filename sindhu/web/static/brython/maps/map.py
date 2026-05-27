@@ -102,14 +102,17 @@ class Map:
         self.station_lines = []
         self.station_markers = []
         self._on_pin_callback = None
+        self._on_pin_off_callback = None
         self._pin_mode_active = False
         self._pin_btn = None
+        self._reset_btn_container = None
 
     def __del__(self):
         self.map.remove()
 
-    def enable_pin_mode(self, callback):
+    def enable_pin_mode(self, callback, off_callback=None):
         self._on_pin_callback = callback
+        self._on_pin_off_callback = off_callback
         self._add_pin_control()
 
     def _add_pin_control(self):
@@ -127,6 +130,8 @@ class Map:
         btn.style.cssText = "display:flex;align-items:center;justify-content:center;width:30px;height:30px;cursor:pointer;border-top:1px solid #ccc;"
         self._pin_btn = btn
 
+        hint = doc.getElementById("pin_hint_banner")
+
         def toggle(e):
             e.preventDefault()
             e.stopPropagation()
@@ -137,14 +142,42 @@ class Map:
                 if svg_path:
                     svg_path.attrs["fill"] = "#2563eb"
                 self.map.getContainer().style.cursor = "crosshair"
+                if hint:
+                    hint.classList.remove("hidden")
             else:
                 btn.style.backgroundColor = ""
                 if svg_path:
                     svg_path.attrs["fill"] = "#6b7280"
                 self.map.getContainer().style.cursor = ""
+                if hint:
+                    hint.classList.add("hidden")
+                self.remove_pin()
+                self.clear_zone_display()
+                if self._on_pin_off_callback:
+                    self._on_pin_off_callback()
 
         btn.bind("click", toggle)
         zoom_bar <= btn
+
+        map_container = self.map.getContainer()
+        reset_div = doc.createElement("div")
+        reset_div.style.cssText = "display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:1000;"
+        reset_btn = doc.createElement("button")
+        reset_btn.html = '<i class="ph ph-arrow-counter-clockwise"></i> แสดงสถานีทั้งหมด'
+        reset_btn.style.cssText = "background:white;color:#2563eb;border:1px solid #e5e7eb;border-radius:9999px;padding:6px 16px;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.15);display:flex;align-items:center;gap:6px;"
+        reset_div <= reset_btn
+        map_container <= reset_div
+        self._reset_btn_container = reset_div
+
+        def on_reset(e):
+            e.preventDefault()
+            e.stopPropagation()
+            self.remove_pin()
+            self.clear_zone_display()
+            if self._on_pin_off_callback:
+                self._on_pin_off_callback()
+
+        reset_btn.bind("click", on_reset)
 
         self.map.on("click", self._handle_map_click)
 
@@ -177,6 +210,16 @@ class Map:
                 .addTo(self.map)
                 .bindPopup("ตำแหน่งที่เลือก")
             )
+        if self._reset_btn_container:
+            self._reset_btn_container.style.display = "block"
+
+    def remove_pin(self):
+        if hasattr(self, "user_mark") and self.user_mark and not isinstance(self.user_mark, list):
+            self.map.removeLayer(self.user_mark)
+            self.user_mark = []
+            self.user_coord = None
+        if self._reset_btn_container:
+            self._reset_btn_container.style.display = "none"
 
     def clear_zone_display(self):
         if self.zone_layer:
@@ -193,6 +236,8 @@ class Map:
         if self.zone_layer:
             self.map.removeLayer(self.zone_layer)
 
+        zone_name = zone_geojson.get("properties", {}).get("name", "")
+
         self.zone_layer = self.leaflet.geoJson(
             zone_geojson,
             {
@@ -203,6 +248,10 @@ class Map:
                     "weight": 2,
                     "dashArray": "5, 5",
                 },
+                "onEachFeature": lambda feature, layer: layer.bindTooltip(
+                    f'<b>{zone_name}</b>',
+                    {"permanent": True, "direction": "center", "className": "zone-label"},
+                ) if zone_name else None,
             },
         ).addTo(self.map)
 
