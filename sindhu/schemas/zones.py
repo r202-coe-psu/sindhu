@@ -1,7 +1,9 @@
 from typing import List
 from pydantic import BaseModel, Field
+from beanie import PydanticObjectId
 
 from sindhu.schemas import bases
+from sindhu.schemas.stations import Station as StationSchema
 
 
 class BaseZone(BaseModel):
@@ -9,25 +11,24 @@ class BaseZone(BaseModel):
     name_th: str | None = None
     code: str
     boundary: bases.GeoPolygon
-    station_codes: List[str] = Field(default_factory=list)
     status: str = Field("active")
     metadata: dict | None = None
 
 
 class CreateUpdateZone(BaseZone):
-    pass
+    station_ids: List[PydanticObjectId] = Field(default_factory=list)
 
 
 class Zone(bases.BaseSchema, BaseZone):
     pass
 
 
-class ZoneList(BaseModel):
-    zones: List[Zone]
-
-
 class ZoneWithStations(Zone):
-    stations: list = Field(default_factory=list)
+    stations: List[StationSchema] = Field(default_factory=list)
+
+
+class ZoneList(BaseModel):
+    zones: List[ZoneWithStations]
 
 
 class LocateRequest(BaseModel):

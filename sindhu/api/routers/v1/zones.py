@@ -2,7 +2,6 @@ import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as http_status
 from beanie import PydanticObjectId
-from beanie.operators import Set
 from loguru import logger
 
 from sindhu.api.core import deps
@@ -15,13 +14,13 @@ router = APIRouter(prefix="/zones", tags=["zones"])
 async def get_all(
     status: str = "active",
 ) -> schemas.zones.ZoneList:
-    zones = await models.Zone.find({"status": status}).to_list()
+    zones = await models.Zone.find({"status": status}, fetch_links=True).to_list()
     return schemas.zones.ZoneList(zones=zones)
 
 
 @router.get("/{zone_id}")
-async def get(zone_id: PydanticObjectId) -> schemas.zones.Zone:
-    zone = await models.Zone.find_one(models.Zone.id == zone_id)
+async def get(zone_id: PydanticObjectId) -> schemas.zones.ZoneWithStations:
+    zone = await models.Zone.find_one(models.Zone.id == zone_id, fetch_links=True)
     if not zone:
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
@@ -47,14 +46,18 @@ async def locate(
 async def create(
     zone_form: schemas.zones.CreateUpdateZone,
     current_user: models.User = Depends(deps.get_current_user),
-) -> schemas.zones.Zone:
+) -> schemas.zones.ZoneWithStations:
     db_zone = await models.Zone.find_one(models.Zone.code == zone_form.code)
     if db_zone:
         raise HTTPException(
             status_code=http_status.HTTP_409_CONFLICT,
             detail="This zone already exists",
         )
-    zone = models.Zone(**zone_form.model_dump())
+    db_stations = await models.Station.find(
+        {"_id": {"$in": zone_form.station_ids}}
+    ).to_list()
+    zone = models.Zone(**zone_form.model_dump(exclude={"station_ids"}))
+    zone.stations = db_stations
     await zone.insert()
     return zone
 
@@ -64,15 +67,19 @@ async def update(
     zone_id: PydanticObjectId,
     zone_form: schemas.zones.CreateUpdateZone,
     current_user: models.User = Depends(deps.get_current_user),
-) -> schemas.zones.Zone:
+) -> schemas.zones.ZoneWithStations:
     db_zone = await models.Zone.find_one(models.Zone.id == zone_id)
     if not db_zone:
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found zone",
         )
-    data = zone_form.model_dump()
-    await db_zone.update(Set(data))
+    db_stations = await models.Station.find(
+        {"_id": {"$in": zone_form.station_ids}}
+    ).to_list()
+    for key, value in zone_form.model_dump(exclude={"station_ids"}).items():
+        setattr(db_zone, key, value)
+    db_zone.stations = db_stations
     db_zone.updated_date = datetime.datetime.now()
     await db_zone.save()
     return db_zone

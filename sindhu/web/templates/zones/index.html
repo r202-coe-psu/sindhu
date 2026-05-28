@@ -1,0 +1,416 @@
+{% extends '/base/default_page.html' %}
+
+{% block additional_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='node_modules/leaflet/dist/leaflet.css') }}" />
+<script src="{{ url_for('static', filename='node_modules/leaflet/dist/leaflet.js') }}"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<style>
+.zone-row.active { background-color: #eff6ff; border-color: #3b82f6; }
+</style>
+{% endblock additional_head %}
+
+{% block header_title %}จัดการลุ่มน้ำ{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    {# Map #}
+    <div class="lg:col-span-2">
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden relative" style="height: 600px;">
+            <div id="zone-map" style="height:100%;width:100%;z-index:1;"></div>
+        </div>
+    </div>
+
+    {# Panel #}
+    <div class="lg:col-span-1 flex flex-col gap-4">
+
+        {# Form #}
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
+            <h3 class="text-lg font-bold text-gray-800 mb-4" id="form-title">สร้างลุ่มน้ำใหม่</h3>
+            <form id="zone-form" class="space-y-3">
+                <input type="hidden" id="zone-id" />
+                <div>
+                    <label class="label text-sm font-medium text-gray-600">ชื่อ (EN)</label>
+                    <input id="zone-name" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. Songkhla Lake Basin" required />
+                </div>
+                <div>
+                    <label class="label text-sm font-medium text-gray-600">ชื่อ (TH)</label>
+                    <input id="zone-name-th" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. ลุ่มน้ำทะเลสาบสงขลา" />
+                </div>
+                <div>
+                    <label class="label text-sm font-medium text-gray-600">รหัส</label>
+                    <input id="zone-code" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. songkhla-lake" required />
+                </div>
+                <div>
+                    <label class="label text-sm font-medium text-gray-600">สถานี</label>
+                    <div class="relative">
+                        <input id="station-search" type="text" autocomplete="off" class="input input-bordered input-sm w-full" placeholder="ค้นหาชื่อหรือรหัสสถานี..." />
+                        <div id="station-dropdown" class="hidden absolute z-[1100] mt-1 w-full max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg custom-scrollbar"></div>
+                    </div>
+                    <div id="station-chips" class="flex flex-wrap gap-1 mt-2"></div>
+                </div>
+                <div>
+                    <label class="label text-sm font-medium text-gray-600">ขอบเขต (GeoJSON) — วาดบนแผนที่ หรือวาง/แก้พิกัด</label>
+                    <textarea id="zone-boundary" rows="5" class="textarea textarea-bordered textarea-sm w-full font-mono text-xs leading-tight" placeholder='{"type":"Polygon","coordinates":[[[100.5,7.0],[100.6,7.0],[100.6,7.1],[100.5,7.0]]]}'></textarea>
+                    <div id="boundary-json-error" class="text-xs text-red-600 hidden mt-1"></div>
+                </div>
+                <div id="boundary-status" class="text-xs text-amber-600 hidden">
+                    <i class="ph ph-warning"></i> กรุณาวาด polygon บนแผนที่
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button type="submit" id="btn-save" class="btn btn-primary btn-sm flex-1">
+                        <i class="ph ph-floppy-disk"></i> บันทึก
+                    </button>
+                    <button type="button" id="btn-cancel" class="btn btn-ghost btn-sm hidden" onclick="resetForm()">
+                        ยกเลิก
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        {# Zone List #}
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden flex flex-col" style="max-height: 320px;">
+            <div class="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
+                <span class="font-bold text-gray-700 text-sm">ลุ่มน้ำทั้งหมด</span>
+                <span id="zone-count" class="badge badge-sm badge-primary">0</span>
+            </div>
+            <div id="zone-list" class="flex-1 overflow-y-auto divide-y divide-gray-100 custom-scrollbar">
+                <div class="p-4 text-center text-sm text-gray-400">กำลังโหลด...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const API_URL = "{{ api_url }}";
+const TOKEN_URL = "{{ url_for('accounts.get_token') }}";
+let map, drawnItems, drawControl, editingZoneId = null, allZoneLayers = {};
+let allStations = [], selectedStationIds = [];
+
+async function fetchStations() {
+    try {
+        const res = await fetch(API_URL + "/v1/stations?status=active");
+        const data = await res.json();
+        return data.stations || [];
+    } catch(e) { console.error(e); return []; }
+}
+
+function stationLabel(s) {
+    return (s.name_th || s.name || s.code || "") + (s.code ? ` (${s.code})` : "");
+}
+
+function renderStationChips() {
+    const el = document.getElementById("station-chips");
+    if (!selectedStationIds.length) { el.innerHTML = ""; return; }
+    el.innerHTML = selectedStationIds.map(id => {
+        const s = allStations.find(x => x.id === id);
+        const label = s ? stationLabel(s) : id;
+        return `<span class="badge badge-sm badge-primary gap-1 py-2">
+            ${label}
+            <button type="button" class="hover:text-red-200" onclick="removeStation('${id}')">&times;</button>
+        </span>`;
+    }).join("");
+}
+
+function renderStationDropdown(query) {
+    const el = document.getElementById("station-dropdown");
+    const q = (query || "").trim().toLowerCase();
+    const matches = allStations
+        .filter(s => !selectedStationIds.includes(s.id))
+        .filter(s => !q || [s.name, s.name_th, s.code].some(v => (v || "").toLowerCase().includes(q)))
+        .slice(0, 30);
+    if (!matches.length) {
+        el.innerHTML = '<div class="px-3 py-2 text-sm text-gray-400">ไม่พบสถานี</div>';
+    } else {
+        el.innerHTML = matches.map(s => `
+            <div class="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer" onmousedown="event.preventDefault();addStation('${s.id}')">
+                ${stationLabel(s)}
+            </div>
+        `).join("");
+    }
+    el.classList.remove("hidden");
+}
+
+function addStation(id) {
+    if (!selectedStationIds.includes(id)) selectedStationIds.push(id);
+    const search = document.getElementById("station-search");
+    search.value = "";
+    renderStationChips();
+    renderStationDropdown("");
+    search.focus();
+}
+
+function removeStation(id) {
+    selectedStationIds = selectedStationIds.filter(x => x !== id);
+    renderStationChips();
+}
+
+async function authHeaders() {
+    const res = await fetch(TOKEN_URL, { credentials: "same-origin" });
+    if (!res.ok) throw new Error("หมดสิทธิ์เข้าใช้งาน กรุณาเข้าสู่ระบบใหม่");
+    const t = await res.json();
+    return { "Authorization": "Bearer " + t.access_token };
+}
+
+function setBoundaryText(geom) {
+    document.getElementById("zone-boundary").value = geom ? JSON.stringify(geom, null, 2) : "";
+}
+
+function showJsonError(msg) {
+    const el = document.getElementById("boundary-json-error");
+    if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
+    el.textContent = msg;
+    el.classList.remove("hidden");
+}
+
+function validatePolygonGeometry(geom) {
+    if (!geom || geom.type !== "Polygon") return "ต้องเป็น GeoJSON ชนิด Polygon";
+    if (!Array.isArray(geom.coordinates) || !Array.isArray(geom.coordinates[0])) return "coordinates ไม่ถูกต้อง";
+    const ring = geom.coordinates[0];
+    if (ring.length < 4) return "ต้องมีอย่างน้อย 4 จุด (รวมจุดปิดวง)";
+    for (const pt of ring) {
+        if (!Array.isArray(pt) || pt.length < 2 || typeof pt[0] !== "number" || typeof pt[1] !== "number")
+            return "แต่ละจุดต้องเป็น [lng, lat] ที่เป็นตัวเลข";
+        if (pt[0] < -180 || pt[0] > 180 || pt[1] < -90 || pt[1] > 90)
+            return "พิกัดเกินช่วง — ตรวจลำดับ [lng, lat] (lng -180..180, lat -90..90)";
+    }
+    return null;
+}
+
+function renderBoundaryFromText() {
+    const raw = document.getElementById("zone-boundary").value.trim();
+    if (!raw) { drawnItems.clearLayers(); showJsonError(null); return; }
+    let geom;
+    try { geom = JSON.parse(raw); }
+    catch(e) { showJsonError("JSON ไม่ถูกต้อง: " + e.message); return; }
+    const err = validatePolygonGeometry(geom);
+    if (err) { showJsonError(err); return; }
+    showJsonError(null);
+    drawnItems.clearLayers();
+    const layer = L.geoJson({ type: "Feature", geometry: geom });
+    layer.eachLayer(l => drawnItems.addLayer(l));
+    try { map.fitBounds(drawnItems.getBounds(), { padding: [40, 40] }); } catch(e) {}
+    document.getElementById("boundary-status").classList.add("hidden");
+}
+
+function initMap() {
+    map = L.map("zone-map", { center: [9.0, 100.5], zoom: 7 });
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    drawnItems = new L.FeatureGroup().addTo(map);
+
+    drawControl = new L.Control.Draw({
+        draw: {
+            polygon: { shapeOptions: { color: "#2563eb", weight: 2, fillOpacity: 0.15, dashArray: "5,5" } },
+            polyline: false, rectangle: false, circle: false, marker: false, circlemarker: false
+        },
+        edit: { featureGroup: drawnItems }
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, function(e) {
+        drawnItems.clearLayers();
+        drawnItems.addLayer(e.layer);
+        setBoundaryText(e.layer.toGeoJSON().geometry);
+        showJsonError(null);
+        document.getElementById("boundary-status").classList.add("hidden");
+    });
+
+    map.on(L.Draw.Event.EDITED, function(e) {
+        e.layers.eachLayer(function(layer) {
+            setBoundaryText(layer.toGeoJSON().geometry);
+            showJsonError(null);
+        });
+    });
+
+    map.on(L.Draw.Event.DELETED, function() {
+        setBoundaryText(null);
+    });
+}
+
+async function fetchZones() {
+    try {
+        const res = await fetch(API_URL + "/v1/zones?status=active");
+        const data = await res.json();
+        return data.zones || [];
+    } catch(e) { console.error(e); return []; }
+}
+
+async function saveZone(body, zoneId) {
+    const url = zoneId
+        ? API_URL + "/v1/zones/update/" + zoneId
+        : API_URL + "/v1/zones/create";
+    const method = zoneId ? "PUT" : "POST";
+    const res = await fetch(url, {
+        method,
+        headers: {"Content-Type": "application/json", ...(await authHeaders())},
+        body: JSON.stringify(body)
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "บันทึกไม่สำเร็จ");
+    }
+    return res.json();
+}
+
+async function deleteZone(zoneId) {
+    const res = await fetch(API_URL + "/v1/zones/delete/" + zoneId, {
+        method: "DELETE",
+        headers: {...(await authHeaders())}
+    });
+    if (!res.ok) throw new Error("ลบไม่สำเร็จ");
+}
+
+let zonesCache = [];
+
+function renderZoneList(zones) {
+    const el = document.getElementById("zone-list");
+    document.getElementById("zone-count").textContent = zones.length;
+    if (!zones.length) {
+        el.innerHTML = '<div class="p-4 text-center text-sm text-gray-400">ยังไม่มีลุ่มน้ำ</div>';
+        return;
+    }
+    el.innerHTML = zones.map(z => `
+        <div class="zone-row p-3 hover:bg-blue-50 cursor-pointer transition-colors border-l-4 border-transparent" data-id="${z.id}" onclick="selectZone('${z.id}')">
+            <div class="flex justify-between items-start">
+                <div>
+                    <div class="font-semibold text-gray-800 text-sm">${z.name_th || z.name}</div>
+                    <div class="text-xs text-gray-500">${z.code}</div>
+                </div>
+                <div class="flex gap-1">
+                    <button class="btn btn-ghost btn-xs text-blue-600" onclick="event.stopPropagation();editZone('${z.id}')" title="แก้ไข">
+                        <i class="ph ph-pencil-simple"></i>
+                    </button>
+                    <button class="btn btn-ghost btn-xs text-red-500" onclick="event.stopPropagation();confirmDelete('${z.id}')" title="ลบ">
+                        <i class="ph ph-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `).join("");
+}
+
+function renderZonesOnMap(zones) {
+    Object.values(allZoneLayers).forEach(l => map.removeLayer(l));
+    allZoneLayers = {};
+    zones.forEach(z => {
+        if (!z.boundary) return;
+        const layer = L.geoJson({ type: "Feature", geometry: z.boundary, properties: { name: z.name_th || z.name } }, {
+            style: { fillColor: "#3b82f6", fillOpacity: 0.1, color: "#2563eb", weight: 1.5, dashArray: "5,5" }
+        }).bindTooltip(z.name_th || z.name, { sticky: true }).addTo(map);
+        allZoneLayers[z.id] = layer;
+    });
+}
+
+async function loadZones() {
+    zonesCache = await fetchZones();
+    renderZoneList(zonesCache);
+    renderZonesOnMap(zonesCache);
+}
+
+function selectZone(id) {
+    document.querySelectorAll(".zone-row").forEach(r => r.classList.remove("active"));
+    const row = document.querySelector(`.zone-row[data-id="${id}"]`);
+    if (row) row.classList.add("active");
+    const layer = allZoneLayers[id];
+    if (layer) map.fitBounds(layer.getBounds(), { padding: [40, 40] });
+}
+
+function editZone(id) {
+    const z = zonesCache.find(x => x.id === id);
+    if (!z) return;
+
+    editingZoneId = id;
+    document.getElementById("zone-id").value = id;
+    document.getElementById("zone-name").value = z.name || "";
+    document.getElementById("zone-name-th").value = z.name_th || "";
+    document.getElementById("zone-code").value = z.code || "";
+    selectedStationIds = (z.stations || []).map(s => s.id);
+    document.getElementById("station-search").value = "";
+    document.getElementById("station-dropdown").classList.add("hidden");
+    renderStationChips();
+    setBoundaryText(z.boundary);
+    showJsonError(null);
+    document.getElementById("form-title").textContent = "แก้ไขลุ่มน้ำ";
+    document.getElementById("btn-cancel").classList.remove("hidden");
+
+    drawnItems.clearLayers();
+    if (z.boundary) {
+        const layer = L.geoJson({ type: "Feature", geometry: z.boundary });
+        layer.eachLayer(l => drawnItems.addLayer(l));
+        map.fitBounds(drawnItems.getBounds(), { padding: [40, 40] });
+    }
+    selectZone(id);
+}
+
+function resetForm() {
+    editingZoneId = null;
+    document.getElementById("zone-form").reset();
+    document.getElementById("zone-id").value = "";
+    document.getElementById("zone-boundary").value = "";
+    selectedStationIds = [];
+    renderStationChips();
+    document.getElementById("station-dropdown").classList.add("hidden");
+    document.getElementById("form-title").textContent = "สร้างลุ่มน้ำใหม่";
+    document.getElementById("btn-cancel").classList.add("hidden");
+    document.getElementById("boundary-status").classList.add("hidden");
+    showJsonError(null);
+    drawnItems.clearLayers();
+    document.querySelectorAll(".zone-row").forEach(r => r.classList.remove("active"));
+}
+
+async function confirmDelete(id) {
+    const z = zonesCache.find(x => x.id === id);
+    if (!confirm('ลบลุ่มน้ำ "' + (z?.name_th || z?.name) + '" ?')) return;
+    try {
+        await deleteZone(id);
+        resetForm();
+        await loadZones();
+    } catch(e) { alert(e.message); }
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    initMap();
+    fetchStations().then(s => { allStations = s; });
+    loadZones();
+
+    document.getElementById("zone-boundary").addEventListener("input", renderBoundaryFromText);
+
+    const stationSearch = document.getElementById("station-search");
+    stationSearch.addEventListener("focus", () => renderStationDropdown(stationSearch.value));
+    stationSearch.addEventListener("input", () => renderStationDropdown(stationSearch.value));
+    stationSearch.addEventListener("blur", () => {
+        setTimeout(() => document.getElementById("station-dropdown").classList.add("hidden"), 150);
+    });
+
+    document.getElementById("zone-form").addEventListener("submit", async function(e) {
+        e.preventDefault();
+        const boundaryRaw = document.getElementById("zone-boundary").value.trim();
+        if (!boundaryRaw) {
+            document.getElementById("boundary-status").classList.remove("hidden");
+            return;
+        }
+        let boundaryGeom;
+        try { boundaryGeom = JSON.parse(boundaryRaw); }
+        catch(err) { showJsonError("JSON ไม่ถูกต้อง: " + err.message); return; }
+        const gErr = validatePolygonGeometry(boundaryGeom);
+        if (gErr) { showJsonError(gErr); return; }
+        const body = {
+            name: document.getElementById("zone-name").value.trim(),
+            name_th: document.getElementById("zone-name-th").value.trim() || null,
+            code: document.getElementById("zone-code").value.trim(),
+            boundary: boundaryGeom,
+            station_ids: selectedStationIds,
+        };
+        try {
+            await saveZone(body, editingZoneId);
+            resetForm();
+            await loadZones();
+        } catch(e) { alert(e.message); }
+    });
+});
+</script>
+{% endblock content %}

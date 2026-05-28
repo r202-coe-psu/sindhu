@@ -37,6 +37,12 @@
       <div class="px-5 mt-6 mb-2 text-xs font-semibold uppercase tracking-widest text-gray-400">การจัดการ</div>
       <ul class="menu px-2 gap-1 w-full">
         <li>
+          <a href="{{ url_for('zones.index') }}"
+             class="text-base font-medium {% if request.endpoint and request.endpoint.startswith('zones.') %}bg-primary text-primary-content hover:bg-primary{% else %}text-gray-700 hover:bg-blue-50 hover:text-primary{% endif %}">
+            <i class="ph ph-polygon text-xl"></i> จัดการลุ่มน้ำ
+          </a>
+        </li>
+        <li>
           <a href="{{ url_for('system_settings.index') }}"
              class="text-base font-medium {% if request.endpoint and request.endpoint.startswith('system_settings.') %}bg-primary text-primary-content hover:bg-primary{% else %}text-gray-700 hover:bg-blue-50 hover:text-primary{% endif %}">
             <i class="ph ph-gear text-xl"></i> ตั้งค่าระบบ

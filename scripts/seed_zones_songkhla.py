@@ -129,15 +129,23 @@ async def seed_zones():
             models.Zone.code == zone_data["code"]
         )
         if existing:
-            existing.station_codes = zone_data["station_codes"]
-            existing.boundary = zone_data["boundary"]
-            await existing.save()
-            print(f"  updated: {zone_data['name_th']} ({len(zone_data['station_codes'])} stations)")
+            print(f"  skipped (already exists): {zone_data['name_th']}")
             continue
 
-        zone = models.Zone(**zone_data)
+        codes = zone_data["station_codes"]
+        db_stations = await models.Station.find({"code": {"$in": codes}}).to_list()
+        found = {s.code for s in db_stations}
+        missing = [c for c in codes if c not in found]
+
+        zone_fields = {k: v for k, v in zone_data.items() if k != "station_codes"}
+        zone = models.Zone(**zone_fields)
+        zone.stations = db_stations
         await zone.insert()
-        print(f"  created: {zone_data['name_th']} ({len(zone_data['station_codes'])} stations)")
+
+        msg = f"  created: {zone_data['name_th']} ({len(db_stations)}/{len(codes)} stations)"
+        if missing:
+            msg += f" — missing codes: {missing}"
+        print(msg)
 
     total = await models.Zone.find({"status": "active"}).count()
     print(f"\nTotal active zones: {total}")
