@@ -66,6 +66,9 @@ class BaseMonitor:
 
         self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
 
+        if "my_locate" in document:
+            document["my_locate"].bind("click", lambda ev: self.map.fly_to_user())
+
     def on_pin_mode_off(self):
         self.map.show_all_markers()
         self.on_zone_stations_cleared()

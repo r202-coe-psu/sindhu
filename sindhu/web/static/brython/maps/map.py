@@ -78,20 +78,6 @@ class Map:
 
         self.leaflet.control.zoom({"position": "topright"}).addTo(self.map)
 
-        def navi(pos):
-            self.user_coord = (pos.coords.latitude, pos.coords.longitude)
-            self.user_mark = (
-                self.leaflet.marker(
-                    self.user_coord,
-                    {"icon": self.get_icon("my_location"), "zIndexOffset": 1000},
-                )
-                .addTo(self.map)
-                .bindPopup("ต่ำแหน่งของคุณ")
-            )
-
-        def nonavi(error):
-            alert("Your browser doesn't support geolocation")
-
         # window.navigator.geolocation.getCurrentPosition(
         #     navi, nonavi
         # )  # set user's current location on map(success, error)
@@ -278,9 +264,40 @@ class Map:
             ).addTo(self.map)
             self.station_lines.append(line)
 
-    # def fly_to_user(self):
-    #     self.map.flyTo(self.user_coord, 16)
-    #     self.user_mark.openPopup()
+    def fly_to_user(self):
+        self.map.locate()
+
+        def on_location_found(e):
+            self.user_coord = (e.latlng.lat, e.latlng.lng)
+
+            self.map.flyTo(self.user_coord, 16)
+
+            if hasattr(self, "user_mark") and self.user_mark and not isinstance(self.user_mark, list):
+                self.user_mark.setLatLng(self.user_coord)
+            else:
+                self.user_mark = (
+                    self.leaflet.marker(
+                        self.user_coord,
+                        {
+                            "icon": self.get_icon("my_location"),
+                            "zIndexOffset": 1000,
+                        },
+                    )
+                    .addTo(self.map)
+                    .bindPopup("ตำแหน่งของคุณ")
+                )
+
+            self.map.off("locationfound", on_location_found)
+            self.map.off("locationerror", on_location_error)
+
+        def on_location_error(e):
+            alert(f"ไม่สามารถระบุตำแหน่งได้: {e.message}")
+            self.map.off("locationfound", on_location_found)
+            self.map.off("locationerror", on_location_error)
+
+        # ผูกเหตุการณ์
+        self.map.on("locationfound", on_location_found)
+        self.map.on("locationerror", on_location_error)
 
     def zoom_out(self):
         self.map.zoomOut(1)
