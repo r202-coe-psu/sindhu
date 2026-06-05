@@ -109,11 +109,13 @@
 <script type="text/javascript">
     window.onload = function () {
         if (!window.brython_initialized) {
-            brython();
+            brython({
+                debug: 1,
+                pythonpath: ["{{ url_for('static', filename='brython') }}"]
+            });
             window.brython_initialized = true;
         }
     };
-
 </script>
 <script type="text/python">
   from monitors import WaterMonitor 
