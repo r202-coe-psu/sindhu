@@ -25,14 +25,20 @@ def when_file_changed(filename, path):
 def build(filename, path):
     print("build", filename, path)
 
-    packagename = pathlib.Path(filename[len(path) :]).parts[1]
+    abs_filename = pathlib.Path(filename).resolve()
+    abs_path = pathlib.Path(path).resolve()
+    try:
+        packagename = abs_filename.relative_to(abs_path).parts[0]
+    except ValueError:
+        packagename = pathlib.Path(filename[len(path) :]).parts[1]
 
     module_file = pathlib.Path(path) / f"{packagename}.brython.js"
     if module_file.exists():
         module_file.unlink()
 
+
     subprocess.run(
-        ["python", "-m", "brython", "make_package", packagename],
+        [sys.executable, "-m", "brython", "make_package", packagename],
         cwd=(pathlib.Path(path) / packagename).resolve(),
     )
 
