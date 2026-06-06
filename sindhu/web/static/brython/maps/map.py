@@ -1,5 +1,5 @@
-from browser import alert, window
-
+from browser import alert, window, ajax
+import json
 
 class Map:
     def __init__(self, center, zoom, min_zoom):
@@ -585,3 +585,33 @@ class Map:
                 popupAnchor=[0, -30],
             )
         )
+    
+    def load_river_basins(self):
+        """ฟังก์ชันสำหรับดึงข้อมูล GeoJSON ลุ่มน้ำจาก API และวาดลงแผนที่"""
+        
+        def on_complete(req):
+            if req.status == 200 or req.status == 0:
+                geojson_data = json.loads(req.text)
+                
+                # กำหนดสไตล์เส้นแม่น้ำ
+                river_style = {
+                    "color": "#3388ff", # สีฟ้า
+                    "weight": 2,        # ความหนาของเส้น
+                    "opacity": 0.8      # ความโปร่งใส
+                }
+                
+                # ใช้ self.leaflet.geoJson วาดเส้น และเก็บไว้ใน self.shapes
+                self.shapes['river_basins'] = self.leaflet.geoJson(
+                    geojson_data, 
+                    {"style": river_style}
+                ).addTo(self.map)
+                
+                print("🎉 โหลดข้อมูลเส้นแม่น้ำสงขลาลงแผนที่สำเร็จ!")
+            else:
+                print(f"❌ โหลดข้อมูล GeoJSON ล้มเหลว (Status: {req.status})")
+
+        print("กำลังดึงข้อมูลแม่น้ำจาก API...")
+        req = ajax.Ajax()
+        req.bind('complete', on_complete)
+        req.open('GET', 'http://127.0.0.1:8000/v1/basins', True) 
+        req.send()
