@@ -35,3 +35,6 @@ auto_test.sh
 .agents/debug/*
 
 !setup.css
+
+# Ignore data file
+sindhu/web/static/data/songkhla_basins.geojson
