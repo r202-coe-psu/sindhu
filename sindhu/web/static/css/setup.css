@@ -1,8 +1,26 @@
 @import "tailwindcss";
 @source "../../templates";
+@source "../brython/**/*.py";
+
 @plugin "daisyui" {
   themes: sindhu --default;
 }
+
+/* Override Leaflet default tooltip styling for our custom class */
+.leaflet-tooltip.tooltip-marker {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.leaflet-tooltip-left.tooltip-marker::before,
+.leaflet-tooltip-right.tooltip-marker::before,
+.leaflet-tooltip-top.tooltip-marker::before,
+.leaflet-tooltip-bottom.tooltip-marker::before {
+  display: none !important; /* Hide default leaflet arrow */
+}
+
 
 @plugin "daisyui/theme" {
   name: "sindhu";
