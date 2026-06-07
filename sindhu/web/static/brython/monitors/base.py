@@ -62,7 +62,7 @@ class BaseMonitor:
         min_zoom = self.system_setting["min_zoom"]
 
         self.map = BaseMap([center[1], center[0]], zoom, min_zoom, self.lang_code)
-        self.map.load_river_basins()
+        self.map.load_river_basins(self.api_url)
         self.set_map_loading(False)
 
         self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)

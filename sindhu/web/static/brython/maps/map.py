@@ -586,7 +586,7 @@ class Map:
             )
         )
     
-    def load_river_basins(self):
+    def load_river_basins(self, api_url):
         """ฟังก์ชันสำหรับดึงข้อมูล GeoJSON ลุ่มน้ำจาก API และวาดลงแผนที่"""
         
         def on_complete(req):
@@ -613,5 +613,5 @@ class Map:
         print("กำลังดึงข้อมูลแม่น้ำจาก API...")
         req = ajax.Ajax()
         req.bind('complete', on_complete)
-        req.open('GET', 'http://127.0.0.1:8000/v1/basins', True) 
+        req.open('GET', f'{api_url}/v1/basins', True) 
         req.send()

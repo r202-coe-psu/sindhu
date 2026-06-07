@@ -19,5 +19,5 @@ def on_ajax_complete(req):
 print("กำลังโหลดข้อมูลแม่น้ำ...")
 req = ajax.Ajax()
 req.bind('complete', on_ajax_complete)
-req.open('GET', 'http://127.0.0.1:8000/v1/basins', True) 
+req.open('GET', '/v1/basins', True) 
 req.send()
