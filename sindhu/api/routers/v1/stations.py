@@ -200,9 +200,11 @@ async def get_latest_metrics_by_metric_type(
 @router.get("/metrics/latest")
 @cache(expire=1800)
 async def get_latest_metrics(
-    source: str,
+    source: str | None = None,
 ) -> schemas.stations.StationWithMetricsList:
     try:
+        if source == "all":
+            source = None
         result = await services.metrics.get_latest_metrics(source)
     except Exception as e:
         logger.exception(e)
