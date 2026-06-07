@@ -78,16 +78,40 @@ class BaseMap(Map):
             if station["name"] in self.panel_plus_sensors:
                 continue
 
+            # Determine badge color based on source
+            source_name = station.get("source", "")
+            source_lower = source_name.lower()
+            badge_color_map = {
+                "thaiwater": "badge-info text-info-content",
+                "rid": "badge-error text-error-content",
+                "dwr": "badge-success text-success-content"
+            }
+            badge_color = badge_color_map.get(source_lower, "badge-neutral")
+
             metrics = station.get("metrics", [])
             if not metrics:
                 animate = False
                 metric_color = "DarkGrey"
                 disactive_txt = {"th": "ขาดการเชื่อมต่อ", "en": "lost connection"}
                 tooltip_detail = f"""
-                <div align="left" style="font-size: 15px;">
-                    <b>{station.get("name_th", "")}</b><br/>
-                    <b>{station["name"]}</b><br/>
-                    {disactive_txt[self.lang_code]}
+                <div class="card card-compact w-64 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
+                    <div class="card-body p-3 gap-1.5">
+                        <div class="flex justify-between items-center border-b border-base-content/10 pb-1 mb-1">
+                            <span class="badge {badge_color} badge-xs font-semibold px-2 py-1.5">{source_name.upper()}</span>
+                            <span class="text-[10px] font-mono opacity-60">#{station["code"]}</span>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-sm text-base-content leading-snug">{station.get("name_th", "")}</h3>
+                            <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
+                        </div>
+                        <div class="text-xs font-semibold text-error mt-1.5 flex items-center gap-1">
+                            <span class="relative flex h-2 w-2">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-error opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-2 w-2 bg-error"></span>
+                            </span>
+                            {disactive_txt[self.lang_code]}
+                        </div>
+                    </div>
                 </div>
                 """
             else:
@@ -137,20 +161,25 @@ class BaseMap(Map):
                         animate = False
 
                         if metric_type == "PM_0_1_forecast".lower():
-                            msg = "<b>ไม่พบข้อมูลการพยากรณ์ </b><br/><em><b>หมายเหตุ:</b> สถานีนี้อาจจะมีข้อมูลไม่เพียงพอสำหรับการพยากรณ์<br/><br/>"
+                            msg = "ไม่พบข้อมูลการพยากรณ์"
                         else:
-                            msg = "<b>ไม่พบข้อมูล</b><br/>"
+                            msg = "ไม่พบข้อมูล"
                         metric_texts.append(
                             f"""
-                            {metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}:
-                            {msg}
+                            <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
+                                <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
+                                <span class="text-base-content/40 italic text-[11px]">{msg}</span>
+                            </div>
                             """
                         )
                     else:
+                        unit = metric_infos.HTML_METRIC_UNITS.get(metric_type, "")
                         metric_texts.append(
                             f"""
-                            {metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}:
-                            <b>{value_str}</b> {metric_infos.HTML_METRIC_UNITS.get(metric_type, "")}<br/>
+                            <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
+                                <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
+                                <span class="font-semibold text-base-content">{value_str} <span class="text-[10px] opacity-60 font-normal">{unit}</span></span>
+                            </div>
                             """
                         )
 
@@ -164,16 +193,27 @@ class BaseMap(Map):
                     ict_ts = utc_ts.astimezone(bangkok_timezone)
 
                     tooltip_detail = f"""
-                    <div align="left" style="font-size: 15px;">
-                        <b>{station["name_th"]}</b><br/>
-                        <b>{station["name"]}</b><br/>
-                        <b>หมายเหตุ</b> ค่าที่แสดงเป็นข้อมูลรายชั่วโมง แต่การใช้สีอ้างอิงจากค่าเฉลี่ย 24 ชั่วโมง<br/>
-                        อ้างอิงข้อมูลสีตาม AQI จากกรมควบคุมมลพิษ<br/>
-                        {"".join(metric_texts)}
-                        {utc_ts.strftime("%d/%m/%Y %H:%M:%S %Z")}<br/>
-                        {ict_ts.strftime("%d/%m/%Y %H:%M:%S %Z")}<br/>
+                    <div class="card card-compact w-64 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
+                        <div class="card-body p-3 gap-1.5">
+                            <div class="flex justify-between items-center border-b border-base-content/10 pb-1 mb-1">
+                                <span class="badge {badge_color} badge-xs font-semibold px-2 py-1.5">{source_name.upper()}</span>
+                                <span class="text-[10px] font-mono opacity-60">#{station["code"]}</span>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
+                                <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
+                            </div>
+                            <div class="flex flex-col gap-0.5 mt-1">
+                                {"".join(metric_texts)}
+                            </div>
+                            <div class="border-t border-base-content/10 pt-1 mt-1 text-[9px] text-base-content/40 flex flex-col gap-0.5 font-mono">
+                                <div>UTC: {utc_ts.strftime("%d/%m/%Y %H:%M:%S")}</div>
+                                <div>ICT: {ict_ts.strftime("%d/%m/%Y %H:%M:%S")}</div>
+                            </div>
+                        </div>
                     </div>
                     """
+
 
             # Sensor color
             # metrics = {k: v["value"] for k, v in metrics_dict.items()}
