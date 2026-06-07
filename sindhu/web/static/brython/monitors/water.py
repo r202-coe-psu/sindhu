@@ -53,6 +53,9 @@ class WaterMonitor(BaseMonitor):
         except Exception as e:
             print(f"Failed to load rivers: {e}")
 
+        if "source_selector" in document:
+            document["source_selector"].bind("change", self.on_source_change)
+
         if self.running:
             print(f"monitor: wake up {datetime.datetime.now()}")
             print(f"monitor: {self.monitor_name} monitor")
@@ -87,21 +90,84 @@ class WaterMonitor(BaseMonitor):
         if hasattr(self, "map") and hasattr(self, "latest_data"):
             style = ev.target.value
             self.map.marker_style = style
-            aio.run(self.map.update("storage_percent", self.latest_data))
+            aio.run(self._update_and_filter())
+
+    async def _update_and_filter(self):
+        await self.map.update("storage_percent", self.latest_data)
+        if "source_selector" in document:
+            selected_source = document["source_selector"].value
+            if selected_source != "all":
+                filtered_codes = []
+                for station in self.latest_data.get("stations", []):
+                    if station.get("source") == selected_source:
+                        code = station.get("code")
+                        if code:
+                            filtered_codes.append(code)
+                self.map.filter_markers_by_codes(filtered_codes)
+            else:
+                self.map.show_all_markers()
+
+    def on_source_change(self, ev):
+        if hasattr(self, "map") and hasattr(self, "latest_data"):
+            selected_source = ev.target.value
+            
+            if hasattr(self.map, "_pin_mode_active") and self.map._pin_mode_active and self.map.user_coord:
+                lat, lng = self.map.user_coord
+                aio.run(self.on_location_received(lat, lng))
+                return
+
+            if selected_source == "all":
+                self.map.show_all_markers()
+                self.render_data_list()
+            else:
+                filtered_codes = []
+                for station in self.latest_data.get("stations", []):
+                    if station.get("source") == selected_source:
+                        code = station.get("code")
+                        if code:
+                            filtered_codes.append(code)
+                self.map.filter_markers_by_codes(filtered_codes)
+                self.render_data_list()
 
     def on_zone_stations_found(self, nearby_stations):
         if not hasattr(self, "latest_data"):
             return
-        zone_codes = set()
+            
+        selected_source = "all"
+        if "source_selector" in document:
+            selected_source = document["source_selector"].value
+
+        zone_codes = []
         for s in nearby_stations:
             code = s.get("code", None)
             if code:
-                zone_codes.add(code)
-        if zone_codes:
-            self.render_data_list(zone_codes)
+                zone_codes.append(code)
+                
+        if selected_source != "all":
+            valid_codes = set()
+            for station in self.latest_data.get("stations", []):
+                if station.get("source") == selected_source:
+                    valid_codes.add(station.get("code"))
+            zone_codes = [code for code in zone_codes if code in valid_codes]
+            
+        self.map.filter_markers_by_codes(zone_codes)
+        self.render_data_list(zone_codes)
 
     def on_zone_stations_cleared(self):
         if hasattr(self, "latest_data"):
+            selected_source = "all"
+            if "source_selector" in document:
+                selected_source = document["source_selector"].value
+                
+            if selected_source != "all":
+                filtered_codes = []
+                for station in self.latest_data.get("stations", []):
+                    if station.get("source") == selected_source:
+                        code = station.get("code")
+                        if code:
+                            filtered_codes.append(code)
+                self.map.filter_markers_by_codes(filtered_codes)
+                
             self.render_data_list()
 
     def render_data_list(self, filter_codes=None):
@@ -109,8 +175,16 @@ class WaterMonitor(BaseMonitor):
             return
 
         stations = self.latest_data.get("stations", [])
-        if filter_codes:
+        if filter_codes is not None:
             stations = [s for s in stations if s.get("code") in filter_codes]
+            
+        selected_source = "all"
+        if "source_selector" in document:
+            selected_source = document["source_selector"].value
+            
+        if selected_source != "all":
+            stations = [s for s in stations if s.get("source") == selected_source]
+            
         html_content = ""
         
         for station in stations:

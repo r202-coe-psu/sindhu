@@ -61,14 +61,18 @@ async def get_metrics(source, metric_type, started_datetime, ended_datetime):
     return responses
 
 
-async def get_latest_metrics(source, timestamp=None):
+async def get_latest_metrics(source=None, timestamp=None):
     if not timestamp:
         timestamp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
             hours=24
         )
 
+    match_query = {"status": "active"}
+    if source:
+        match_query["source"] = source
+
     aggregation_pipeline = [
-        {"$match": {"source": source, "status": "active"}},
+        {"$match": match_query},
         {
             "$lookup": {
                 "from": "metrics",
