@@ -1,5 +1,5 @@
-from browser import alert, window
-
+from browser import alert, window, ajax
+import json
 
 class Map:
     def __init__(self, center, zoom, min_zoom):
@@ -449,6 +449,107 @@ class Map:
         ):
             self.geojson.bringToFront()
 
+    def set_rivers_layer(self, data):
+        """Dedicated method for rendering river/waterway GeoJSON with flow animation."""
+        if not data or len(data) == 0:
+            return
+
+        # River selection state (scoped to this layer only)
+        self._selected_river = None
+        self._river_clicked = False
+
+        def get_val(obj, key_name, default_val=None):
+            if obj is None:
+                return default_val
+            if isinstance(obj, dict):
+                return obj.get(key_name, default_val)
+            return getattr(obj, key_name, default_val)
+
+        def style(feature):
+            properties = get_val(feature, "properties", {})
+            stroke_color = get_val(properties, "stroke", "#C6C6C6")
+            stroke_w = get_val(properties, "stroke-width", get_val(properties, "stroke_w", 2))
+            return {
+                "color": stroke_color,
+                "weight": stroke_w,
+                "opacity": 0.3,
+                "fillOpacity": 0,
+                "className": "river-line",
+            }
+
+        def _clear_river_selection(self_ref):
+            """Helper to reset the currently selected river layer."""
+            if self_ref._selected_river:
+                prev = self_ref._selected_river
+                if "rivers" in self_ref.shapes and self_ref.shapes["rivers"].hasLayer(prev):
+                    self_ref.shapes["rivers"].resetStyle(prev)
+                if hasattr(prev, "_path") and prev._path:
+                    prev._path.classList.remove("flowing-river")
+                self_ref._selected_river = None
+
+        def on_map_click(e):
+            if self._river_clicked:
+                self._river_clicked = False
+                return
+            _clear_river_selection(self)
+
+        self.map.on("click", on_map_click)
+
+        def on_each_feature(feature, layer):
+
+            def highlight_feature(e):
+                target_layer = e.target
+                feature_obj = target_layer.feature
+                props = get_val(feature_obj, "properties", {})
+                color = get_val(props, "stroke", "#0984e3")
+                target_layer.setStyle({"weight": 5, "color": color, "opacity": 0.95})
+                if hasattr(target_layer, "_path") and target_layer._path:
+                    target_layer._path.classList.add("flowing-river")
+
+            def zoom_to_feature(e):
+                target_layer = e.target
+                self._river_clicked = True
+
+                target_feature = target_layer.feature
+                geom = get_val(target_feature, "geometry", {})
+                geom_type = get_val(geom, "type", "")
+                if self.map.getZoom() < 11 and geom_type != "Point":
+                    self.map.fitBounds(target_layer.getBounds())
+
+                # Reset previous selection, then set new one
+                if self._selected_river and self._selected_river != target_layer:
+                    _clear_river_selection(self)
+                self._selected_river = target_layer
+                highlight_feature(e)
+
+            # Build popup content
+            popup_detail = ""
+            properties = get_val(feature, "properties", {})
+            name = get_val(properties, "Name", None)
+            if name:
+                display_name = name
+                if name == "Waterway":
+                    lang = getattr(self, "lang_code", "th")
+                    display_name = "เส้นทางน้ำ (ไม่ระบุชื่อ)" if lang == "th" else "Unnamed Waterway"
+                popup_detail += f"<div>{display_name}</div>"
+
+            if popup_detail:
+                layer.bindPopup(popup_detail)
+
+            layer.on({
+                "click": zoom_to_feature,
+            })
+
+        self.geojson = self.leaflet.geoJson(
+            data,
+            {
+                "style": style,
+                "onEachFeature": on_each_feature,
+                "renderer": self.leaflet.svg(),
+            },
+        ).addTo(self.map)
+        self.shapes["rivers"] = self.geojson
+
     def set_shape_boundary(self, data):
         def style(feature):
             return {
@@ -484,3 +585,33 @@ class Map:
                 popupAnchor=[0, -30],
             )
         )
+    
+    def load_river_basins(self):
+        """ฟังก์ชันสำหรับดึงข้อมูล GeoJSON ลุ่มน้ำจาก API และวาดลงแผนที่"""
+        
+        def on_complete(req):
+            if req.status == 200 or req.status == 0:
+                geojson_data = json.loads(req.text)
+                
+                # กำหนดสไตล์เส้นแม่น้ำ
+                river_style = {
+                    "color": "#3388ff", # สีฟ้า
+                    "weight": 2,        # ความหนาของเส้น
+                    "opacity": 0.8      # ความโปร่งใส
+                }
+                
+                # ใช้ self.leaflet.geoJson วาดเส้น และเก็บไว้ใน self.shapes
+                self.shapes['river_basins'] = self.leaflet.geoJson(
+                    geojson_data, 
+                    {"style": river_style}
+                ).addTo(self.map)
+                
+                print("🎉 โหลดข้อมูลเส้นแม่น้ำสงขลาลงแผนที่สำเร็จ!")
+            else:
+                print(f"❌ โหลดข้อมูล GeoJSON ล้มเหลว (Status: {req.status})")
+
+        print("กำลังดึงข้อมูลแม่น้ำจาก API...")
+        req = ajax.Ajax()
+        req.bind('complete', on_complete)
+        req.open('GET', 'http://127.0.0.1:8000/v1/basins', True) 
+        req.send()

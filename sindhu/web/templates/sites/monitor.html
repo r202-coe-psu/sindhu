@@ -103,20 +103,36 @@
         background-color: #cbd5e1;
         border-radius: 20px;
     }
-</style>
 
+    {# River flow animation styles #}
+    @keyframes flow {
+        to {
+            stroke-dashoffset: -20;
+        }
+    }
+    .river-line {
+        stroke-dasharray: none;
+        transition: stroke-width 0.2s, stroke 0.2s, stroke-opacity 0.2s;
+    }
+    .flowing-river {
+        stroke-dasharray: 10, 8;
+        animation: flow 1.5s linear infinite;
+    }
+</style>
 
 <script type="text/javascript">
     window.onload = function () {
         if (!window.brython_initialized) {
-            brython();
+            brython({
+                debug: 1,
+                pythonpath: ["{{ url_for('static', filename='brython') }}"]
+            });
             window.brython_initialized = true;
         }
     };
-
 </script>
 <script type="text/python">
-  from monitors import WaterMonitor 
+  from monitors import WaterMonitor
   from browser import aio
   monitors = WaterMonitor(
     "{{ g.lang_code }}",
@@ -128,8 +144,8 @@
 {% endblock content %}
 {% block additional_js %}
 
-<script type="text/javascript" src="{{ url_for('static', filename='brython/maps.brython.js') }}"></script>
-<script type="text/javascript" src="{{ url_for('static', filename='brython/monitors.brython.js') }}"></script>
-<script type="text/javascript" src="{{ url_for('static', filename='brython/stations.brython.js') }}"></script>
+<script type="text/javascript" src="{{ 'brython/maps.brython.js' | static_url }}"></script>
+<script type="text/javascript" src="{{ 'brython/monitors.brython.js' | static_url }}"></script>
+<script type="text/javascript" src="{{ 'brython/stations.brython.js' | static_url }}"></script>
 
 {% endblock additional_js %}

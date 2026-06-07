@@ -45,6 +45,14 @@ class WaterMonitor(BaseMonitor):
         if "marker_style_selector" in document:
             document["marker_style_selector"].bind("change", self.on_marker_style_change)
 
+        # Load and render river waterways
+        try:
+            rivers_response = await aio.get("/static/resources/rivers.geojson")
+            rivers_data = json.loads(rivers_response.data)
+            self.map.set_rivers_layer(rivers_data)
+        except Exception as e:
+            print(f"Failed to load rivers: {e}")
+
         if self.running:
             print(f"monitor: wake up {datetime.datetime.now()}")
             print(f"monitor: {self.monitor_name} monitor")

@@ -30,7 +30,11 @@ __pycache__
 auto_test.sh
 /sindhu/web/static/css/app.css
 /sindhu/web/static/brython/*.js
+/sindhu/shapefiles
 
 .agents/debug/*
 
 !setup.css
+
+# Ignore data file
+sindhu/web/static/data/songkhla_basins.geojson
