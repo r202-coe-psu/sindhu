@@ -33,11 +33,13 @@ async def find_stations_by_zone(zone, user_lng: float = 0, user_lat: float = 0) 
     if not zone:
         return []
 
-    # Fetch linked stations that were explicitly assigned to this zone
-    await zone.fetch_all_links()
-    stations = [
-        s for s in (zone.stations or []) if getattr(s, "status", "active") == "active"
-    ]
+    zone_with_links = await models.Zone.find_one(
+        models.Zone.id == zone.id, fetch_links=True
+    )
+    if not zone_with_links:
+        return []
+
+    stations = [s for s in zone_with_links.stations if s.status == "active"]
 
     result = []
     for s in stations:
