@@ -36,12 +36,14 @@ pipeline {
                 ]) {
                     echo '==> Transferring Image and Compose file via Proxy Server...'
                     sh '''
+                        set -e
                         # 1. send .tar and docker-compose to proxy
                         scp -i $SSH_KEY -P $SSH_PORT -o StrictHostKeyChecking=no ${TAR_NAME} docker-compose.production.yml $SSH_USER@$SSH_HOST:/tmp/
 
                         # 2. send to r202-sindhu from proxy
                         ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
-                            scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid /tmp/${TAR_NAME} /tmp/docker-compose.production.yml \\$SSH_USER@r202-sindhu:/tmp/
+                            set -e
+                            scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid /tmp/${TAR_NAME} /tmp/docker-compose.production.yml $SSH_USER@r202-sindhu:/tmp/
                             rm -f /tmp/${TAR_NAME} /tmp/docker-compose.production.yml
                         "
                     '''
@@ -59,10 +61,12 @@ pipeline {
                 ]) {
                     echo '==> Loading Docker Image on target server...'
                     sh '''
+                        set -e
                         # สั่งผ่าน Proxy -> ไปยังเครื่อง r202-sindhu เพื่อทำ docker load
                         ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
                             ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid $SSH_USER@r202-sindhu '
-                                echo '--> Executing docker load...'
+                                set -e
+                                echo \"--> Executing docker load...\"
                                 sudo docker load -i /tmp/${TAR_NAME}
                                 rm -f /tmp/${TAR_NAME}
                             '
@@ -82,15 +86,17 @@ pipeline {
                 ]) {
                     echo '==> Deploying Sindhu Containers...'
                     sh '''
+                        set -e
                         ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
                             ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid $SSH_USER@r202-sindhu '
+                                set -e
                                 # ย้ายไฟล์ compose ไปไว้ที่โฟลเดอร์โปรเจกต์
                                 sudo mkdir -p ${TARGET_DIR}
                                 sudo mv /tmp/docker-compose.production.yml ${TARGET_DIR}/docker-compose.production.yml
                                 
                                 cd ${TARGET_DIR}
                                 
-                                echo "--> Pulling latest source code from git..."
+                                echo \"--> Pulling latest source code from git...\"
                                 sudo git pull origin main
                                 
                                 # รันโดยใช้ Image ใหม่ที่เราเพิ่งโหลดเข้าไป ไม่ต้องใช้ --build แล้ว
