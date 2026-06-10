@@ -2,9 +2,11 @@ pipeline {
     agent { label 'mgmt' }
 
     environment {
-        IMAGE_NAME  = 'sindhu/sindhu:latest mageai-sindhu-image'
-        TAR_NAME    = 'sindhu-image.tar'
-        TARGET_DIR  = '/home/projects/sindhu'
+        IMAGE_SINDHU  = 'sindhu/sindhu:latest'
+        IMAGE_MAGEAI  = 'mageai-sindhu-image'
+        TAR_SINDHU    = 'sindhu-image.tar'
+        TAR_MAGEAI    = 'mageai-image.tar'
+        TARGET_DIR    = '/home/projects/sindhu'
     }
 
     stages {
@@ -23,11 +25,19 @@ pipeline {
             }
         }
 
-        stage('Image Export') {
+        stage('Export Sindhu Image') {
             when { branch 'main' }
             steps {
-                echo '==> Saving Image to .tar file...'
-                sh "docker save -o ${TAR_NAME} ${IMAGE_NAME}"
+                echo '==> Saving Sindhu Image to .tar file...'
+                sh "docker save -o ${TAR_SINDHU} ${IMAGE_SINDHU}"
+            }
+        }
+
+        stage('Export MageAI Image') {
+            when { branch 'main' }
+            steps {
+                echo '==> Saving MageAI Image to .tar file...'
+                sh "docker save -o ${TAR_MAGEAI} ${IMAGE_MAGEAI}"
             }
         }
 
@@ -43,13 +53,13 @@ pipeline {
                     sh '''
                         set -e
                         # 1. send .tar and docker-compose to proxy
-                        scp -i $SSH_KEY -P $SSH_PORT -o StrictHostKeyChecking=no ${TAR_NAME} docker-compose.production.yml $SSH_USER@$SSH_HOST:~/
+                        scp -i $SSH_KEY -P $SSH_PORT -o StrictHostKeyChecking=no ${TAR_SINDHU} ${TAR_MAGEAI} docker-compose.production.yml $SSH_USER@$SSH_HOST:~/
 
                         # 2. send to r202-sindhu from proxy
                         ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
                             set -e
-                            scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid ~/${TAR_NAME} ~/docker-compose.production.yml $SSH_USER@r202-sindhu:~/
-                            rm -f ~/${TAR_NAME} ~/docker-compose.production.yml
+                            scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid ~/${TAR_SINDHU} ~/${TAR_MAGEAI} ~/docker-compose.production.yml $SSH_USER@r202-sindhu:~/
+                            rm -f ~/${TAR_SINDHU} ~/${TAR_MAGEAI} ~/docker-compose.production.yml
                         "
                     '''
                 }
@@ -71,9 +81,12 @@ pipeline {
                         ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
                             ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid $SSH_USER@r202-sindhu '
                                 set -e
-                                echo \"--> Executing docker load...\"
-                                sudo docker load -i ~/${TAR_NAME}
-                                rm -f ~/${TAR_NAME}
+                                echo \"--> Executing docker load for Sindhu...\"
+                                sudo docker load -i ~/${TAR_SINDHU}
+                                rm -f ~/${TAR_SINDHU}
+                                echo \"--> Executing docker load for MageAI...\"
+                                sudo docker load -i ~/${TAR_MAGEAI}
+                                rm -f ~/${TAR_MAGEAI}
                             '
                         "
                     '''
@@ -118,7 +131,7 @@ pipeline {
     post {
         always {
             echo 'Cleaning up workspace artifact...'
-            sh "rm -f ${TAR_NAME}"
+            sh "rm -f ${TAR_SINDHU} ${TAR_MAGEAI}"
         }
     }
 }
