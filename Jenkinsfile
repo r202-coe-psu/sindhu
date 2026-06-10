@@ -38,13 +38,13 @@ pipeline {
                     sh '''
                         set -e
                         # 1. send .tar and docker-compose to proxy
-                        scp -i $SSH_KEY -P $SSH_PORT -o StrictHostKeyChecking=no ${TAR_NAME} docker-compose.production.yml $SSH_USER@$SSH_HOST:/tmp/
+                        scp -i $SSH_KEY -P $SSH_PORT -o StrictHostKeyChecking=no ${TAR_NAME} docker-compose.production.yml $SSH_USER@$SSH_HOST:~/
 
                         # 2. send to r202-sindhu from proxy
                         ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
                             set -e
-                            scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid /tmp/${TAR_NAME} /tmp/docker-compose.production.yml $SSH_USER@r202-sindhu:/tmp/
-                            rm -f /tmp/${TAR_NAME} /tmp/docker-compose.production.yml
+                            scp -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid ~/${TAR_NAME} ~/docker-compose.production.yml $SSH_USER@r202-sindhu:~/
+                            rm -f ~/${TAR_NAME} ~/docker-compose.production.yml
                         "
                     '''
                 }
@@ -67,8 +67,8 @@ pipeline {
                             ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid $SSH_USER@r202-sindhu '
                                 set -e
                                 echo \"--> Executing docker load...\"
-                                sudo docker load -i /tmp/${TAR_NAME}
-                                rm -f /tmp/${TAR_NAME}
+                                sudo docker load -i ~/${TAR_NAME}
+                                rm -f ~/${TAR_NAME}
                             '
                         "
                     '''
@@ -92,7 +92,7 @@ pipeline {
                                 set -e
                                 # ย้ายไฟล์ compose ไปไว้ที่โฟลเดอร์โปรเจกต์
                                 sudo mkdir -p ${TARGET_DIR}
-                                sudo mv /tmp/docker-compose.production.yml ${TARGET_DIR}/docker-compose.production.yml
+                                sudo mv ~/docker-compose.production.yml ${TARGET_DIR}/docker-compose.production.yml
                                 
                                 cd ${TARGET_DIR}
                                 
