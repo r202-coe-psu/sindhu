@@ -8,7 +8,10 @@ def _haversine(lat1, lon1, lat2, lon2):
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlam = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    a = (
+        math.sin(dphi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    )
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
@@ -30,13 +33,11 @@ async def find_stations_by_zone(zone, user_lng: float = 0, user_lat: float = 0) 
     if not zone:
         return []
 
-    boundary = zone.boundary if isinstance(zone.boundary, dict) else zone.boundary.model_dump()
-    stations = await models.Station.find(
-        {
-            "coordinates": {"$geoWithin": {"$geometry": boundary}},
-            "status": "active",
-        }
-    ).to_list()
+    # Fetch linked stations that were explicitly assigned to this zone
+    await zone.fetch_all_links()
+    stations = [
+        s for s in (zone.stations or []) if getattr(s, "status", "active") == "active"
+    ]
 
     result = []
     for s in stations:
