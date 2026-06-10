@@ -32,8 +32,8 @@ services:
     env_file:
       - .env
     build:
-      context: .
-      dockerfile: Dockerfile.mageai.prod
+      context: mageai
+      dockerfile: Dockerfile
     environment:
       USER_CODE_PATH: /home/src/${PROJECT_NAME}
       ENV: ${ENV}
@@ -42,8 +42,13 @@ services:
     ports:
       - 9082:6789
     volumes:
-      - ../deployment/sindhu/mageai/mage_data:/home/src/mage_data
+      - ../deployment/sindhu/mageai:/home/src/
+      - ./sindhu/models/:/home/src/${PROJECT_NAME}/models
+      - ./sindhu/schemas/:/home/src/${PROJECT_NAME}/schemas
+      - ./sindhu/services/:/home/src/${PROJECT_NAME}/services
       - ../sindhu/credentials/:/home/src/${PROJECT_NAME}/credentials
+      - ./sindhu/web/static/resources:/home/src/${PROJECT_NAME}/web/static/resources
+      - ./sindhu/web/static/forecast_models:/home/src/${PROJECT_NAME}/web/static/forecast_models
       - /etc/localtime:/etc/localtime:ro
 
     restart: on-failure:5

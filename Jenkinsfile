@@ -89,6 +89,10 @@ pipeline {
                                 sudo mv /tmp/docker-compose.production.yml ${TARGET_DIR}/docker-compose.production.yml
                                 
                                 cd ${TARGET_DIR}
+                                
+                                echo "--> Pulling latest source code from git..."
+                                sudo git pull origin main
+                                
                                 # รันโดยใช้ Image ใหม่ที่เราเพิ่งโหลดเข้าไป ไม่ต้องใช้ --build แล้ว
                                 sudo docker compose -f docker-compose.production.yml up -d --force-recreate
                             '
