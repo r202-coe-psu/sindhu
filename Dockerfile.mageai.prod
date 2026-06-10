@@ -4,6 +4,9 @@ ARG USER_CODE_PATH=/home/src/${PROJECT_NAME:-sindhu}
 ARG DEBIAN_FRONTEND=noninteractive
 
 FROM mageai/mageai:${MAGEAI_VERSION:-latest}
+ARG PROJECT_NAME
+ARG USER_CODE_PATH=/home/src/${PROJECT_NAME:-sindhu}
+
 RUN echo 'deb http://mirrors.psu.ac.th/debian/ bookworm main contrib non-free' > /etc/apt/sources.list
 
 # RUN apt purge -y  -f unixodbc-common libodbc2
@@ -31,10 +34,10 @@ COPY mageai/mageai_home/sindhu ${USER_CODE_PATH}
 COPY sindhu/models ${USER_CODE_PATH}/models
 COPY sindhu/schemas ${USER_CODE_PATH}/schemas
 COPY sindhu/services ${USER_CODE_PATH}/services
-COPY sindhu/web/static/resources ${USER_CODE_PATH}/web/static/resources
-COPY sindhu/web/static/forecast_models ${USER_CODE_PATH}/web/static/forecast_models
 
-RUN chown -R mage ${USER_CODE_PATH}
+RUN mkdir -p ${USER_CODE_PATH}/web/static/resources \
+ && mkdir -p ${USER_CODE_PATH}/web/static/forecast_models \
+ && chown -R mage ${USER_CODE_PATH}
 
 # Install custom libraries within 3rd party libraries (e.g. dbt packages)
 # RUN python3 /app/install_other_dependencies.py --path ${USER_CODE_PATH}
