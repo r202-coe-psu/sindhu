@@ -20,7 +20,12 @@ pipeline {
             steps {
                 echo '==> Building Docker Image on Management Node...'
                 sh "docker compose -f docker-compose.production.yml build"
-                
+            }
+        }
+
+        stage('Image Export') {
+            when { branch 'main' }
+            steps {
                 echo '==> Saving Image to .tar file...'
                 sh "docker save -o ${TAR_NAME} ${IMAGE_NAME}"
             }
