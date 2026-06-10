@@ -64,10 +64,10 @@ pipeline {
                         ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no r202cid@r202-sindhu "
                             set -e
                             echo \"--> Executing docker load for Sindhu...\"
-                            sudo docker load -i ~/${TAR_SINDHU}
+                            docker load -i ~/${TAR_SINDHU}
                             rm -f ~/${TAR_SINDHU}
                             echo \"--> Executing docker load for MageAI...\"
-                            sudo docker load -i ~/${TAR_MAGEAI}
+                            docker load -i ~/${TAR_MAGEAI}
                             rm -f ~/${TAR_MAGEAI}
                         "
                     '''
@@ -94,7 +94,7 @@ pipeline {
                             sudo git pull origin main
                             
                             # รันโดยใช้ Image ใหม่ที่เราเพิ่งโหลดเข้าไป ไม่ต้องใช้ --build แล้ว
-                            sudo docker compose -f docker-compose.production.yml up -d --force-recreate
+                            docker compose -f docker-compose.production.yml up -d --force-recreate
                         "
                         echo "Deployment process finished successfully!"
                     '''
