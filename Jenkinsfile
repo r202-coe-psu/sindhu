@@ -84,10 +84,7 @@ pipeline {
                         set -e
                         ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no r202cid@r202-sindhu "
                             set -e
-                            # ย้ายไฟล์ compose ไปไว้ที่โฟลเดอร์โปรเจกต์
-                            sudo mkdir -p ${TARGET_DIR}
-                            sudo mv ~/docker-compose.production.yml ${TARGET_DIR}/docker-compose.production.yml
-                            
+
                             cd ${TARGET_DIR}
                             
                             echo \"--> Pulling latest source code from git...\"
