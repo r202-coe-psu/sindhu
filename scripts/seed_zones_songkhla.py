@@ -14,7 +14,16 @@ SONGKHLA_ZONES = [
         "name": "Zone_1",
         "name_th": "Zone_1",
         "code": "songkhla-zone-1",
-        "station_codes": [],
+        "station_codes": [
+            "STN07",
+            "2590",
+            "TSL26",
+            "STN2213",
+            "TSL39",
+            "STN0134",
+            "STN0709",
+            "STN0580",
+        ],
         "boundary": {
             "type": "Polygon",
             "coordinates": [
@@ -79,7 +88,19 @@ SONGKHLA_ZONES = [
         "name": "Zone_2",
         "name_th": "Zone_2",
         "code": "songkhla-zone-2",
-        "station_codes": [],
+        "station_codes": [
+            "1109526",
+            "858",
+            "2591",
+            "2590",
+            "TSL28",
+            "TSL27",
+            "TSL25",
+            "TSL24",
+            "TSL40",
+            "STN02",
+            "STN04",
+        ],
         "boundary": {
             "type": "Polygon",
             "coordinates": [
@@ -124,7 +145,16 @@ SONGKHLA_ZONES = [
         "name": "Zone_3",
         "name_th": "Zone_3",
         "code": "songkhla-zone-3",
-        "station_codes": [],
+        "station_codes": [
+            "STN2212",
+            "STN05",
+            "STN06",
+            "STN01",
+            "STN1025",
+            "STN1026",
+            "TSL24",
+            "TSL27",
+        ],
         "boundary": {
             "type": "Polygon",
             "coordinates": [
@@ -175,15 +205,25 @@ async def seed_zones():
     await models.init_beanie(None, settings)
 
     for zone_data in SONGKHLA_ZONES:
-        existing = await models.Zone.find_one(models.Zone.code == zone_data["code"])
-        if existing:
-            print(f"  skipped (already exists): {zone_data['name_th']}")
-            continue
-
         codes = zone_data["station_codes"]
         db_stations = await models.Station.find({"code": {"$in": codes}}).to_list()
         found = {s.code for s in db_stations}
         missing = [c for c in codes if c not in found]
+
+        existing = await models.Zone.find_one(models.Zone.code == zone_data["code"])
+        if existing:
+            existing.name = zone_data["name"]
+            existing.name_th = zone_data["name_th"]
+            existing.boundary = zone_data["boundary"]
+            existing.stations = db_stations
+            existing.status = "active"
+            await existing.save()
+
+            msg = f"  updated: {zone_data['name_th']} ({len(db_stations)}/{len(codes)} stations)"
+            if missing:
+                msg += f" — missing codes: {missing}"
+            print(msg)
+            continue
 
         zone_fields = {k: v for k, v in zone_data.items() if k != "station_codes"}
         zone = models.Zone(**zone_fields)
