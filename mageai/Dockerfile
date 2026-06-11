@@ -9,7 +9,11 @@ RUN echo 'deb http://mirrors.psu.ac.th/debian/ bookworm main contrib non-free' >
 # RUN apt purge -y  -f unixodbc-common libodbc2
 
 RUN apt update -y && apt -y install apt-utils && ACCEPT_EULA=Y apt upgrade -y -q
-RUN apt -y install locales apt-utils
+RUN apt -y install locales apt-utils \
+    && apt-get autoremove -y \
+    && apt-get autoclean \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN sed -i '/th_TH.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
 
