@@ -253,10 +253,10 @@ class Map:
             station_latlng = marker.getLatLng()
 
             if first:
-                style = {"color": "#dc2626", "weight": 2.5, "opacity": 0.8, "dashArray": "6, 4"}
+                style = {"color": "#dc2626", "weight": 2.5, "opacity": 0.8}
                 first = False
             else:
-                style = {"color": "#3b82f6", "weight": 1.5, "opacity": 0.4, "dashArray": "6, 4"}
+                style = {"color": "#3b82f6", "weight": 1.5, "opacity": 0.4}
 
             line = self.leaflet.polyline(
                 [list(user_latlng), [station_latlng.lat, station_latlng.lng]],
