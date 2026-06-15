@@ -21,7 +21,7 @@ pipeline {
                             echo '==> Deploying Sindhu..'
                             ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid $SSH_USER@r202-sindhu '
                                 cd /home/projects/sindhu
-                                sudo git pull
+                                sudo git -C /home/projects/sindhu pull
                                 docker compose -f docker-compose.production.yml up -d --build --force-recreate
                                 '
                         "
