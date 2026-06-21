@@ -2,18 +2,6 @@ pipeline {
     agent { label 'mgmt' }
 
     stages {
-        stage('Checkout') {
-            when {
-                anyOf {
-                    branch 'develop'
-                    branch 'main'
-                }
-            }
-            steps {
-                checkout scm
-            }
-        }
-
         stage('SonarQube Analysis') {
             when {
                 anyOf {
