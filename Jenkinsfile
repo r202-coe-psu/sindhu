@@ -2,6 +2,37 @@ pipeline {
     agent { label 'mgmt' }
 
     stages {
+        stage('Checkout') {
+            when {
+                anyOf {
+                    branch 'develop'
+                    branch 'main'
+                }
+            }
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            when {
+                anyOf {
+                    branch 'develop'
+                    branch 'main'
+                }
+            }
+            steps {
+                script {
+                    def scannerHome = tool 'SonarScanner'
+                    withCredentials([string(credentialsId: 'SONARQUBE_TOKEN', variable: 'SONAR_TOKEN')]) {
+                        withSonarQubeEnv() {
+                            sh "${scannerHome}/bin/sonar-scanner -Dsonar.login=${SONAR_TOKEN}"
+                        }
+                    }
+                }
+            }
+        }
+
         stage('Deploy to Production') {
             when {
                 branch 'main'
