@@ -14,7 +14,7 @@ pipeline {
                     def scannerHome = tool 'SonarScanner'
                     withCredentials([string(credentialsId: 'SONARQUBE_TOKEN', variable: 'SONAR_TOKEN')]) {
                         withSonarQubeEnv() {
-                            sh "${scannerHome}/bin/sonar-scanner -Dsonar.login=${SONAR_TOKEN}"
+                            sh "${scannerHome}/bin/sonar-scanner -Dsonar.token=\$SONAR_TOKEN"
                         }
                     }
                 }
