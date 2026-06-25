@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from .base import BaseMonitor
 import json
 from urllib.parse import urlencode
+from stations.metric_colors import get_metric_details
 
 class WaterMonitor(BaseMonitor):
     def __init__(
@@ -170,6 +171,39 @@ class WaterMonitor(BaseMonitor):
                 
             self.render_data_list()
 
+    def update_zone_properties(self, zone_geojson, nearby_stations):
+        if not hasattr(self, "latest_data") or not nearby_stations:
+            return
+
+        total_percent = 0
+        count = 0
+        
+        selected_source = "all"
+        if "source_selector" in document:
+            selected_source = document["source_selector"].value
+
+        for s in nearby_stations:
+            code = s.get("code")
+            if not code:
+                continue
+            for db_station in self.latest_data.get("stations", []):
+                if db_station.get("code") == code:
+                    if selected_source != "all" and db_station.get("source") != selected_source:
+                        continue
+                    for m in db_station.get("metrics", []):
+                        if m["metric_type"].lower() == "storage_percent":
+                            val = m.get("value")
+                            if val is not None:
+                                total_percent += float(val)
+                                count += 1
+                                
+        if count > 0:
+            avg_percent = total_percent / count
+            details = get_metric_details("storage_percent", avg_percent)
+            zone_geojson["properties"]["fillColor"] = details["color"]
+            zone_geojson["properties"]["color"] = details["color"]
+            zone_geojson["properties"]["fillOpacity"] = 0.25
+
     def render_data_list(self, filter_codes=None):
         if "reservoir_data_list" not in document:
             return
@@ -206,26 +240,10 @@ class WaterMonitor(BaseMonitor):
                 
             percent_val = float(storage_percent)
             
-            if percent_val < 30:
-                hex_color = "#FFFFFF"
-                text_color = "#374151" # gray-700
-                label = "น้ำน้อย"
-            elif percent_val < 50:
-                hex_color = "#B3E5FC"
-                text_color = "#0369a1" # light blue on white bg -> use darker text
-                label = "น้ำน้อย"
-            elif percent_val < 80:
-                hex_color = "#4FC3F7"
-                text_color = "#0c4a6e"
-                label = "น้ำปกติ"
-            elif percent_val <= 100:
-                hex_color = "#0288D1"
-                text_color = "#FFFFFF"
-                label = "น้ำมาก"
-            else:
-                hex_color = "#01579B"
-                text_color = "#FFFFFF"
-                label = "เฝ้าระวัง"
+            details = get_metric_details("storage_percent", percent_val)
+            hex_color = details["color"]
+            text_color = details["text_color"]
+            label = details["label"]
                 
             name = station.get("name_th") or station.get("name")
             prov = station.get("province", "ไม่ระบุจังหวัด")

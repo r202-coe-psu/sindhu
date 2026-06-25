@@ -99,6 +99,8 @@ class BaseMonitor:
                     "properties": {"name": zone_name},
                     "geometry": zone["boundary"],
                 }
+                if hasattr(self, "update_zone_properties"):
+                    self.update_zone_properties(zone_geojson, nearby_stations)
                 self.map.show_zone(zone_geojson)
 
                 mark = self.map.user_mark
