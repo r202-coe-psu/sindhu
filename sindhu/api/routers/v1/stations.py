@@ -19,7 +19,7 @@ from sindhu import schemas, models, services
 
 router = APIRouter(prefix="/stations", tags=["stations"])
 
-SOURCES = ["thaiwater", "rid", "dwr"]
+SOURCES = ["thaiwater", "rid"]
 
 @router.get("")
 #@cache(expire=300)

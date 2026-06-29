@@ -75,12 +75,70 @@ class WaterMonitor(BaseMonitor):
         try:
             response = await aio.get(url, cache=True)
             data = json.loads(response.data)
+            
+            for station in data.get("stations", []):
+                metadata = station.get("metadata", {})
+                wl_crit = metadata.get("water_level_critical")
+                wl_warn = metadata.get("water_level_warning")
+                wl_evac = metadata.get("water_level_evacuation")
+                if wl_evac is None and wl_crit is not None:
+                    try:
+                        wl_evac = float(wl_crit) + 0.5
+                    except:
+                        pass
+
+                waterlevel = None
+                diff_wl_bank = None
+                for m in station.get("metrics", []):
+                    m_type = m.get("metric_type", "").lower()
+                    val = m.get("value")
+                    if val is not None:
+                        if m_type in ["waterlevel", "waterlevel_msl", "waterlevel_m"]:
+                            waterlevel = float(val)
+                        elif m_type == "diff_wl_bank":
+                            diff_wl_bank = float(val)
+                
+                risk = -1
+                if waterlevel is not None and wl_crit is not None and wl_warn is not None:
+                    try:
+                        wl = float(waterlevel)
+                        crit = float(wl_crit)
+                        warn = float(wl_warn)
+                        evac = float(wl_evac) if wl_evac is not None else crit + 0.5
+                        if wl >= evac: risk = 3
+                        elif wl >= crit: risk = 2
+                        elif wl >= warn: risk = 1
+                        else: risk = 0
+                    except:
+                        pass
+                elif diff_wl_bank is not None:
+                    if diff_wl_bank >= 0.5: risk = 3
+                    elif diff_wl_bank >= 0: risk = 2
+                    elif diff_wl_bank >= -0.5: risk = 1
+                    else: risk = 0
+
+                if risk == 3:
+                    station["risk_color"] = "#9333ea"
+                    station["risk_percent"] = 100
+                elif risk == 2:
+                    station["risk_color"] = "#ef4444"
+                    station["risk_percent"] = 100
+                elif risk == 1:
+                    station["risk_color"] = "#f97316"
+                    station["risk_percent"] = 100
+                elif risk == 0:
+                    station["risk_color"] = "#22c55e"
+                    station["risk_percent"] = 100
+                else:
+                    station["risk_color"] = "#9ca3af"
+                    station["risk_percent"] = 100
+
             self.latest_data = data
             
-            if "storage_percent" not in self.map.metric_types:
-                self.map.metric_types.append("storage_percent")
+            if "waterlevel" not in self.map.metric_types:
+                self.map.metric_types.append("waterlevel")
                 
-            await self.map.update("storage_percent", data)
+            await self.map.update("waterlevel", data)
             self.render_data_list()
         except Exception as e:
             print(f"monitor: error {e}")
@@ -94,7 +152,7 @@ class WaterMonitor(BaseMonitor):
             aio.run(self._update_and_filter())
 
     async def _update_and_filter(self):
-        await self.map.update("storage_percent", self.latest_data)
+        await self.map.update("waterlevel", self.latest_data)
         if "source_selector" in document:
             selected_source = document["source_selector"].value
             if selected_source != "all":
@@ -175,12 +233,11 @@ class WaterMonitor(BaseMonitor):
         if not hasattr(self, "latest_data") or not nearby_stations:
             return
 
-        total_percent = 0
-        count = 0
-        
         selected_source = "all"
         if "source_selector" in document:
             selected_source = document["source_selector"].value
+
+        max_risk = -1  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical, 3 = Evacuation
 
         for s in nearby_stations:
             code = s.get("code")
@@ -190,19 +247,88 @@ class WaterMonitor(BaseMonitor):
                 if db_station.get("code") == code:
                     if selected_source != "all" and db_station.get("source") != selected_source:
                         continue
+                    
+                    # Extract variables
+                    metadata = db_station.get("metadata", {})
+                    wl_crit = metadata.get("water_level_critical")
+                    wl_warn = metadata.get("water_level_warning")
+                    wl_evac = metadata.get("water_level_evacuation")
+                    
+                    if wl_evac is None and wl_crit is not None:
+                        try:
+                            wl_evac = float(wl_crit) + 0.5
+                        except:
+                            wl_evac = None
+
+                    waterlevel = None
+                    diff_wl_bank = None
+                    
                     for m in db_station.get("metrics", []):
-                        if m["metric_type"].lower() == "storage_percent":
-                            val = m.get("value")
-                            if val is not None:
-                                total_percent += float(val)
-                                count += 1
-                                
-        if count > 0:
-            avg_percent = total_percent / count
-            details = get_metric_details("storage_percent", avg_percent)
-            zone_geojson["properties"]["fillColor"] = details["color"]
-            zone_geojson["properties"]["color"] = details["color"]
-            zone_geojson["properties"]["fillOpacity"] = 0.25
+                        m_type = m["metric_type"].lower()
+                        val = m.get("value")
+                        if val is not None:
+                            if m_type in ["waterlevel", "waterlevel_msl", "waterlevel_m"]:
+                                waterlevel = float(val)
+                            elif m_type == "diff_wl_bank":
+                                diff_wl_bank = float(val)
+                    
+                    risk = -1
+                    if waterlevel is not None and wl_crit is not None and wl_warn is not None:
+                        try:
+                            wl = float(waterlevel)
+                            crit = float(wl_crit)
+                            warn = float(wl_warn)
+                            evac = float(wl_evac) if wl_evac is not None else crit + 0.5
+                            
+                            if wl >= evac:
+                                risk = 3
+                            elif wl >= crit:
+                                risk = 2
+                            elif wl >= warn:
+                                risk = 1
+                            else:
+                                risk = 0
+                        except:
+                            pass
+                    elif diff_wl_bank is not None:
+                        # Fallback using diff_wl_bank if thresholds are missing
+                        if diff_wl_bank >= 0.5:
+                            risk = 3
+                        elif diff_wl_bank >= 0:
+                            risk = 2
+                        elif diff_wl_bank >= -0.5:
+                            risk = 1
+                        else:
+                            risk = 0
+                    
+                    if risk > max_risk:
+                        max_risk = risk
+
+        # Map risk to colors
+        if max_risk == 3:
+            fill_color = "#9333ea" # Purple (Evacuation)
+            fill_opacity = 0.5
+            color = "#7e22ce"
+        elif max_risk == 2:
+            fill_color = "#ef4444" # Red (Critical)
+            fill_opacity = 0.4
+            color = "#dc2626"
+        elif max_risk == 1:
+            fill_color = "#f97316" # Orange (Warning)
+            fill_opacity = 0.3
+            color = "#ea580c"
+        elif max_risk == 0:
+            fill_color = "#22c55e" # Green (Normal)
+            fill_opacity = 0.15
+            color = "#16a34a"
+        else:
+            fill_color = "#9ca3af" # Gray (Unknown)
+            fill_opacity = 0.1
+            color = "#6b7280"
+
+        zone_geojson["properties"]["fillColor"] = fill_color
+        zone_geojson["properties"]["color"] = color
+        zone_geojson["properties"]["fillOpacity"] = fill_opacity
 
     def render_data_list(self, filter_codes=None):
         if "reservoir_data_list" not in document:
@@ -226,24 +352,83 @@ class WaterMonitor(BaseMonitor):
             if not metrics:
                 continue
                 
-            storage_percent = None
+            metadata = station.get("metadata", {})
+            wl_crit = metadata.get("water_level_critical")
+            wl_warn = metadata.get("water_level_warning")
+            wl_evac = metadata.get("water_level_evacuation")
+            
+            if wl_evac is None and wl_crit is not None:
+                try:
+                    wl_evac = float(wl_crit) + 0.5
+                except:
+                    wl_evac = None
+
+            waterlevel = None
+            diff_wl_bank = None
             other_metrics = []
             
             for m in metrics:
-                if m["metric_type"].lower() == "storage_percent":
-                    storage_percent = m.get("value")
+                m_type = m["metric_type"].lower()
+                val = m.get("value")
+                if val is not None:
+                    if m_type in ["waterlevel", "waterlevel_msl", "waterlevel_m"]:
+                        waterlevel = float(val)
+                    elif m_type == "diff_wl_bank":
+                        diff_wl_bank = float(val)
+                other_metrics.append(m)
+            
+            risk = -1
+            if waterlevel is not None and wl_crit is not None and wl_warn is not None:
+                try:
+                    wl = float(waterlevel)
+                    crit = float(wl_crit)
+                    warn = float(wl_warn)
+                    evac = float(wl_evac) if wl_evac is not None else crit + 0.5
+                    
+                    if wl >= evac:
+                        risk = 3
+                    elif wl >= crit:
+                        risk = 2
+                    elif wl >= warn:
+                        risk = 1
+                    else:
+                        risk = 0
+                except:
+                    pass
+            elif diff_wl_bank is not None:
+                if diff_wl_bank >= 0.5:
+                    risk = 3
+                elif diff_wl_bank >= 0:
+                    risk = 2
+                elif diff_wl_bank >= -0.5:
+                    risk = 1
                 else:
-                    other_metrics.append(m)
-            
-            if storage_percent is None:
+                    risk = 0
+
+            # Only show stations that have valid water level data
+            if waterlevel is None and diff_wl_bank is None:
                 continue
-                
-            percent_val = float(storage_percent)
-            
-            details = get_metric_details("storage_percent", percent_val)
-            hex_color = details["color"]
-            text_color = details["text_color"]
-            label = details["label"]
+
+            if risk == 3:
+                hex_color = "#9333ea"
+                text_color = "white"
+                label = "อพยพ"
+            elif risk == 2:
+                hex_color = "#ef4444"
+                text_color = "white"
+                label = "วิกฤต"
+            elif risk == 1:
+                hex_color = "#f97316"
+                text_color = "white"
+                label = "เฝ้าระวัง"
+            elif risk == 0:
+                hex_color = "#22c55e"
+                text_color = "white"
+                label = "ปกติ"
+            else:
+                hex_color = "#9ca3af"
+                text_color = "white"
+                label = "ไม่ทราบสถานะ"
                 
             name = station.get("name_th") or station.get("name")
             prov = station.get("province", "ไม่ระบุจังหวัด")
@@ -283,17 +468,8 @@ class WaterMonitor(BaseMonitor):
                         <div class="text-xs text-gray-500 mt-0.5">{location}</div>
                     </div>
                     <span class="badge gap-1 px-2 py-3 shadow-sm border border-gray-200" style="background-color: {hex_color}; color: {text_color};">
-                        <span class="w-2 h-2 rounded-full border border-gray-300" style="background-color: {'#e5e7eb' if percent_val < 30 else 'white'};"></span>{label}
+                        <span class="w-2 h-2 rounded-full border border-gray-300" style="background-color: {'white'};"></span>{label}
                     </span>
-                </div>
-                <div class="flex justify-between text-sm mb-1.5 mt-3">
-                    <span class="text-gray-500">ปริมาณน้ำ</span>
-                    <span class="font-semibold text-gray-800">
-                        <span class="ml-1" style="color: {hex_color if percent_val >= 80 else text_color}">{percent_val:.1f}%</span>
-                    </span>
-                </div>
-                <div class="w-full bg-gray-100 rounded-full h-2 overflow-hidden border border-gray-200">
-                    <div class="h-full rounded-full transition-all duration-300" style="width: {min(100, percent_val)}%; background-color: {hex_color};"></div>
                 </div>
                 <div class="mt-3 flex flex-wrap gap-2">
                     {other_html}
@@ -302,6 +478,6 @@ class WaterMonitor(BaseMonitor):
             """
             
         if not html_content:
-            html_content = '<div class="flex justify-center items-center h-full text-gray-500">ไม่พบข้อมูลอ่างเก็บน้ำ</div>'
+            html_content = '<div class="flex justify-center items-center h-full text-gray-500">ไม่พบข้อมูลสถานีวัดน้ำ</div>'
             
         document["reservoir_data_list"].html = html_content
