@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 from .base import BaseMonitor
 import json
 from urllib.parse import urlencode
-from stations.metric_colors import get_metric_details
+
 
 class WaterMonitor(BaseMonitor):
     def __init__(
@@ -27,7 +27,57 @@ class WaterMonitor(BaseMonitor):
         self.monitor_name = "water"
 
         self.params = dict()
-   
+
+    def calculate_risk(self, station):
+        metadata = station.get("metadata", {})
+        wl_crit = metadata.get("water_level_critical")
+        wl_warn = metadata.get("water_level_warning")
+        wl_evac = metadata.get("water_level_evacuation")
+        if wl_evac is None and wl_crit is not None:
+            try:
+                wl_evac = float(wl_crit) + 0.5
+            except:
+                pass
+
+        waterlevel = None
+        diff_wl_bank = None
+        for m in station.get("metrics", []):
+            m_type = m.get("metric_type", "").lower()
+            val = m.get("value")
+            if val is not None:
+                if m_type in ["waterlevel", "waterlevel_msl", "waterlevel_m"]:
+                    waterlevel = float(val)
+                elif m_type == "diff_wl_bank":
+                    diff_wl_bank = float(val)
+
+        risk = -1
+        if waterlevel is not None and wl_crit is not None and wl_warn is not None:
+            try:
+                wl = float(waterlevel)
+                crit = float(wl_crit)
+                warn = float(wl_warn)
+                evac = float(wl_evac) if wl_evac is not None else crit + 0.5
+                if wl >= evac:
+                    risk = 3
+                elif wl >= crit:
+                    risk = 2
+                elif wl >= warn:
+                    risk = 1
+                else:
+                    risk = 0
+            except:
+                pass
+        elif diff_wl_bank is not None:
+            if diff_wl_bank >= 0.5:
+                risk = 3
+            elif diff_wl_bank >= 0:
+                risk = 2
+            elif diff_wl_bank >= -0.5:
+                risk = 1
+            else:
+                risk = 0
+
+        return risk, waterlevel, diff_wl_bank
 
     """
     ===========================================================================
@@ -44,7 +94,9 @@ class WaterMonitor(BaseMonitor):
 
         # Bind UI events
         if "marker_style_selector" in document:
-            document["marker_style_selector"].bind("change", self.on_marker_style_change)
+            document["marker_style_selector"].bind(
+                "change", self.on_marker_style_change
+            )
 
         # Load and render river waterways
         try:
@@ -70,52 +122,14 @@ class WaterMonitor(BaseMonitor):
     async def get_stations_metrics(self):
         query_data = urlencode({"source": self.source})
         url = f"{self.api_url}/v1/stations/metrics/latest?{query_data}"
-        
+
         self.set_map_loading(True)
         try:
             response = await aio.get(url, cache=True)
             data = json.loads(response.data)
-            
-            for station in data.get("stations", []):
-                metadata = station.get("metadata", {})
-                wl_crit = metadata.get("water_level_critical")
-                wl_warn = metadata.get("water_level_warning")
-                wl_evac = metadata.get("water_level_evacuation")
-                if wl_evac is None and wl_crit is not None:
-                    try:
-                        wl_evac = float(wl_crit) + 0.5
-                    except:
-                        pass
 
-                waterlevel = None
-                diff_wl_bank = None
-                for m in station.get("metrics", []):
-                    m_type = m.get("metric_type", "").lower()
-                    val = m.get("value")
-                    if val is not None:
-                        if m_type in ["waterlevel", "waterlevel_msl", "waterlevel_m"]:
-                            waterlevel = float(val)
-                        elif m_type == "diff_wl_bank":
-                            diff_wl_bank = float(val)
-                
-                risk = -1
-                if waterlevel is not None and wl_crit is not None and wl_warn is not None:
-                    try:
-                        wl = float(waterlevel)
-                        crit = float(wl_crit)
-                        warn = float(wl_warn)
-                        evac = float(wl_evac) if wl_evac is not None else crit + 0.5
-                        if wl >= evac: risk = 3
-                        elif wl >= crit: risk = 2
-                        elif wl >= warn: risk = 1
-                        else: risk = 0
-                    except:
-                        pass
-                elif diff_wl_bank is not None:
-                    if diff_wl_bank >= 0.5: risk = 3
-                    elif diff_wl_bank >= 0: risk = 2
-                    elif diff_wl_bank >= -0.5: risk = 1
-                    else: risk = 0
+            for station in data.get("stations", []):
+                risk, _, _ = self.calculate_risk(station)
 
                 if risk == 3:
                     station["risk_color"] = "#9333ea"
@@ -134,10 +148,10 @@ class WaterMonitor(BaseMonitor):
                     station["risk_percent"] = 100
 
             self.latest_data = data
-            
+
             if "waterlevel" not in self.map.metric_types:
                 self.map.metric_types.append("waterlevel")
-                
+
             await self.map.update("waterlevel", data)
             self.render_data_list()
         except Exception as e:
@@ -169,8 +183,12 @@ class WaterMonitor(BaseMonitor):
     def on_source_change(self, ev):
         if hasattr(self, "map") and hasattr(self, "latest_data"):
             selected_source = ev.target.value
-            
-            if hasattr(self.map, "_pin_mode_active") and self.map._pin_mode_active and self.map.user_coord:
+
+            if (
+                hasattr(self.map, "_pin_mode_active")
+                and self.map._pin_mode_active
+                and self.map.user_coord
+            ):
                 lat, lng = self.map.user_coord
                 aio.run(self.on_location_received(lat, lng))
                 return
@@ -191,7 +209,7 @@ class WaterMonitor(BaseMonitor):
     def on_zone_stations_found(self, nearby_stations):
         if not hasattr(self, "latest_data"):
             return
-            
+
         selected_source = "all"
         if "source_selector" in document:
             selected_source = document["source_selector"].value
@@ -201,14 +219,14 @@ class WaterMonitor(BaseMonitor):
             code = s.get("code", None)
             if code:
                 zone_codes.append(code)
-                
+
         if selected_source != "all":
             valid_codes = set()
             for station in self.latest_data.get("stations", []):
                 if station.get("source") == selected_source:
                     valid_codes.add(station.get("code"))
             zone_codes = [code for code in zone_codes if code in valid_codes]
-            
+
         self.map.filter_markers_by_codes(zone_codes)
         self.render_data_list(zone_codes)
 
@@ -217,7 +235,7 @@ class WaterMonitor(BaseMonitor):
             selected_source = "all"
             if "source_selector" in document:
                 selected_source = document["source_selector"].value
-                
+
             if selected_source != "all":
                 filtered_codes = []
                 for station in self.latest_data.get("stations", []):
@@ -226,7 +244,7 @@ class WaterMonitor(BaseMonitor):
                         if code:
                             filtered_codes.append(code)
                 self.map.filter_markers_by_codes(filtered_codes)
-                
+
             self.render_data_list()
 
     def update_zone_properties(self, zone_geojson, nearby_stations):
@@ -237,7 +255,9 @@ class WaterMonitor(BaseMonitor):
         if "source_selector" in document:
             selected_source = document["source_selector"].value
 
-        max_risk = -1  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical, 3 = Evacuation
+        max_risk = (
+            -1
+        )  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical, 3 = Evacuation
 
         for s in nearby_stations:
             code = s.get("code")
@@ -245,84 +265,36 @@ class WaterMonitor(BaseMonitor):
                 continue
             for db_station in self.latest_data.get("stations", []):
                 if db_station.get("code") == code:
-                    if selected_source != "all" and db_station.get("source") != selected_source:
+                    if (
+                        selected_source != "all"
+                        and db_station.get("source") != selected_source
+                    ):
                         continue
-                    
-                    # Extract variables
-                    metadata = db_station.get("metadata", {})
-                    wl_crit = metadata.get("water_level_critical")
-                    wl_warn = metadata.get("water_level_warning")
-                    wl_evac = metadata.get("water_level_evacuation")
-                    
-                    if wl_evac is None and wl_crit is not None:
-                        try:
-                            wl_evac = float(wl_crit) + 0.5
-                        except:
-                            wl_evac = None
 
-                    waterlevel = None
-                    diff_wl_bank = None
-                    
-                    for m in db_station.get("metrics", []):
-                        m_type = m["metric_type"].lower()
-                        val = m.get("value")
-                        if val is not None:
-                            if m_type in ["waterlevel", "waterlevel_msl", "waterlevel_m"]:
-                                waterlevel = float(val)
-                            elif m_type == "diff_wl_bank":
-                                diff_wl_bank = float(val)
-                    
-                    risk = -1
-                    if waterlevel is not None and wl_crit is not None and wl_warn is not None:
-                        try:
-                            wl = float(waterlevel)
-                            crit = float(wl_crit)
-                            warn = float(wl_warn)
-                            evac = float(wl_evac) if wl_evac is not None else crit + 0.5
-                            
-                            if wl >= evac:
-                                risk = 3
-                            elif wl >= crit:
-                                risk = 2
-                            elif wl >= warn:
-                                risk = 1
-                            else:
-                                risk = 0
-                        except:
-                            pass
-                    elif diff_wl_bank is not None:
-                        # Fallback using diff_wl_bank if thresholds are missing
-                        if diff_wl_bank >= 0.5:
-                            risk = 3
-                        elif diff_wl_bank >= 0:
-                            risk = 2
-                        elif diff_wl_bank >= -0.5:
-                            risk = 1
-                        else:
-                            risk = 0
-                    
+                    risk, _, _ = self.calculate_risk(db_station)
+
                     if risk > max_risk:
                         max_risk = risk
 
         # Map risk to colors
         if max_risk == 3:
-            fill_color = "#9333ea" # Purple (Evacuation)
+            fill_color = "#9333ea"  # Purple (Evacuation)
             fill_opacity = 0.5
             color = "#7e22ce"
         elif max_risk == 2:
-            fill_color = "#ef4444" # Red (Critical)
+            fill_color = "#ef4444"  # Red (Critical)
             fill_opacity = 0.4
             color = "#dc2626"
         elif max_risk == 1:
-            fill_color = "#f97316" # Orange (Warning)
+            fill_color = "#f97316"  # Orange (Warning)
             fill_opacity = 0.3
             color = "#ea580c"
         elif max_risk == 0:
-            fill_color = "#22c55e" # Green (Normal)
+            fill_color = "#22c55e"  # Green (Normal)
             fill_opacity = 0.15
             color = "#16a34a"
         else:
-            fill_color = "#9ca3af" # Gray (Unknown)
+            fill_color = "#9ca3af"  # Gray (Unknown)
             fill_opacity = 0.1
             color = "#6b7280"
 
@@ -337,73 +309,22 @@ class WaterMonitor(BaseMonitor):
         stations = self.latest_data.get("stations", [])
         if filter_codes is not None:
             stations = [s for s in stations if s.get("code") in filter_codes]
-            
+
         selected_source = "all"
         if "source_selector" in document:
             selected_source = document["source_selector"].value
-            
+
         if selected_source != "all":
             stations = [s for s in stations if s.get("source") == selected_source]
-            
+
         html_content = ""
-        
+
         for station in stations:
             metrics = station.get("metrics", [])
             if not metrics:
                 continue
-                
-            metadata = station.get("metadata", {})
-            wl_crit = metadata.get("water_level_critical")
-            wl_warn = metadata.get("water_level_warning")
-            wl_evac = metadata.get("water_level_evacuation")
-            
-            if wl_evac is None and wl_crit is not None:
-                try:
-                    wl_evac = float(wl_crit) + 0.5
-                except:
-                    wl_evac = None
 
-            waterlevel = None
-            diff_wl_bank = None
-            other_metrics = []
-            
-            for m in metrics:
-                m_type = m["metric_type"].lower()
-                val = m.get("value")
-                if val is not None:
-                    if m_type in ["waterlevel", "waterlevel_msl", "waterlevel_m"]:
-                        waterlevel = float(val)
-                    elif m_type == "diff_wl_bank":
-                        diff_wl_bank = float(val)
-                other_metrics.append(m)
-            
-            risk = -1
-            if waterlevel is not None and wl_crit is not None and wl_warn is not None:
-                try:
-                    wl = float(waterlevel)
-                    crit = float(wl_crit)
-                    warn = float(wl_warn)
-                    evac = float(wl_evac) if wl_evac is not None else crit + 0.5
-                    
-                    if wl >= evac:
-                        risk = 3
-                    elif wl >= crit:
-                        risk = 2
-                    elif wl >= warn:
-                        risk = 1
-                    else:
-                        risk = 0
-                except:
-                    pass
-            elif diff_wl_bank is not None:
-                if diff_wl_bank >= 0.5:
-                    risk = 3
-                elif diff_wl_bank >= 0:
-                    risk = 2
-                elif diff_wl_bank >= -0.5:
-                    risk = 1
-                else:
-                    risk = 0
+            risk, waterlevel, diff_wl_bank = self.calculate_risk(station)
 
             # Only show stations that have valid water level data
             if waterlevel is None and diff_wl_bank is None:
@@ -429,22 +350,22 @@ class WaterMonitor(BaseMonitor):
                 hex_color = "#9ca3af"
                 text_color = "white"
                 label = "ไม่ทราบสถานะ"
-                
+
             name = station.get("name_th") or station.get("name")
             prov = station.get("province", "ไม่ระบุจังหวัด")
             location = f"จ.{prov}"
-            
+
             # format other metrics
             other_html = ""
-            for om in other_metrics:
+            for om in metrics:
                 m_name = om["metric_type"]
                 val = om.get("value")
                 if val is None:
                     continue
-                
-                if m_name == "waterlevel_msl": 
+
+                if m_name == "waterlevel_msl":
                     display_text = f'ระดับน้ำ: <span class="font-medium text-gray-700">{val} ม.รทก.</span>'
-                elif m_name == "diff_wl_bank": 
+                elif m_name == "diff_wl_bank":
                     try:
                         v = float(val)
                         if v < 0:
@@ -457,9 +378,9 @@ class WaterMonitor(BaseMonitor):
                         display_text = f'ระดับน้ำกับตลิ่ง: <span class="font-medium text-gray-700">{val} ม.</span>'
                 else:
                     display_text = f'{m_name}: <span class="font-medium text-gray-700">{val}</span>'
-                    
+
                 other_html += f'<div class="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">{display_text}</div>'
-                
+
             html_content += f"""
             <div class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
                 <div class="flex justify-between items-start mb-2">
@@ -476,8 +397,8 @@ class WaterMonitor(BaseMonitor):
                 </div>
             </div>
             """
-            
+
         if not html_content:
             html_content = '<div class="flex justify-center items-center h-full text-gray-500">ไม่พบข้อมูลสถานีวัดน้ำ</div>'
-            
+
         document["reservoir_data_list"].html = html_content
