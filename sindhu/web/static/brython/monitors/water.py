@@ -259,22 +259,29 @@ class WaterMonitor(BaseMonitor):
             -1
         )  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical, 3 = Evacuation
 
+        stations_dict = {
+            s.get("code"): s
+            for s in self.latest_data.get("stations", [])
+            if s.get("code")
+        }
+
         for s in nearby_stations:
             code = s.get("code")
             if not code:
                 continue
-            for db_station in self.latest_data.get("stations", []):
-                if db_station.get("code") == code:
-                    if (
-                        selected_source != "all"
-                        and db_station.get("source") != selected_source
-                    ):
-                        continue
 
-                    risk, _, _ = self.calculate_risk(db_station)
+            db_station = stations_dict.get(code)
+            if db_station:
+                if (
+                    selected_source != "all"
+                    and db_station.get("source") != selected_source
+                ):
+                    continue
 
-                    if risk > max_risk:
-                        max_risk = risk
+                risk, _, _ = self.calculate_risk(db_station)
+
+                if risk > max_risk:
+                    max_risk = risk
 
         # Map risk to colors
         if max_risk == 3:
