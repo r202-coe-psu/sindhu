@@ -27,9 +27,16 @@ class WaterMonitor(BaseMonitor):
         self.monitor_name = "water"
 
         self.params = dict()
+        self.latest_data = None
 
     def calculate_risk(self, station):
-        metadata = station.get("metadata", {})
+        if not station or not isinstance(station, dict):
+            return -1, None, None
+
+        metadata = station.get("metadata") or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+
         wl_crit = metadata.get("water_level_critical")
         wl_warn = metadata.get("water_level_warning")
         wl_evac = metadata.get("water_level_evacuation")
@@ -41,14 +48,19 @@ class WaterMonitor(BaseMonitor):
 
         waterlevel = None
         diff_wl_bank = None
-        for m in station.get("metrics", []):
-            m_type = m.get("metric_type", "").lower()
+        for m in station.get("metrics") or []:
+            if not m or not isinstance(m, dict):
+                continue
+            m_type = (m.get("metric_type") or "").lower()
             val = m.get("value")
             if val is not None:
-                if m_type in ["waterlevel", "waterlevel_msl", "waterlevel_m"]:
-                    waterlevel = float(val)
-                elif m_type == "diff_wl_bank":
-                    diff_wl_bank = float(val)
+                try:
+                    if m_type in ["waterlevel", "waterlevel_msl", "waterlevel_m"]:
+                        waterlevel = float(val)
+                    elif m_type == "diff_wl_bank":
+                        diff_wl_bank = float(val)
+                except (ValueError, TypeError):
+                    pass
 
         risk = -1
         if waterlevel is not None and wl_crit is not None and wl_warn is not None:
@@ -127,8 +139,13 @@ class WaterMonitor(BaseMonitor):
         try:
             response = await aio.get(url, cache=True)
             data = json.loads(response.data)
+            if not data or not isinstance(data, dict):
+                print(f"monitor: error data is invalid: {data}")
+                return
 
-            for station in data.get("stations", []):
+            for station in data.get("stations") or []:
+                if not station or not isinstance(station, dict):
+                    continue
                 risk, _, _ = self.calculate_risk(station)
 
                 if risk == 3:
@@ -160,19 +177,21 @@ class WaterMonitor(BaseMonitor):
             self.set_map_loading(False)
 
     def on_marker_style_change(self, ev):
-        if hasattr(self, "map") and hasattr(self, "latest_data"):
+        if hasattr(self, "map") and self.latest_data:
             style = ev.target.value
             self.map.marker_style = style
             aio.run(self._update_and_filter())
 
     async def _update_and_filter(self):
+        if not self.latest_data:
+            return
         await self.map.update("waterlevel", self.latest_data)
         if "source_selector" in document:
             selected_source = document["source_selector"].value
             if selected_source != "all":
                 filtered_codes = []
-                for station in self.latest_data.get("stations", []):
-                    if station.get("source") == selected_source:
+                for station in self.latest_data.get("stations") or []:
+                    if station and station.get("source") == selected_source:
                         code = station.get("code")
                         if code:
                             filtered_codes.append(code)
@@ -181,7 +200,7 @@ class WaterMonitor(BaseMonitor):
                 self.map.show_all_markers()
 
     def on_source_change(self, ev):
-        if hasattr(self, "map") and hasattr(self, "latest_data"):
+        if hasattr(self, "map") and self.latest_data:
             selected_source = ev.target.value
 
             if (
@@ -198,8 +217,8 @@ class WaterMonitor(BaseMonitor):
                 self.render_data_list()
             else:
                 filtered_codes = []
-                for station in self.latest_data.get("stations", []):
-                    if station.get("source") == selected_source:
+                for station in self.latest_data.get("stations") or []:
+                    if station and station.get("source") == selected_source:
                         code = station.get("code")
                         if code:
                             filtered_codes.append(code)
@@ -207,7 +226,7 @@ class WaterMonitor(BaseMonitor):
                 self.render_data_list()
 
     def on_zone_stations_found(self, nearby_stations):
-        if not hasattr(self, "latest_data"):
+        if not self.latest_data:
             return
 
         selected_source = "all"
@@ -215,15 +234,17 @@ class WaterMonitor(BaseMonitor):
             selected_source = document["source_selector"].value
 
         zone_codes = []
-        for s in nearby_stations:
+        for s in nearby_stations or []:
+            if not s:
+                continue
             code = s.get("code", None)
             if code:
                 zone_codes.append(code)
 
         if selected_source != "all":
             valid_codes = set()
-            for station in self.latest_data.get("stations", []):
-                if station.get("source") == selected_source:
+            for station in self.latest_data.get("stations") or []:
+                if station and station.get("source") == selected_source:
                     valid_codes.add(station.get("code"))
             zone_codes = [code for code in zone_codes if code in valid_codes]
 
@@ -231,15 +252,15 @@ class WaterMonitor(BaseMonitor):
         self.render_data_list(zone_codes)
 
     def on_zone_stations_cleared(self):
-        if hasattr(self, "latest_data"):
+        if self.latest_data:
             selected_source = "all"
             if "source_selector" in document:
                 selected_source = document["source_selector"].value
 
             if selected_source != "all":
                 filtered_codes = []
-                for station in self.latest_data.get("stations", []):
-                    if station.get("source") == selected_source:
+                for station in self.latest_data.get("stations") or []:
+                    if station and station.get("source") == selected_source:
                         code = station.get("code")
                         if code:
                             filtered_codes.append(code)
@@ -248,7 +269,7 @@ class WaterMonitor(BaseMonitor):
             self.render_data_list()
 
     def update_zone_properties(self, zone_geojson, nearby_stations):
-        if not hasattr(self, "latest_data") or not nearby_stations:
+        if not self.latest_data or not nearby_stations:
             return
 
         selected_source = "all"
@@ -261,11 +282,13 @@ class WaterMonitor(BaseMonitor):
 
         stations_dict = {
             s.get("code"): s
-            for s in self.latest_data.get("stations", [])
-            if s.get("code")
+            for s in (self.latest_data.get("stations") or [])
+            if s and s.get("code")
         }
 
         for s in nearby_stations:
+            if not s:
+                continue
             code = s.get("code")
             if not code:
                 continue
@@ -313,7 +336,11 @@ class WaterMonitor(BaseMonitor):
         if "reservoir_data_list" not in document:
             return
 
-        stations = self.latest_data.get("stations", [])
+        if not self.latest_data:
+            return
+
+        stations = self.latest_data.get("stations") or []
+        stations = [s for s in stations if s and isinstance(s, dict)]
         if filter_codes is not None:
             stations = [s for s in stations if s.get("code") in filter_codes]
 
@@ -327,7 +354,8 @@ class WaterMonitor(BaseMonitor):
         html_content = ""
 
         for station in stations:
-            metrics = station.get("metrics", [])
+            metrics = station.get("metrics") or []
+            metrics = [m for m in metrics if m and isinstance(m, dict)]
             if not metrics:
                 continue
 
@@ -365,7 +393,9 @@ class WaterMonitor(BaseMonitor):
             # format other metrics
             other_html = ""
             for om in metrics:
-                m_name = om["metric_type"]
+                m_name = om.get("metric_type")
+                if not m_name:
+                    continue
                 val = om.get("value")
                 if val is None:
                     continue
