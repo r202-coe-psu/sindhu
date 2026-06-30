@@ -2,13 +2,17 @@ FROM debian:sid
 RUN echo 'deb http://mirrors.psu.ac.th/debian/ sid main contrib non-free' > /etc/apt/sources.list
 # RUN echo 'deb http://mirror.kku.ac.th/debian/ sid main contrib non-free' >> /etc/apt/sources.list
 RUN apt update && apt upgrade -y
-RUN apt install -y python3 python3-dev python3-pip python3-venv npm locales \
-    build-essential cmake libopenblas-dev gfortran cargo
+RUN apt install -y python3.13 python3.13-dev python3.13-venv python3-pip npm locales \
+    build-essential cmake libopenblas-dev gfortran cargo \
+    && apt-get autoremove -y \
+    && apt-get autoclean \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN sed -i '/th_TH.UTF-8/s/^# //g' /etc/locale.gen && locale-gen
 
-RUN python3 -m venv /venv
-ENV PYTHON=/venv/bin/python3
+RUN python3.13 -m venv /venv
+ENV PYTHON=/venv/bin/python3.13
 
 RUN $PYTHON -m pip install wheel poetry gunicorn 
 
