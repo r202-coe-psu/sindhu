@@ -222,16 +222,31 @@ class Map:
         if self.zone_layer:
             self.map.removeLayer(self.zone_layer)
 
+        def get_val(obj, key_name, default_val=None):
+            if obj is None:
+                return default_val
+            if isinstance(obj, dict):
+                return obj.get(key_name, default_val)
+            return getattr(obj, key_name, default_val)
+
+        def get_style(feature):
+            props = get_val(feature, "properties", {})
+            fill_color = get_val(props, "fillColor", "#3b82f6")
+            color = get_val(props, "color", "#2563eb")
+            fill_opacity = get_val(props, "fillOpacity", 0.15)
+            weight = get_val(props, "weight", 2)
+            return {
+                "fillColor": fill_color,
+                "fillOpacity": fill_opacity,
+                "color": color,
+                "weight": weight,
+                "dashArray": "",
+            }
+
         self.zone_layer = self.leaflet.geoJson(
             zone_geojson,
             {
-                "style": lambda feature: {
-                    "fillColor": "#3b82f6",
-                    "fillOpacity": 0.15,
-                    "color": "#2563eb",
-                    "weight": 2,
-                    "dashArray": "5, 5",
-                },
+                "style": get_style,
             },
         ).addTo(self.map)
 
@@ -253,10 +268,10 @@ class Map:
             station_latlng = marker.getLatLng()
 
             if first:
-                style = {"color": "#dc2626", "weight": 2.5, "opacity": 0.8, "dashArray": "6, 4"}
+                style = {"color": "#dc2626", "weight": 2.5, "opacity": 0.8}
                 first = False
             else:
-                style = {"color": "#3b82f6", "weight": 1.5, "opacity": 0.4, "dashArray": "6, 4"}
+                style = {"color": "#3b82f6", "weight": 1.5, "opacity": 0.4}
 
             line = self.leaflet.polyline(
                 [list(user_latlng), [station_latlng.lat, station_latlng.lng]],

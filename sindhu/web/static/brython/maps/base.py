@@ -264,9 +264,16 @@ class BaseMap(Map):
                 marker_option["rotationAngle"] = rotate_direction
             else:
                 style = getattr(self, "marker_style", "donut")
-                percent = metrics.get("storage_percent", 0)
-                if percent is None: percent = 0
+                
+                if "risk_percent" in station:
+                    percent = station["risk_percent"]
+                else:
+                    percent = metrics.get("storage_percent", 0)
+                    if percent is None: percent = 0
                 percent = min(max(percent, 0), 100)
+                
+                if "risk_color" in station:
+                    metric_color = station["risk_color"]
                 
                 if style == "donut":
                     html_content = f'<div style="width: 24px; height: 24px; border-radius: 50%; background: conic-gradient({metric_color} {percent}%, #e5e7eb 0); border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>'
