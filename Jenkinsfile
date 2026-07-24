@@ -59,6 +59,7 @@ pipeline {
                     sh '''
                         # Deploy Sindhu Production
                         echo '==> Deploying Sindhu to Production..'
+                        echo "Target: ${SSH_USER}@${SSH_HOST}:${SSH_PORT}"
                         chmod 600 "$SSH_KEY"
                         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$SSH_KEY" "$SSH_USER"@"$SSH_HOST" -p "$SSH_PORT" '
                             cd /home/projects/sindhu
