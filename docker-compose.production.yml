@@ -2,6 +2,8 @@ services:
   mongodb:
     image: mongo:7
     container_name: sindhu-mongodb
+    ports:
+      - "${PROD_INTERNAL_IP}:27017:27017"
     volumes:
       - ../deployment/sindhu/mongodb/data/db:/data/db
       - /etc/localtime:/etc/localtime:ro
@@ -37,7 +39,7 @@ services:
     environment:
       USER_CODE_PATH: /home/src/${PROJECT_NAME}
       ENV: ${ENV}
-      REQUIRE_USER_AUTHENTICATION: 1 # Sign-in required 
+      REQUIRE_USER_AUTHENTICATION: 1 # Sign-in required
       MAGE_ACCESS_TOKEN_EXPIRY_TIME: 86400 # 24 hrs.
     ports:
       - 9082:6789
