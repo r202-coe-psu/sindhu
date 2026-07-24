@@ -32,18 +32,13 @@ pipeline {
                     string(credentialsId: 'sindhu-prod-port', variable: 'SSH_PORT')
                 ]) {
                     sh '''
-                        echo "Starting deployment to Production server..."
-                        # [1] Connect to proxy server 
-                        ssh -i $SSH_KEY -p $SSH_PORT -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST "
-
-                            # [2] Deploy Sindhu
-                            echo '==> Deploying Sindhu..'
-                            ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519_r202cid $SSH_USER@r202-sindhu '
-                                cd /home/projects/sindhu
-                                sudo git -C /home/projects/sindhu pull
-                                docker compose -f docker-compose.production.yml up -d --build --force-recreate
-                                '
-                        "
+                        # [2] Deploy Sindhu
+                        echo '==> Deploying Sindhu..'
+                        ssh -i $SSH_KEY $SSH_USER@r202-sindhu '
+                            cd /home/projects/sindhu
+                            sudo git -C /home/projects/sindhu pull
+                            docker compose -f docker-compose.production.yml up -d --build --force-recreate
+                            '
                         echo "Deployment process finished successfully!"
                     '''
                 }
