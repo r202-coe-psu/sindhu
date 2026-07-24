@@ -21,6 +21,30 @@ pipeline {
             }
         }
 
+        stage('Deploy to Staging') {
+            when {
+                branch 'develop'
+            }
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(credentialsId: 'sindhu-staging-ssh', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER'),
+                    string(credentialsId: 'sindhu-staging-host', variable: 'SSH_HOST'),
+                    string(credentialsId: 'sindhu-staging-port', variable: 'SSH_PORT')
+                ]) {
+                    sh '''
+                        # Deploy Sindhu Staging
+                        echo '==> Deploying Sindhu to Staging..'
+                        ssh -i $SSH_KEY $SSH_USER@$SSH_HOST -p $SSH_PORT '
+                            cd /home/projects/sindhu
+                            sudo git -C /home/projects/sindhu pull
+                            docker compose -f docker-compose.staging.yml up -d --build --force-recreate
+                            '
+                        echo "Staging deployment process finished successfully!"
+                    '''
+                }
+            }
+        }
+
         stage('Deploy to Production') {
             when {
                 branch 'main'
@@ -32,14 +56,14 @@ pipeline {
                     string(credentialsId: 'sindhu-prod-port', variable: 'SSH_PORT')
                 ]) {
                     sh '''
-                        # [2] Deploy Sindhu
-                        echo '==> Deploying Sindhu..'
-                        ssh -i $SSH_KEY $SSH_USER@r202-sindhu '
+                        # Deploy Sindhu Production
+                        echo '==> Deploying Sindhu to Production..'
+                        ssh -i $SSH_KEY $SSH_USER@$SSH_HOST -p $SSH_PORT '
                             cd /home/projects/sindhu
                             sudo git -C /home/projects/sindhu pull
                             docker compose -f docker-compose.production.yml up -d --build --force-recreate
                             '
-                        echo "Deployment process finished successfully!"
+                        echo "Production deployment process finished successfully!"
                     '''
                 }
             }

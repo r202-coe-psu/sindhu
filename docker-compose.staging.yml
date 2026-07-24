@@ -1,0 +1,62 @@
+services:
+  redis:
+    image: redis/redis-stack-server
+    container_name: sindhu-staging-redis
+    volumes:
+      - ../deployment/sindhu/redis/data:/data
+    restart: always
+    networks:
+      - default
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    build: .
+    image: sindhu/sindhu:latest
+    container_name: sindhu-staging-api
+    volumes:
+      - ../deployment:/deployment
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "8000:8000"
+    networks:
+      - default
+    restart: on-failure:5
+    environment:
+      - APP_ENV=staging
+    env_file:
+      - .env
+    command: /venv/bin/gunicorn -w 5 --bind 0.0.0.0:8000 --worker-class uvicorn.workers.UvicornWorker --timeout 600 --keep-alive 10 "sindhu.api:create_application()"
+    logging:
+      options:  
+        max-size: "10m"
+        max-file: "3"
+
+  web:
+    build: .
+    image: sindhu/sindhu:latest
+    container_name: sindhu-staging-web
+    volumes:
+      - ../deployment:/deployment
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "8080:8080"
+    links:
+      - api
+    depends_on:
+      - api
+    networks:
+      - default
+    restart: on-failure:5
+    environment:
+      SINDHU_SETTINGS: /app/.env
+    command: /venv/bin/gunicorn -w 5 --bind 0.0.0.0:8080 --timeout 600 --keep-alive 10 "sindhu.web:create_app()"
+    logging:
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
