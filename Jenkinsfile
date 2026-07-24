@@ -34,7 +34,8 @@ pipeline {
                     sh '''
                         # Deploy Sindhu Staging
                         echo '==> Deploying Sindhu to Staging..'
-                        ssh -i $SSH_KEY $SSH_USER@$SSH_HOST -p $SSH_PORT '
+                        chmod 600 "$SSH_KEY"
+                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$SSH_KEY" "$SSH_USER"@"$SSH_HOST" -p "$SSH_PORT" '
                             cd /home/projects/sindhu
                             sudo git -C /home/projects/sindhu pull
                             docker compose -f docker-compose.staging.yml up -d --build --force-recreate
@@ -58,7 +59,8 @@ pipeline {
                     sh '''
                         # Deploy Sindhu Production
                         echo '==> Deploying Sindhu to Production..'
-                        ssh -i $SSH_KEY $SSH_USER@$SSH_HOST -p $SSH_PORT '
+                        chmod 600 "$SSH_KEY"
+                        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$SSH_KEY" "$SSH_USER"@"$SSH_HOST" -p "$SSH_PORT" '
                             cd /home/projects/sindhu
                             sudo git -C /home/projects/sindhu pull
                             docker compose -f docker-compose.production.yml up -d --build --force-recreate
