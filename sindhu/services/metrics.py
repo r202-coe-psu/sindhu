@@ -266,9 +266,7 @@ async def get_metrics_by_station(
                 "_id": "$timestamp",
                 "metrics": {
                     "$mergeObjects": {
-                        "$arrayToObject": [
-                            [{"k": "$_id.metric_type", "v": "$value"}]
-                        ]
+                        "$arrayToObject": [[{"k": "$_id.metric_type", "v": "$value"}]]
                     }
                 },
             }

@@ -37,6 +37,7 @@ pipeline {
                         chmod 600 "$SSH_KEY"
                         ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -i "$SSH_KEY" "$SSH_USER"@"$SSH_HOST" -p "$SSH_PORT" '
                             cd /home/projects/sindhu
+                            sudo git -C /home/projects/sindhu checkout develop
                             sudo git -C /home/projects/sindhu pull
                             docker compose -f docker-compose.staging.yml up -d --build --force-recreate
                             '

@@ -11,7 +11,6 @@ from ... import models
 from ... import schemas
 from . import security
 
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login")
 
 

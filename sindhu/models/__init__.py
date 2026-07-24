@@ -43,10 +43,46 @@ async def gather_documents() -> Sequence[Type[beanie.Document]]:
     ]
 
 
+import urllib.parse
+
+
+def sanitize_mongo_uri(uri: str) -> str:
+    if not uri or not ("mongodb://" in uri or "mongodb+srv://" in uri):
+        return uri
+    scheme_sep = "://"
+    scheme, remainder = uri.split(scheme_sep, 1)
+    if "@" not in remainder:
+        return uri
+    host_db_idx = remainder.find("/")
+    if host_db_idx == -1:
+        host_db_idx = remainder.find("?")
+    if host_db_idx != -1:
+        user_host_part = remainder[:host_db_idx]
+        rest = remainder[host_db_idx:]
+    else:
+        user_host_part = remainder
+        rest = ""
+
+    last_at = user_host_part.rfind("@")
+    if last_at == -1:
+        return uri
+
+    userinfo = user_host_part[:last_at]
+    hostpart = user_host_part[last_at + 1 :]
+
+    if ":" in userinfo:
+        user, password = userinfo.split(":", 1)
+        quoted_user = urllib.parse.quote_plus(urllib.parse.unquote(user))
+        quoted_pass = urllib.parse.quote_plus(urllib.parse.unquote(password))
+        return f"{scheme}://{quoted_user}:{quoted_pass}@{hostpart}{rest}"
+    return uri
+
+
 class BeanieClient:
     async def init_beanie(self, settings):
         self.settings = settings
-        self.client = pymongo.AsyncMongoClient(settings.MONGODB_URI)
+        uri = sanitize_mongo_uri(getattr(settings, "MONGODB_URI", ""))
+        self.client = pymongo.AsyncMongoClient(uri)
         self.db = self.client.get_default_database()
 
         documents = await gather_documents()

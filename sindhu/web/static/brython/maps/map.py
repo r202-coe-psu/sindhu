@@ -1,6 +1,7 @@
 from browser import alert, window, ajax
 import json
 
+
 class Map:
     def __init__(self, center, zoom, min_zoom):
         self.center = center
@@ -149,7 +150,9 @@ class Map:
         reset_div = doc.createElement("div")
         reset_div.style.cssText = "display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:1000;"
         reset_btn = doc.createElement("button")
-        reset_btn.html = '<i class="ph ph-arrow-counter-clockwise"></i> แสดงสถานีทั้งหมด'
+        reset_btn.html = (
+            '<i class="ph ph-arrow-counter-clockwise"></i> แสดงสถานีทั้งหมด'
+        )
         reset_btn.style.cssText = "background:white;color:#2563eb;border:1px solid #e5e7eb;border-radius:9999px;padding:6px 16px;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.15);display:flex;align-items:center;gap:6px;"
         reset_div <= reset_btn
         map_container <= reset_div
@@ -178,16 +181,22 @@ class Map:
 
     def place_pin(self, lat, lng):
         self.user_coord = (lat, lng)
-        if hasattr(self, "user_mark") and self.user_mark and not isinstance(self.user_mark, list):
+        if (
+            hasattr(self, "user_mark")
+            and self.user_mark
+            and not isinstance(self.user_mark, list)
+        ):
             self.user_mark.setLatLng(self.user_coord)
         else:
-            pin_icon = self.leaflet.divIcon({
-                "className": "",
-                "html": '<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><svg width="30" height="40" viewBox="0 0 30 40"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="#dc2626"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg></div>',
-                "iconSize": [30, 40],
-                "iconAnchor": [15, 40],
-                "popupAnchor": [0, -36],
-            })
+            pin_icon = self.leaflet.divIcon(
+                {
+                    "className": "",
+                    "html": '<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><svg width="30" height="40" viewBox="0 0 30 40"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="#dc2626"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg></div>',
+                    "iconSize": [30, 40],
+                    "iconAnchor": [15, 40],
+                    "popupAnchor": [0, -36],
+                }
+            )
             self.user_mark = (
                 self.leaflet.marker(
                     self.user_coord,
@@ -200,7 +209,11 @@ class Map:
             self._reset_btn_container.style.display = "block"
 
     def remove_pin(self):
-        if hasattr(self, "user_mark") and self.user_mark and not isinstance(self.user_mark, list):
+        if (
+            hasattr(self, "user_mark")
+            and self.user_mark
+            and not isinstance(self.user_mark, list)
+        ):
             self.map.removeLayer(self.user_mark)
             self.user_mark = []
             self.user_coord = None
@@ -287,7 +300,11 @@ class Map:
 
             self.map.flyTo(self.user_coord, 16)
 
-            if hasattr(self, "user_mark") and self.user_mark and not isinstance(self.user_mark, list):
+            if (
+                hasattr(self, "user_mark")
+                and self.user_mark
+                and not isinstance(self.user_mark, list)
+            ):
                 self.user_mark.setLatLng(self.user_coord)
             else:
                 self.user_mark = (
@@ -483,7 +500,9 @@ class Map:
         def style(feature):
             properties = get_val(feature, "properties", {})
             stroke_color = get_val(properties, "stroke", "#C6C6C6")
-            stroke_w = get_val(properties, "stroke-width", get_val(properties, "stroke_w", 2))
+            stroke_w = get_val(
+                properties, "stroke-width", get_val(properties, "stroke_w", 2)
+            )
             return {
                 "color": stroke_color,
                 "weight": stroke_w,
@@ -496,7 +515,9 @@ class Map:
             """Helper to reset the currently selected river layer."""
             if self_ref._selected_river:
                 prev = self_ref._selected_river
-                if "rivers" in self_ref.shapes and self_ref.shapes["rivers"].hasLayer(prev):
+                if "rivers" in self_ref.shapes and self_ref.shapes["rivers"].hasLayer(
+                    prev
+                ):
                     self_ref.shapes["rivers"].resetStyle(prev)
                 if hasattr(prev, "_path") and prev._path:
                     prev._path.classList.remove("flowing-river")
@@ -545,15 +566,21 @@ class Map:
                 display_name = name
                 if name == "Waterway":
                     lang = getattr(self, "lang_code", "th")
-                    display_name = "เส้นทางน้ำ (ไม่ระบุชื่อ)" if lang == "th" else "Unnamed Waterway"
+                    display_name = (
+                        "เส้นทางน้ำ (ไม่ระบุชื่อ)"
+                        if lang == "th"
+                        else "Unnamed Waterway"
+                    )
                 popup_detail += f"<div>{display_name}</div>"
 
             if popup_detail:
                 layer.bindPopup(popup_detail)
 
-            layer.on({
-                "click": zoom_to_feature,
-            })
+            layer.on(
+                {
+                    "click": zoom_to_feature,
+                }
+            )
 
         self.geojson = self.leaflet.geoJson(
             data,
@@ -600,33 +627,32 @@ class Map:
                 popupAnchor=[0, -30],
             )
         )
-    
+
     def load_river_basins(self, api_url):
         """ฟังก์ชันสำหรับดึงข้อมูล GeoJSON ลุ่มน้ำจาก API และวาดลงแผนที่"""
-        
+
         def on_complete(req):
             if req.status == 200 or req.status == 0:
                 geojson_data = json.loads(req.text)
-                
+
                 # กำหนดสไตล์เส้นแม่น้ำ
                 river_style = {
-                    "color": "#3388ff", # สีฟ้า
-                    "weight": 2,        # ความหนาของเส้น
-                    "opacity": 0.8      # ความโปร่งใส
+                    "color": "#3388ff",  # สีฟ้า
+                    "weight": 2,  # ความหนาของเส้น
+                    "opacity": 0.8,  # ความโปร่งใส
                 }
-                
+
                 # ใช้ self.leaflet.geoJson วาดเส้น และเก็บไว้ใน self.shapes
-                self.shapes['river_basins'] = self.leaflet.geoJson(
-                    geojson_data, 
-                    {"style": river_style}
+                self.shapes["river_basins"] = self.leaflet.geoJson(
+                    geojson_data, {"style": river_style}
                 ).addTo(self.map)
-                
+
                 print("🎉 โหลดข้อมูลเส้นแม่น้ำสงขลาลงแผนที่สำเร็จ!")
             else:
                 print(f"❌ โหลดข้อมูล GeoJSON ล้มเหลว (Status: {req.status})")
 
         print("กำลังดึงข้อมูลแม่น้ำจาก API...")
         req = ajax.Ajax()
-        req.bind('complete', on_complete)
-        req.open('GET', f'{api_url}/v1/basins', True) 
+        req.bind("complete", on_complete)
+        req.open("GET", f"{api_url}/v1/basins", True)
         req.send()

@@ -8,6 +8,7 @@ from .map import Map
 from stations import metric_infos
 from stations.metric_colors import get_metric_color as _get_metric_color
 
+
 class BaseMap(Map):
     def __init__(
         self,
@@ -24,7 +25,7 @@ class BaseMap(Map):
         self.metric_markers_layers = {}
         self.metric_legends = {}
         self.interpolate_layers = {}
-        
+
         self.metric_markers = {}
         self.metric_markers_by_code = {}
         self.metric_markers_layer = {}
@@ -84,7 +85,7 @@ class BaseMap(Map):
             badge_color_map = {
                 "thaiwater": "badge-info text-info-content",
                 "rid": "badge-error text-error-content",
-                "dwr": "badge-success text-success-content"
+                "dwr": "badge-success text-success-content",
             }
             badge_color = badge_color_map.get(source_lower, "badge-neutral")
 
@@ -156,7 +157,8 @@ class BaseMap(Map):
                         f"{value:.2f}" if isinstance(value, float) else str(value)
                     )
                     if sensor["value"] is None or (
-                        sensor["value"] < 0 and metric_type not in ["diff_wl_bank", "waterlevel_msl"]
+                        sensor["value"] < 0
+                        and metric_type not in ["diff_wl_bank", "waterlevel_msl"]
                     ):
                         animate = False
 
@@ -164,24 +166,20 @@ class BaseMap(Map):
                             msg = "ไม่พบข้อมูลการพยากรณ์"
                         else:
                             msg = "ไม่พบข้อมูล"
-                        metric_texts.append(
-                            f"""
+                        metric_texts.append(f"""
                             <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
                                 <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
                                 <span class="text-base-content/40 italic text-[11px]">{msg}</span>
                             </div>
-                            """
-                        )
+                            """)
                     else:
                         unit = metric_infos.HTML_METRIC_UNITS.get(metric_type, "")
-                        metric_texts.append(
-                            f"""
+                        metric_texts.append(f"""
                             <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
                                 <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
                                 <span class="font-semibold text-base-content">{value_str} <span class="text-[10px] opacity-60 font-normal">{unit}</span></span>
                             </div>
-                            """
-                        )
+                            """)
 
                     # Capture one timestamp for display
                     if not timestamp and sensor.get("timestamp"):
@@ -213,7 +211,6 @@ class BaseMap(Map):
                         </div>
                     </div>
                     """
-
 
             # Sensor color
             # metrics = {k: v["value"] for k, v in metrics_dict.items()}
@@ -250,9 +247,7 @@ class BaseMap(Map):
 
             if has_wind:
                 wind_speed_val = metrics.get("wind_speed", 0)
-                metric_color = await self.get_metric_color(
-                    "wind_speed", wind_speed_val
-                )
+                metric_color = await self.get_metric_color("wind_speed", wind_speed_val)
                 metric_marker = self.leaflet.icon(
                     {
                         "iconUrl": f"/static/resources/marks/up_arrow_{metric_color}.svg",
@@ -264,50 +259,59 @@ class BaseMap(Map):
                 marker_option["rotationAngle"] = rotate_direction
             else:
                 style = getattr(self, "marker_style", "donut")
-                
+
                 if "risk_percent" in station:
                     percent = station["risk_percent"]
                 else:
                     percent = metrics.get("storage_percent", 0)
-                    if percent is None: percent = 0
+                    if percent is None:
+                        percent = 0
                 percent = min(max(percent, 0), 100)
-                
+
                 if "risk_color" in station:
                     metric_color = station["risk_color"]
-                
+
                 if style == "donut":
                     html_content = f'<div style="width: 24px; height: 24px; border-radius: 50%; background: conic-gradient({metric_color} {percent}%, #e5e7eb 0); border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>'
-                    metric_marker = self.leaflet.divIcon({
-                        "className": "custom-div-icon",
-                        "html": html_content,
-                        "iconSize": [24, 24],
-                        "iconAnchor": [12, 12]
-                    })
+                    metric_marker = self.leaflet.divIcon(
+                        {
+                            "className": "custom-div-icon",
+                            "html": html_content,
+                            "iconSize": [24, 24],
+                            "iconAnchor": [12, 12],
+                        }
+                    )
                 elif style == "drop":
                     html_content = f'<div style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));"><svg viewBox="0 0 24 24" fill="{metric_color}" width="24" height="24"><path d="M12 21.5c-3.3 0-6-2.7-6-6 0-3.1 3.5-8.5 5.5-11.3.3-.4.8-.4 1 0 2 2.8 5.5 8.2 5.5 11.3 0 3.3-2.7 6-6 6z"/></svg></div>'
-                    metric_marker = self.leaflet.divIcon({
-                        "className": "custom-div-icon",
-                        "html": html_content,
-                        "iconSize": [24, 24],
-                        "iconAnchor": [12, 12]
-                    })
+                    metric_marker = self.leaflet.divIcon(
+                        {
+                            "className": "custom-div-icon",
+                            "html": html_content,
+                            "iconSize": [24, 24],
+                            "iconAnchor": [12, 12],
+                        }
+                    )
                 elif style == "tank":
                     html_content = f'<div style="width: 14px; height: 28px; border-radius: 6px; border: 2px solid #cbd5e1; background: white; position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"><div style="position: absolute; bottom: 0; left: 0; width: 100%; height: {percent}%; background-color: {metric_color}; transition: height 0.3s ease;"></div></div>'
-                    metric_marker = self.leaflet.divIcon({
-                        "className": "custom-div-icon",
-                        "html": html_content,
-                        "iconSize": [14, 28],
-                        "iconAnchor": [7, 14]
-                    })
+                    metric_marker = self.leaflet.divIcon(
+                        {
+                            "className": "custom-div-icon",
+                            "html": html_content,
+                            "iconSize": [14, 28],
+                            "iconAnchor": [7, 14],
+                        }
+                    )
                 elif style == "bubble":
                     size = max(12, min(percent / 2.5, 40))
                     html_content = f'<div style="width: {size}px; height: {size}px; border-radius: 50%; background-color: {metric_color}; border: 2px solid white; opacity: 0.85; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>'
-                    metric_marker = self.leaflet.divIcon({
-                        "className": "custom-div-icon",
-                        "html": html_content,
-                        "iconSize": [size, size],
-                        "iconAnchor": [size/2, size/2]
-                    })
+                    metric_marker = self.leaflet.divIcon(
+                        {
+                            "className": "custom-div-icon",
+                            "html": html_content,
+                            "iconSize": [size, size],
+                            "iconAnchor": [size / 2, size / 2],
+                        }
+                    )
                 else:
                     metric_marker = self.leaflet.icon.pulse(
                         {
@@ -374,7 +378,6 @@ class BaseMap(Map):
             self.metric_markers_layer[document_id]
         ).addTo(self.map)
 
-    
     """
     ===========================================================================
     Helper functions

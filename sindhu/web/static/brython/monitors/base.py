@@ -105,7 +105,9 @@ class BaseMonitor:
 
                 mark = self.map.user_mark
                 if mark and not isinstance(mark, list):
-                    mark.setPopupContent(f'<div class="text-sm font-semibold text-blue-700"><i class="ph ph-map-pin"></i> {zone_name}</div>').openPopup()
+                    mark.setPopupContent(
+                        f'<div class="text-sm font-semibold text-blue-700"><i class="ph ph-map-pin"></i> {zone_name}</div>'
+                    ).openPopup()
 
                 if nearby_stations and len(nearby_stations) > 0:
                     self.map.show_station_paths((lat, lng), nearby_stations)
@@ -125,7 +127,9 @@ class BaseMonitor:
                     self.map._reset_btn_container.style.display = "none"
                 mark = self.map.user_mark
                 if mark and not isinstance(mark, list):
-                    mark.setPopupContent('<div class="text-sm text-amber-700 font-semibold"><i class="ph ph-warning"></i> ไม่พบลุ่มน้ำสำหรับตำแหน่งนี้</div>').openPopup()
+                    mark.setPopupContent(
+                        '<div class="text-sm text-amber-700 font-semibold"><i class="ph ph-warning"></i> ไม่พบลุ่มน้ำสำหรับตำแหน่งนี้</div>'
+                    ).openPopup()
         except Exception as e:
             print(f"locate error: {e}")
 

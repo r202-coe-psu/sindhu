@@ -21,6 +21,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 @router.post(
     "/token",
     summary="Get OAuth2 access token",

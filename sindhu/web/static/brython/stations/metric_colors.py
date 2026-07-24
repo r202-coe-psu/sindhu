@@ -1,9 +1,12 @@
 from typing import Any, List, Tuple, Union
 
+
 class MetricColor:
     def __init__(self, type_: str = "default"):
         self.type = type_
-        self.color_ranks: List[Tuple[Union[float, int], Union[float, int], str, str, str]] = [
+        self.color_ranks: List[
+            Tuple[Union[float, int], Union[float, int], str, str, str]
+        ] = [
             (0, 15, "#00BFFF", "#FFFFFF", "ดีมาก"),
             (15, 25, "#01DF3A", "#FFFFFF", "ดี"),
             (25, 37.5, "#FFE319", "#374151", "ปานกลาง"),
@@ -97,7 +100,9 @@ METRIC_COLORS: List[MetricColor] = [
 ]
 
 
-def get_metric_color_rank(type_: str) -> List[Tuple[Union[float, int], Union[float, int], str]]:
+def get_metric_color_rank(
+    type_: str,
+) -> List[Tuple[Union[float, int], Union[float, int], str]]:
     type_ = type_.lower()
     for metric_color in METRIC_COLORS:
         if type_ == metric_color.type:
@@ -122,4 +127,3 @@ def get_metric_details(type_: str, value: Union[float, int, None]) -> dict:
         if type_ == metric_color.type:
             return metric_color.get_details(value)
     return {"color": "#808080", "text_color": "#FFFFFF", "label": "ไม่มีข้อมูล"}
-

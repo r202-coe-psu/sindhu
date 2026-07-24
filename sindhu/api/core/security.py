@@ -6,7 +6,6 @@ from fastapi import HTTPException, status
 
 from sindhu.api.core.config import settings
 
-
 ALGORITHM = "HS256"
 
 

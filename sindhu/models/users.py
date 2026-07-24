@@ -21,8 +21,12 @@ class User(schemas.users.User, Document):
     roles: List[str] = ["user"]
     status: str = "active"
 
-    register_date: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_date: datetime | None = Field(default_factory=lambda: datetime.now(timezone.utc))
+    register_date: datetime | None = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    updated_date: datetime | None = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
 
     class Settings:
         name = "users"

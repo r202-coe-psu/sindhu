@@ -21,8 +21,9 @@ router = APIRouter(prefix="/stations", tags=["stations"])
 
 SOURCES = ["thaiwater", "rid"]
 
+
 @router.get("")
-#@cache(expire=300)
+# @cache(expire=300)
 async def all(
     status: str = "active",
     source: Annotated[list[str], Query()] | None = None,
@@ -30,7 +31,7 @@ async def all(
     name: str | None = None,
     name_th: str | None = None,
     # current_user: models.users.User = Depends(deps.get_current_user),
-) ->schemas.stations.StationList:
+) -> schemas.stations.StationList:
     try:
         logger.debug(source)
         if source == [""]:
@@ -223,7 +224,7 @@ async def get_metrics(
     source: str,
     started_datetime: datetime.datetime,
     ended_datetime: datetime.datetime,
-    metric_type: str | None= None,
+    metric_type: str | None = None,
 ) -> schemas.stations.StationWithMetricsList:
     try:
         result = await services.metrics.get_metrics(

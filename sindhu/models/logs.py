@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from .users import User
 
+
 class RequestLog(Document):
     user: Optional[Link[User]] = None
     ip_address: str

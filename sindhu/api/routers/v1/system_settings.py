@@ -7,7 +7,6 @@ from sindhu.api.core import deps
 from loguru import logger
 from beanie.operators import Set
 
-
 router = APIRouter(prefix="/system_settings", tags=["system_settings"])
 
 
@@ -188,7 +187,12 @@ async def delete_api_token(
     if db_system_setting.api_tokens:
         # We search for the token in the list by ID to be safe
         token_to_remove = next(
-            (t for t in db_system_setting.api_tokens if str(t.to_ref().id) == api_token_id), None
+            (
+                t
+                for t in db_system_setting.api_tokens
+                if str(t.to_ref().id) == api_token_id
+            ),
+            None,
         )
         if token_to_remove:
             db_system_setting.api_tokens.remove(token_to_remove)

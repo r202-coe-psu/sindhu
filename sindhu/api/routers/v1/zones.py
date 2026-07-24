@@ -34,7 +34,9 @@ async def locate(
     body: schemas.zones.LocateRequest,
 ) -> schemas.zones.LocateResponse:
     zone = await services.zones.find_zone_by_location(body.longitude, body.latitude)
-    zone_stations = await services.zones.find_stations_by_zone(zone, body.longitude, body.latitude)
+    zone_stations = await services.zones.find_stations_by_zone(
+        zone, body.longitude, body.latitude
+    )
     return schemas.zones.LocateResponse(
         zone=zone,
         nearby_stations=zone_stations,

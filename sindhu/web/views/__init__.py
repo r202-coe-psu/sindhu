@@ -5,7 +5,6 @@ import logging
 from flask import g, redirect, url_for
 from sindhu.web.utils import template_filters
 
-
 logger = logging.getLogger(__name__)
 
 

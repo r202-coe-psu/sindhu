@@ -65,8 +65,8 @@ def get_token():
     if expires_at < datetime.datetime.now():
         print("token expired")
         client = AuthenticatedClient(
-            base_url=str(current_app.config.get("SINDHU_API_BASE_URL")), 
-            token=str(session["tokens"]["refresh_token"]),  
+            base_url=str(current_app.config.get("SINDHU_API_BASE_URL")),
+            token=str(session["tokens"]["refresh_token"]),
         )
         response = refresh_token_v1_auth_refresh_token_get.sync_detailed(client=client)
         if response.parsed:
@@ -141,5 +141,3 @@ def logout():
     session.clear()
 
     return redirect(url_for("sites.index"))
-
-

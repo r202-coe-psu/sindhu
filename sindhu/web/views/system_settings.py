@@ -10,10 +10,11 @@ from sindhu_client.api.v1 import (
     get_v1_system_settings_get,
     create_v1_system_settings_create_post,
     update_v1_system_settings_update_put,
-    create_api_token_v1_system_settings_api_tokens_create_post
+    create_api_token_v1_system_settings_api_tokens_create_post,
 )
 
 module = Blueprint("system_settings", __name__, url_prefix="/system_settings")
+
 
 @module.route("/", methods=["GET", "POST"])
 @acl.roles_required("admin")
@@ -85,6 +86,7 @@ def index():
 
     return redirect(url_for("system_settings.index"))
 
+
 @module.route("/api_tokens/add/", methods=["GET", "POST"])
 @acl.roles_required("admin")
 def add_api_token():
@@ -108,4 +110,3 @@ def add_api_token():
     )
 
     return redirect(url_for("system_settings.index"))
-

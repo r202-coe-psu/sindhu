@@ -50,4 +50,3 @@ class StationWithMetrics(Station):
 
 class StationWithMetricsList(BaseModel):
     stations: list[StationWithMetrics]
-
