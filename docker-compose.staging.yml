@@ -25,7 +25,7 @@ services:
       - default
     restart: on-failure:5
     environment:
-      - APP_ENV=staging
+      - APP_ENV=prod
     env_file:
       - .env
     command: /venv/bin/gunicorn -w 5 --bind 0.0.0.0:8000 --worker-class uvicorn.workers.UvicornWorker --timeout 600 --keep-alive 10 "sindhu.api:create_application()"
