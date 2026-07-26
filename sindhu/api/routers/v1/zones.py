@@ -29,6 +29,26 @@ async def get(zone_id: PydanticObjectId) -> schemas.zones.ZoneWithStations:
     return zone
 
 
+@router.get("/{zone_id}/stations")
+async def get_stations(zone_id: PydanticObjectId) -> schemas.zones.ZoneStationList:
+    """The stations that belong to a zone, without needing a location.
+
+    `/locate` answers the same question but only for a point the user picked.
+    This lets the map ask about a zone the user clicked directly. Membership
+    is resolved by `find_stations_by_zone`, so it follows whatever that
+    service decides — currently the stations linked to the zone.
+    """
+    zone = await models.Zone.find_one(models.Zone.id == zone_id)
+    if not zone:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Not found zone",
+        )
+
+    stations = await services.zones.find_stations_by_zone(zone)
+    return schemas.zones.ZoneStationList(stations=stations)
+
+
 @router.post("/locate")
 async def locate(
     body: schemas.zones.LocateRequest,

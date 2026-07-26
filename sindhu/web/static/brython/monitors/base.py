@@ -2,6 +2,7 @@ from browser import aio, timer, document, ajax, window
 import javascript as js
 
 import datetime
+import json
 from urllib.parse import urlencode
 
 from maps.base import BaseMap
@@ -29,9 +30,11 @@ class BaseMonitor:
         self.monitor_name = "base"
 
         self.params = None
+        self.zones = []
         self.apis = {
             "system_settings": f"{self.api_url}/v1/system_settings",
             "locate": f"{self.api_url}/v1/zones/locate",
+            "zones": f"{self.api_url}/v1/zones",
         }
 
     def start(self):
@@ -67,8 +70,53 @@ class BaseMonitor:
 
         self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
 
+        await self.load_zones()
+
         if "my_locate" in document:
             document["my_locate"].bind("click", lambda ev: self.map.fly_to_user())
+
+    async def load_zones(self):
+        """Draw every zone up front so a zone can be picked without pinning."""
+        try:
+            response = await aio.get(self.apis["zones"], cache=True)
+            data = json.loads(response.data)
+            self.zones = data.get("zones", [])
+            self.map.show_all_zones(self.zones, on_select=self.on_zone_selected)
+        except Exception as e:
+            print(f"load_zones error: {e}")
+
+    def on_zone_selected(self, zone):
+        """Called when a user clicks a zone polygon on the map."""
+        aio.run(self.load_zone_stations(zone))
+
+    async def load_zone_stations(self, zone):
+        # `Zone.stations` is only filled in when an admin links stations by
+        # hand, so fall back to resolving the members geographically.
+        stations = zone.get("stations", []) or []
+        zone_id = str(zone.get("id", "") or "")
+
+        if not stations and zone_id:
+            try:
+                response = await aio.get(f"{self.apis['zones']}/{zone_id}/stations")
+                stations = json.loads(response.data).get("stations", [])
+            except Exception as e:
+                print(f"zone stations error: {e}")
+                stations = []
+
+        if stations:
+            codes = []
+            for station in stations:
+                code = station.get("code", None)
+                if code:
+                    codes.append(str(code))
+            if codes:
+                self.map.filter_markers_by_codes(codes)
+            self.on_zone_stations_found(stations)
+        else:
+            # Say the zone is empty rather than silently falling back to the
+            # unfiltered map, which reads as "the click did nothing".
+            self.map.filter_markers_by_codes([])
+            self.on_zone_stations_empty(zone)
 
     def on_pin_mode_off(self):
         self.map.show_all_markers()
@@ -94,14 +142,18 @@ class BaseMonitor:
 
             if zone:
                 zone_name = zone.get("name_th") or zone.get("name", "")
-                zone_geojson = {
-                    "type": "Feature",
-                    "properties": {"name": zone_name},
-                    "geometry": zone["boundary"],
-                }
-                if hasattr(self, "update_zone_properties"):
-                    self.update_zone_properties(zone_geojson, nearby_stations)
-                self.map.show_zone(zone_geojson)
+                # The zone is already drawn by load_zones, so highlight it
+                # instead of stacking a second polygon on top of it.
+                zone_id = str(zone.get("id", "") or "")
+                if not self.map.select_zone(zone_id, fit_bounds=False):
+                    zone_geojson = {
+                        "type": "Feature",
+                        "properties": {"name": zone_name},
+                        "geometry": zone["boundary"],
+                    }
+                    if hasattr(self, "update_zone_properties"):
+                        self.update_zone_properties(zone_geojson, nearby_stations)
+                    self.map.show_zone(zone_geojson)
 
                 mark = self.map.user_mark
                 if mark and not isinstance(mark, list):
@@ -123,8 +175,7 @@ class BaseMonitor:
             else:
                 self.map.show_all_markers()
                 self.on_zone_stations_cleared()
-                if self.map._reset_btn_container:
-                    self.map._reset_btn_container.style.display = "none"
+                self.map.show_reset_button(False)
                 mark = self.map.user_mark
                 if mark and not isinstance(mark, list):
                     mark.setPopupContent(
@@ -139,6 +190,9 @@ class BaseMonitor:
         pass
 
     def on_zone_stations_cleared(self):
+        pass
+
+    def on_zone_stations_empty(self, zone):
         pass
 
     def on_filter_clicked(self, ev):

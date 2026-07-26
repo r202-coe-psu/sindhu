@@ -1,0 +1,8 @@
+#!/bin/sh -e
+export PATH="/venv/bin:$PATH"
+. /venv/bin/activate
+# export APP_ENV=dev
+
+APP_ENV=dev poetry run uvicorn sindhu.cmd.api:app 
+
+

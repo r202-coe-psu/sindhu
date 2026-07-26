@@ -57,20 +57,25 @@ def build_first_time(dir_path):
 
 
 class ModifiedHandler(PatternMatchingEventHandler):
-    patterns = ["*.py"]
-    base_path = ""
+    def __init__(self, base_path=""):
+        # 1. ย้าย patterns มาไว้ใน __init__ อย่างถูกต้อง (แก้เส้นเหลือง)
+        super().__init__(patterns=["*.py"])
+        self.base_path = base_path
 
     def on_created(self, event):
-        when_file_changed(event.src_path, path)
+        # 2. เปลี่ยนจาก path เฉยๆ เป็น self.base_path (แก้โค้ดพัง)
+        when_file_changed(event.src_path, self.base_path)
 
     def on_any_event(self, event):
         pass
 
     def on_modified(self, event):
-        when_file_changed(event.src_path, path)
+        # 2. เปลี่ยนจาก path เฉยๆ เป็น self.base_path (แก้โค้ดพัง)
+        when_file_changed(event.src_path, self.base_path)
 
-    def set_based_path(self, path):
-        self.based_path = path
+    def set_base_path(self, path):
+        # 3. แก้ชื่อให้ตรงกันทั้งหมด (base_path ไม่มีตัว d)
+        self.base_path = path
 
 
 if __name__ == "__main__":
@@ -85,7 +90,7 @@ if __name__ == "__main__":
     build_first_time(path)
 
     event_handler = ModifiedHandler()
-    event_handler.set_based_path(path)
+    event_handler.set_base_path(path)
     observer = Observer()
     observer.schedule(event_handler, path, recursive=True)
     observer.start()

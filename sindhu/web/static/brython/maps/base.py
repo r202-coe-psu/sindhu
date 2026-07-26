@@ -28,10 +28,12 @@ class BaseMap(Map):
 
         self.metric_markers = {}
         self.metric_markers_by_code = {}
+        self.metric_markers_by_key = {}
         self.metric_markers_layer = {}
         self.metric_types = []
         self.panel_plus_sensors = []
         self.marker_style = "donut"
+        self._metric_legend_container = None
 
     """
     ===========================================================================
@@ -86,8 +88,26 @@ class BaseMap(Map):
                 "thaiwater": "badge-info text-info-content",
                 "rid": "badge-error text-error-content",
                 "dwr": "badge-success text-success-content",
+                "dwr_telemetry": "badge-success text-success-content",
             }
             badge_color = badge_color_map.get(source_lower, "badge-neutral")
+
+            # Credit the agency that publishes this station's data
+            source_credit = metric_infos.get_source_credit(source_lower)
+            credit_html = ""
+            credit_footer_html = ""
+            if source_credit:
+                credit_html = f"""
+                <div class="flex items-start gap-1 text-[9px] text-base-content/50 leading-tight">
+                    <i class="ph ph-database mt-px"></i>
+                    <span>ที่มาข้อมูล: {source_credit["name"]}</span>
+                </div>
+                """
+                credit_footer_html = f"""
+                <div class="border-t border-base-content/10 pt-1 mt-1">
+                    {credit_html}
+                </div>
+                """
 
             metrics = station.get("metrics", [])
             if not metrics:
@@ -112,6 +132,7 @@ class BaseMap(Map):
                             </span>
                             {disactive_txt[self.lang_code]}
                         </div>
+                        {credit_footer_html}
                     </div>
                 </div>
                 """
@@ -158,7 +179,8 @@ class BaseMap(Map):
                     )
                     if sensor["value"] is None or (
                         sensor["value"] < 0
-                        and metric_type not in ["diff_wl_bank", "waterlevel_msl"]
+                        and metric_type
+                        not in ["diff_wl_bank", "waterlevel", "waterlevel_msl"]
                     ):
                         animate = False
 
@@ -186,31 +208,44 @@ class BaseMap(Map):
                         timestamp = datetime.fromisoformat(sensor["timestamp"])
 
                 # Format timestamps
+                timestamp_html = ""
+                footer_html = ""
                 if timestamp:
                     utc_ts = timestamp.replace(tzinfo=timezone.utc)
                     ict_ts = utc_ts.astimezone(bangkok_timezone)
-
-                    tooltip_detail = f"""
-                    <div class="card card-compact w-64 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
-                        <div class="card-body p-3 gap-1.5">
-                            <div class="flex justify-between items-center border-b border-base-content/10 pb-1 mb-1">
-                                <span class="badge {badge_color} badge-xs font-semibold px-2 py-1.5">{source_name.upper()}</span>
-                                <span class="text-[10px] font-mono opacity-60">#{station["code"]}</span>
-                            </div>
-                            <div>
-                                <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
-                                <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
-                            </div>
-                            <div class="flex flex-col gap-0.5 mt-1">
-                                {"".join(metric_texts)}
-                            </div>
-                            <div class="border-t border-base-content/10 pt-1 mt-1 text-[9px] text-base-content/40 flex flex-col gap-0.5 font-mono">
-                                <div>UTC: {utc_ts.strftime("%d/%m/%Y %H:%M:%S")}</div>
-                                <div>ICT: {ict_ts.strftime("%d/%m/%Y %H:%M:%S")}</div>
-                            </div>
-                        </div>
+                    timestamp_html = f"""
+                    <div class="text-[9px] text-base-content/40 flex flex-col gap-0.5 font-mono">
+                        <div>UTC: {utc_ts.strftime("%d/%m/%Y %H:%M:%S")}</div>
+                        <div>ICT: {ict_ts.strftime("%d/%m/%Y %H:%M:%S")}</div>
                     </div>
                     """
+
+                if credit_html or timestamp_html:
+                    footer_html = f"""
+                    <div class="border-t border-base-content/10 pt-1 mt-1 flex flex-col gap-0.5">
+                        {credit_html}
+                        {timestamp_html}
+                    </div>
+                    """
+
+                tooltip_detail = f"""
+                <div class="card card-compact w-64 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
+                    <div class="card-body p-3 gap-1.5">
+                        <div class="flex justify-between items-center border-b border-base-content/10 pb-1 mb-1">
+                            <span class="badge {badge_color} badge-xs font-semibold px-2 py-1.5">{source_name.upper()}</span>
+                            <span class="text-[10px] font-mono opacity-60">#{station["code"]}</span>
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
+                            <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
+                        </div>
+                        <div class="flex flex-col gap-0.5 mt-1">
+                            {"".join(metric_texts)}
+                        </div>
+                        {footer_html}
+                    </div>
+                </div>
+                """
 
             # Sensor color
             # metrics = {k: v["value"] for k, v in metrics_dict.items()}
@@ -228,20 +263,27 @@ class BaseMap(Map):
             if document_id == "wind_direction":
                 metric_types.remove(document_id)
 
+            # Which metric decides this marker's colour and fill level
+            primary_type = None
+            primary_value = None
             if (
                 metric_type_mapped_key in metric_types
                 and metric_type_mapped_key.lower() in metrics
             ):
-                metric_color = await self.get_metric_color(
-                    metric_type_mapped_key, metrics[metric_type_mapped_key.lower()]
-                )
+                primary_type = metric_type_mapped_key.lower()
+                primary_value = metrics[primary_type]
             else:
+                primary_type, primary_value = metric_infos.pick_primary_metric(metrics)
+
+            if primary_type is None:
                 for s_type in metric_infos.HTML_METRIC_NAMES:
                     if s_type in metrics:
-                        metric_color = await self.get_metric_color(
-                            s_type, metrics[s_type]
-                        )
+                        primary_type = s_type
+                        primary_value = metrics[s_type]
                         break
+
+            if primary_type is not None:
+                metric_color = await self.get_metric_color(primary_type, primary_value)
 
             marker_option = {}
 
@@ -263,9 +305,13 @@ class BaseMap(Map):
                 if "risk_percent" in station:
                     percent = station["risk_percent"]
                 else:
-                    percent = metrics.get("storage_percent", 0)
-                    if percent is None:
-                        percent = 0
+                    # storage_percent is no longer emitted, so fall back to
+                    # how far up its own scale the station's metric sits
+                    percent = metric_infos.get_metric_fill_percent(
+                        primary_type, primary_value
+                    )
+                if percent is None:
+                    percent = 0
                 percent = min(max(percent, 0), 100)
 
                 if "risk_color" in station:
@@ -324,6 +370,10 @@ class BaseMap(Map):
 
             marker_option["customId"] = station["id"]
             marker_option["icon"] = metric_marker
+            # L.Marker defaults to bubblingMouseEvents: false, which stops the
+            # click before the map ever sees it — with a station under the
+            # cursor, pin mode would silently do nothing.
+            marker_option["bubblingMouseEvents"] = True
 
             # ดึง marker เก่าจาก cache ถ้าไม่มี default
             marker = self.metric_markers.get(station["id"], None)
@@ -360,8 +410,14 @@ class BaseMap(Map):
 
                 markers.append(marker)
                 self.metric_markers[station["id"]] = marker
-                if station.get("code"):
-                    self.metric_markers_by_code[station["code"]] = marker
+                code = station.get("code")
+                if code:
+                    # rid and dwr_telemetry publish the same station codes, so
+                    # a code maps to a list and (source, code) is the exact key
+                    self.metric_markers_by_code.setdefault(code, []).append(marker)
+                    self.metric_markers_by_key[
+                        self.marker_key(source_lower, code)
+                    ] = marker
             # Update marker
             else:
                 marker.setIcon(metric_marker)
@@ -388,26 +444,115 @@ class BaseMap(Map):
         return _get_metric_color(type_, value)
 
     async def update_metric_legend(self, document_id):
+        """Draw the colour scale of the active metric on top of the map.
+
+        The bands come from `metric_infos.get_metric_levels`, which reads the
+        same `metric_colors` ranks the markers use, so the legend can never
+        describe colours the map does not actually draw.
+        """
+        from browser import document as doc
+
+        metric_type = document_id.replace("empirical_", "").lower()
+        levels = metric_infos.get_metric_levels(metric_type)
+        if not levels:
+            self.metric_legends[document_id] = True
+            return
+
+        rows = ""
+        for level in levels:
+            rows += f"""
+            <div class="flex items-center gap-2">
+                <span class="inline-block w-4 h-3 rounded-sm shrink-0 border border-gray-300" style="background-color: {level["color"]};"></span>
+                <span class="text-[11px] text-gray-700 leading-tight">{level["label"]}</span>
+                <span class="text-[10px] text-gray-400 leading-tight ml-auto pl-2 whitespace-nowrap">{level["range"]}</span>
+            </div>
+            """
+
+        container = self._metric_legend_container
+        if container is None:
+            container = doc.createElement("div")
+            container.style.cssText = (
+                "position:absolute;bottom:12px;left:12px;z-index:1000;max-width:220px;"
+            )
+            self.map.getContainer() <= container
+            self._metric_legend_container = container
+            # Keep clicks and wheel events on the legend out of the map
+            self.leaflet.DomEvent.disableClickPropagation(container)
+            self.leaflet.DomEvent.disableScrollPropagation(container)
+
+        title = metric_infos.get_metric_level_title(metric_type)
+        container.html = f"""
+        <div class="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-xl shadow-md px-3 py-2">
+            <div class="flex items-center gap-1.5 pb-1 mb-1.5 border-b border-gray-100">
+                <i class="ph ph-palette text-blue-600 text-sm"></i>
+                <div class="leading-tight">
+                    <div class="text-[11px] font-semibold text-gray-700">{title}</div>
+                    <div class="text-[9px] text-gray-400">ระดับความปลอดภัย</div>
+                </div>
+            </div>
+            <div class="flex flex-col gap-1">
+                {rows}
+            </div>
+        </div>
+        """
+
         self.metric_legends[document_id] = True
 
+    def marker_key(self, source, code):
+        return f"{str(source).lower()}:{code}"
+
     def filter_markers_by_codes(self, station_codes):
-        code_set = set(station_codes)
-        visible = set()
-        for code in code_set:
-            m = self.metric_markers_by_code.get(code)
-            if m:
-                visible.add(code)
-                if not self.map.hasLayer(m):
-                    m.addTo(self.map)
-        for code, marker in self.metric_markers_by_code.items():
-            if code not in visible:
-                if self.map.hasLayer(marker):
+        code_set = set(str(code) for code in station_codes)
+        for code, markers in self.metric_markers_by_code.items():
+            wanted = code in code_set
+            for marker in markers:
+                on_map = self.map.hasLayer(marker)
+                if wanted and not on_map:
+                    marker.addTo(self.map)
+                elif not wanted and on_map:
                     self.map.removeLayer(marker)
 
     def show_all_markers(self):
         for station_id, marker in self.metric_markers.items():
             if not self.map.hasLayer(marker):
                 marker.addTo(self.map)
+
+    def close_all_tooltips(self):
+        """Tooltips opened by a click stay open, so clear them before the next."""
+        for marker in self.metric_markers.values():
+            marker.closeTooltip()
+
+    def reset_all(self):
+        self.close_all_tooltips()
+        super().reset_all()
+
+    def fly_to_station(self, station_code, source=None, zoom=13):
+        """Centre the map on a station marker and reveal its tooltip."""
+        marker = None
+        if source:
+            marker = self.metric_markers_by_key.get(
+                self.marker_key(source, station_code)
+            )
+        if not marker:
+            markers = self.metric_markers_by_code.get(station_code) or []
+            marker = markers[0] if markers else None
+        if not marker:
+            print(f"fly_to_station: no marker for code {station_code}")
+            return False
+
+        if not self.map.hasLayer(marker):
+            marker.addTo(self.map)
+
+        target_zoom = max(self.map.getZoom(), zoom)
+        self.map.flyTo(marker.getLatLng(), target_zoom)
+
+        # Only the station picked from the panel should be labelled
+        self.close_all_tooltips()
+        marker.openTooltip()
+
+        # Zooming to one station is also a state the user needs a way out of
+        self.show_reset_button()
+        return True
 
     def on_click_station(self, station_id):
         print(f"Station clicked: {station_id}")

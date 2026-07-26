@@ -94,6 +94,168 @@ class Map:
         self._pin_btn = None
         self._reset_btn_container = None
 
+        self.zone_layers_by_id = {}
+        self._selected_zone_id = None
+        self._on_zone_select = None
+        self._zone_renderer = None
+
+        # A canvas renderer covers the whole overlay pane and would swallow
+        # every click meant for the zone pane below it, so overlays that only
+        # need to be seen are drawn with this shared SVG renderer instead.
+        self.overlay_svg_renderer = self.leaflet.svg()
+
+    """
+    ===========================================================================
+    Zones
+    ===========================================================================
+    """
+
+    # Deliberately heavier than the river lines: the basins cover most of the
+    # map, so a subtle outline disappears into them and the zone stops looking
+    # clickable.
+    ZONE_STYLE = {
+        "fillColor": "#6366f1",
+        "fillOpacity": 0.12,
+        "color": "#4338ca",
+        "weight": 1,
+        "opacity": 0.9,
+        "dashArray": "4, 3",
+    }
+    ZONE_HOVER_STYLE = {
+        "fillColor": "#6366f1",
+        "fillOpacity": 0.28,
+        "color": "#3730a3",
+        "weight": 1.5,
+        "opacity": 1,
+        "dashArray": "",
+    }
+    ZONE_SELECTED_STYLE = {
+        "fillColor": "#2563eb",
+        "fillOpacity": 0.25,
+        "color": "#1d4ed8",
+        "weight": 1.5,
+        "opacity": 1,
+        "dashArray": "",
+    }
+    def show_all_zones(self, zones, on_select=None):
+        """Draw every zone boundary so users can click a zone directly.
+
+        Zones live in their own pane below the overlay pane, which keeps the
+        river lines and the station markers clickable on top of them.
+        """
+        self._on_zone_select = on_select
+        self.clear_all_zones()
+
+        if not zones:
+            return
+
+        pane = self.map.getPane("zones")
+        if not pane:
+            pane = self.map.createPane("zones")
+            pane.style.zIndex = "350"
+
+        if self._zone_renderer is None:
+            self._zone_renderer = self.leaflet.svg({"pane": "zones"})
+        zone_renderer = self._zone_renderer
+
+        for zone in zones:
+            boundary = zone.get("boundary")
+            if not boundary:
+                continue
+
+            zone_id = str(zone.get("id", ""))
+            if not zone_id:
+                continue
+
+            name = zone.get("name_th") or zone.get("name") or ""
+            feature = {
+                "type": "Feature",
+                "properties": {"name": name},
+                "geometry": boundary,
+            }
+
+            layer = self.leaflet.geoJson(
+                feature,
+                {
+                    "pane": "zones",
+                    "renderer": zone_renderer,
+                    "style": lambda f: dict(self.ZONE_STYLE),
+                },
+            )
+            if name:
+                layer.bindTooltip(
+                    name,
+                    {"sticky": True, "direction": "top", "className": "zone-label"},
+                )
+
+            layer.on("mouseover", self._make_zone_hover(zone_id, True))
+            layer.on("mouseout", self._make_zone_hover(zone_id, False))
+            layer.on("click", self._make_zone_click(zone_id, zone))
+            layer.addTo(self.map)
+
+            self.zone_layers_by_id[zone_id] = {"layer": layer, "zone": zone}
+
+    def _make_zone_hover(self, zone_id, entering):
+        def handler(e):
+            if self._pin_mode_active or self._selected_zone_id == zone_id:
+                return
+            entry = self.zone_layers_by_id.get(zone_id)
+            if not entry:
+                return
+            entry["layer"].setStyle(
+                self.ZONE_HOVER_STYLE if entering else self.ZONE_STYLE
+            )
+
+        return handler
+
+    def _make_zone_click(self, zone_id, zone):
+        def handler(e):
+            # Leaflet's _findEventTargets walks the DOM up to the map
+            # container, so the map's own click handler fires for this click
+            # too. Pin mode is already served by it — stepping in here would
+            # place the pin and hit /locate twice.
+            if self._pin_mode_active:
+                return
+
+            self.select_zone(zone_id)
+            if self._on_zone_select:
+                self._on_zone_select(zone)
+
+        return handler
+
+    def select_zone(self, zone_id, fit_bounds=True):
+        zone_id = str(zone_id)
+        entry = self.zone_layers_by_id.get(zone_id)
+        if not entry:
+            return False
+
+        self._selected_zone_id = zone_id
+        # The other zones keep their normal dashed outline: they stay visible
+        # and clickable so a different zone can be picked straight away.
+        for key, other in self.zone_layers_by_id.items():
+            if key == zone_id:
+                other["layer"].setStyle(self.ZONE_SELECTED_STYLE)
+                other["layer"].bringToFront()
+            else:
+                other["layer"].setStyle(self.ZONE_STYLE)
+
+        if fit_bounds:
+            self.map.fitBounds(entry["layer"].getBounds(), {"padding": [24, 24]})
+
+        self.show_reset_button()
+        return True
+
+    def clear_zone_selection(self):
+        self._selected_zone_id = None
+        for entry in self.zone_layers_by_id.values():
+            entry["layer"].setStyle(self.ZONE_STYLE)
+
+    def clear_all_zones(self):
+        for entry in self.zone_layers_by_id.values():
+            self.map.removeLayer(entry["layer"])
+        self.zone_layers_by_id = {}
+        self._selected_zone_id = None
+
     def __del__(self):
         self.map.remove()
 
@@ -150,8 +312,9 @@ class Map:
         reset_div = doc.createElement("div")
         reset_div.style.cssText = "display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:1000;"
         reset_btn = doc.createElement("button")
+        # The button now restores the whole starting view, not just the markers
         reset_btn.html = (
-            '<i class="ph ph-arrow-counter-clockwise"></i> แสดงสถานีทั้งหมด'
+            '<i class="ph ph-arrow-counter-clockwise"></i> กลับสู่มุมมองเริ่มต้น'
         )
         reset_btn.style.cssText = "background:white;color:#2563eb;border:1px solid #e5e7eb;border-radius:9999px;padding:6px 16px;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.15);display:flex;align-items:center;gap:6px;"
         reset_div <= reset_btn
@@ -161,14 +324,28 @@ class Map:
         def on_reset(e):
             e.preventDefault()
             e.stopPropagation()
-            self.remove_pin()
-            self.clear_zone_display()
+            self.reset_all()
             if self._on_pin_off_callback:
                 self._on_pin_off_callback()
 
         reset_btn.bind("click", on_reset)
 
         self.map.on("click", self._handle_map_click)
+
+    def show_reset_button(self, visible=True):
+        if self._reset_btn_container:
+            self._reset_btn_container.style.display = "block" if visible else "none"
+
+    def reset_view(self):
+        """Fly back to the centre and zoom the map was created with."""
+        self.map.flyTo(self.center, self.zoom)
+
+    def reset_all(self):
+        """Put the map back in the state it had when the page first loaded."""
+        self.remove_pin()
+        self.clear_zone_display()
+        self.reset_view()
+        self.show_reset_button(False)
 
     def _handle_map_click(self, e):
         if not self._pin_mode_active:
@@ -205,8 +382,7 @@ class Map:
                 .addTo(self.map)
                 .bindPopup("ตำแหน่งที่เลือก")
             )
-        if self._reset_btn_container:
-            self._reset_btn_container.style.display = "block"
+        self.show_reset_button()
 
     def remove_pin(self):
         if (
@@ -217,10 +393,10 @@ class Map:
             self.map.removeLayer(self.user_mark)
             self.user_mark = []
             self.user_coord = None
-        if self._reset_btn_container:
-            self._reset_btn_container.style.display = "none"
+        self.show_reset_button(False)
 
     def clear_zone_display(self):
+        self.clear_zone_selection()
         if self.zone_layer:
             self.map.removeLayer(self.zone_layer)
             self.zone_layer = None
@@ -259,6 +435,8 @@ class Map:
         self.zone_layer = self.leaflet.geoJson(
             zone_geojson,
             {
+                "interactive": False,
+                "renderer": self.overlay_svg_renderer,
                 "style": get_style,
             },
         ).addTo(self.map)
@@ -271,20 +449,35 @@ class Map:
             self.map.removeLayer(marker)
         self.station_markers = []
 
+        line_renderer = self.overlay_svg_renderer
+
         first = True
         for station in stations:
             code = station.get("code")
-            if not code or code not in self.metric_markers_by_code:
+            markers = self.metric_markers_by_code.get(code) or []
+            if not markers:
                 continue
 
-            marker = self.metric_markers_by_code[code]
+            marker = markers[0]
             station_latlng = marker.getLatLng()
 
             if first:
-                style = {"color": "#dc2626", "weight": 2.5, "opacity": 0.8}
+                style = {
+                    "color": "#dc2626",
+                    "weight": 2.5,
+                    "opacity": 0.8,
+                    "interactive": False,
+                    "renderer": line_renderer,
+                }
                 first = False
             else:
-                style = {"color": "#3b82f6", "weight": 1.5, "opacity": 0.4}
+                style = {
+                    "color": "#3b82f6",
+                    "weight": 1.5,
+                    "opacity": 0.4,
+                    "interactive": False,
+                    "renderer": line_renderer,
+                }
 
             line = self.leaflet.polyline(
                 [list(user_latlng), [station_latlng.lat, station_latlng.lng]],
@@ -643,9 +836,23 @@ class Map:
                 }
 
                 # ใช้ self.leaflet.geoJson วาดเส้น และเก็บไว้ใน self.shapes
-                self.shapes["river_basins"] = self.leaflet.geoJson(
-                    geojson_data, {"style": river_style}
+
+                # Own canvas renderer, kept transparent to the mouse: a shared
+                # canvas covers the whole overlay pane and would otherwise
+                # swallow every click meant for the zone polygons underneath.
+                basin_renderer = self.leaflet.canvas({"padding": 0.5})
+                self.shapes['river_basins'] = self.leaflet.geoJson(
+                    geojson_data,
+                    {
+                        "style": river_style,
+                        "interactive": False,
+                        "renderer": basin_renderer,
+                    },
                 ).addTo(self.map)
+
+                basin_canvas = getattr(basin_renderer, "_container", None)
+                if basin_canvas:
+                    basin_canvas.style.pointerEvents = "none"
 
                 print("🎉 โหลดข้อมูลเส้นแม่น้ำสงขลาลงแผนที่สำเร็จ!")
             else:
