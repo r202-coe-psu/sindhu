@@ -183,22 +183,45 @@ class WaterMonitor(BaseMonitor):
             self.map.marker_style = style
             aio.run(self._update_and_filter())
 
+    def get_selected_source(self):
+        """The source picked in the dropdown, or "all" when nothing narrows it."""
+        if "source_selector" in document:
+            return document["source_selector"].value
+        return "all"
+
+    def source_marker_keys(self, limit_codes=None):
+        """Marker keys of the stations the source filter keeps.
+
+        The map is filtered by `(source, code)` rather than by code alone,
+        because rid and dwr_telemetry publish the same gauge codes — a code
+        filter would leave the other source's marker on the map while
+        `render_data_list` drops that station from the panel.
+
+        `limit_codes` narrows the result further, e.g. to a zone's members.
+        """
+        selected_source = self.get_selected_source()
+        allowed_codes = None if limit_codes is None else set(limit_codes)
+
+        keys = []
+        for station in self.latest_data.get("stations") or []:
+            if not station or station.get("source") != selected_source:
+                continue
+            code = station.get("code")
+            if not code:
+                continue
+            if allowed_codes is not None and code not in allowed_codes:
+                continue
+            keys.append(self.map.marker_key(selected_source, code))
+        return keys
+
     async def _update_and_filter(self):
         if not self.latest_data:
             return
         await self.map.update("waterlevel", self.latest_data)
-        if "source_selector" in document:
-            selected_source = document["source_selector"].value
-            if selected_source != "all":
-                filtered_codes = []
-                for station in self.latest_data.get("stations") or []:
-                    if station and station.get("source") == selected_source:
-                        code = station.get("code")
-                        if code:
-                            filtered_codes.append(code)
-                self.map.filter_markers_by_codes(filtered_codes)
-            else:
-                self.map.show_all_markers()
+        if self.get_selected_source() != "all":
+            self.map.filter_markers_by_keys(self.source_marker_keys())
+        else:
+            self.map.show_all_markers()
 
     def on_source_change(self, ev):
         if hasattr(self, "map") and self.latest_data:
@@ -215,24 +238,14 @@ class WaterMonitor(BaseMonitor):
 
             if selected_source == "all":
                 self.map.show_all_markers()
-                self.render_data_list()
             else:
-                filtered_codes = []
-                for station in self.latest_data.get("stations") or []:
-                    if station and station.get("source") == selected_source:
-                        code = station.get("code")
-                        if code:
-                            filtered_codes.append(code)
-                self.map.filter_markers_by_codes(filtered_codes)
-                self.render_data_list()
+                self.map.filter_markers_by_keys(self.source_marker_keys())
+
+            self.render_data_list()
 
     def on_zone_stations_found(self, nearby_stations):
         if not self.latest_data:
             return
-
-        selected_source = "all"
-        if "source_selector" in document:
-            selected_source = document["source_selector"].value
 
         zone_codes = []
         for s in nearby_stations or []:
@@ -242,14 +255,13 @@ class WaterMonitor(BaseMonitor):
             if code:
                 zone_codes.append(code)
 
-        if selected_source != "all":
-            valid_codes = set()
-            for station in self.latest_data.get("stations") or []:
-                if station and station.get("source") == selected_source:
-                    valid_codes.add(station.get("code"))
-            zone_codes = [code for code in zone_codes if code in valid_codes]
+        if self.get_selected_source() == "all":
+            self.map.filter_markers_by_codes(zone_codes)
+        else:
+            self.map.filter_markers_by_keys(self.source_marker_keys(zone_codes))
 
-        self.map.filter_markers_by_codes(zone_codes)
+        # `render_data_list` applies the source filter itself, so the raw zone
+        # codes are enough to scope the panel to this zone
         self.render_data_list(zone_codes)
 
     def on_zone_stations_empty(self, zone):
@@ -272,18 +284,8 @@ class WaterMonitor(BaseMonitor):
 
     def on_zone_stations_cleared(self):
         if self.latest_data:
-            selected_source = "all"
-            if "source_selector" in document:
-                selected_source = document["source_selector"].value
-
-            if selected_source != "all":
-                filtered_codes = []
-                for station in self.latest_data.get("stations") or []:
-                    if station and station.get("source") == selected_source:
-                        code = station.get("code")
-                        if code:
-                            filtered_codes.append(code)
-                self.map.filter_markers_by_codes(filtered_codes)
+            if self.get_selected_source() != "all":
+                self.map.filter_markers_by_keys(self.source_marker_keys())
 
             self.render_data_list()
 
@@ -291,9 +293,7 @@ class WaterMonitor(BaseMonitor):
         if not self.latest_data or not nearby_stations:
             return
 
-        selected_source = "all"
-        if "source_selector" in document:
-            selected_source = document["source_selector"].value
+        selected_source = self.get_selected_source()
 
         max_risk = (
             -1
@@ -363,10 +363,7 @@ class WaterMonitor(BaseMonitor):
         if filter_codes is not None:
             stations = [s for s in stations if s.get("code") in filter_codes]
 
-        selected_source = "all"
-        if "source_selector" in document:
-            selected_source = document["source_selector"].value
-
+        selected_source = self.get_selected_source()
         if selected_source != "all":
             stations = [s for s in stations if s.get("source") == selected_source]
 
