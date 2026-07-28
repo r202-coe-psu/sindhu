@@ -1,12 +1,11 @@
 <script src="{{ url_for('static', filename='node_modules/jquery/dist/jquery.min.js') }}"></script>
 
-{#
-<script src="{{ url_for('static', filename='brython_modules/brython.js') | add_date_url }}"></script>
-<script src="{{ url_for('static', filename='brython_modules/brython_stdlib.js') | add_date_url }}"></script> 
-#}
-
-<script src="https://cdn.jsdelivr.net/npm/brython@3.13.2/brython.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/brython@3.13.2/brython_stdlib.js"></script>
+{# Keep this version in step with the brython in poetry.lock, which is what
+   builds the *.brython.js packages. A runtime older than the builder has no
+   `__BRYTHON__.loadBrythonPackage`, so every package fails to register and
+   Brython silently falls back to fetching the raw .py files one by one. #}
+<script src="https://cdn.jsdelivr.net/npm/brython@3.14.3/brython.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/brython@3.14.3/brython_stdlib.js"></script>
 
 <link rel="stylesheet" href="{{ url_for('static', filename='node_modules/leaflet/dist/leaflet.css') }}" />
 <script src="{{ url_for('static', filename='node_modules/leaflet/dist/leaflet.js') }}"></script>
