@@ -31,6 +31,10 @@ class ZoneList(BaseModel):
     zones: List[ZoneWithStations]
 
 
+class ZoneStationList(BaseModel):
+    stations: list = Field(default_factory=list)
+
+
 class LocateRequest(BaseModel):
     latitude: float
     longitude: float

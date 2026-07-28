@@ -8,8 +8,13 @@ RUN echo 'deb http://mirrors.psu.ac.th/debian/ bookworm main contrib non-free' >
 
 # RUN apt purge -y  -f unixodbc-common libodbc2
 
-RUN apt update -y && apt -y install apt-utils && ACCEPT_EULA=Y apt upgrade -y -q
-RUN apt -y install locales apt-utils \
+# Keep `apt-get update` in the same layer as the installs: a cached update layer
+# goes stale when the mirror rotates packages, and apt then 404s on versions
+# that no longer exist in the pool.
+RUN apt-get update -y \
+    && apt-get -y install apt-utils \
+    && ACCEPT_EULA=Y apt-get upgrade -y -q \
+    && apt-get -y install locales \
     && apt-get autoremove -y \
     && apt-get autoclean \
     && apt-get clean \

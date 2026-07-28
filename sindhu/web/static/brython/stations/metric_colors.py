@@ -53,6 +53,25 @@ class WaterLevelColor(MetricColor):
         ]
 
 
+class WaterLevelRawColor(MetricColor):
+    """`waterlevel` is what the ETL writes for every source (thaiwater, rid, dwr).
+
+    Same scale as `water_level`; kept as its own type so an unmapped metric
+    never falls through to the grey default.
+    """
+
+    def __init__(self):
+        super().__init__("waterlevel")
+
+        self.color_ranks = [
+            (-1_000_000, 5, "#FFFFFF"),
+            (5, 30, "#B3E5FC"),
+            (30, 120, "#4FC3F7"),
+            (120, 250, "#0288D1"),
+            (250, 1_000_000, "#01579B"),
+        ]
+
+
 class WaterLevelMSLColor(MetricColor):
     def __init__(self):
         super().__init__("waterlevel_msl")
@@ -94,6 +113,7 @@ class DiffWLBankColor(MetricColor):
 
 METRIC_COLORS: List[MetricColor] = [
     WaterLevelColor(),
+    WaterLevelRawColor(),
     WaterLevelMSLColor(),
     StoragePercentColor(),
     DiffWLBankColor(),

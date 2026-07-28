@@ -21,9 +21,10 @@ HTML_METRIC_NAMES = dict(
     dew_point="Dew Point",
     visible="Visible",
     water_level="Water Level",
+    waterlevel="ระดับน้ำ",
     waterlevel_msl="Water Level (MSL)",
     storage_percent="Storage Percent",
-    diff_wl_bank="Diff WL Bank",
+    diff_wl_bank="ระดับน้ำเทียบตลิ่ง",
 )
 
 HTML_METRIC_UNITS = dict(
@@ -50,9 +51,10 @@ HTML_METRIC_UNITS = dict(
     o3="ppb",
     no2="ppb",
     water_level="m",
+    waterlevel="ม.",
     waterlevel_msl="m(MSL)",
     storage_percent="%",
-    diff_wl_bank="m",
+    diff_wl_bank="ม.",
 )
 
 HTML_CLIMATE_LEGENDS = dict(
@@ -308,3 +310,182 @@ INTERPOLATION_METRIC_TYPES_WITH_LEGEND = dict(
         ]
     }
 )
+
+# Data-source credits shown on marker tooltips, keyed by the lowercase
+# `source` field returned by the stations API.
+HTML_SOURCE_CREDITS = dict(
+    thaiwater={
+        "name": "สถาบันสารสนเทศทรัพยากรน้ำ (องค์การมหาชน)",
+        "short": "สสน.",
+    },
+    rid={
+        "name": "กรมชลประทาน",
+        "short": "ชป.",
+    },
+    dwr={
+        "name": "กรมทรัพยากรน้ำ",
+        "short": "ทน.",
+    },
+    # The DWR ETL used to write this instead of plain "dwr"; kept so stations
+    # ingested before the rename still get credited
+    dwr_telemetry={
+        "name": "กรมทรัพยากรน้ำ (โทรมาตร)",
+        "short": "ทน.",
+    },
+)
+
+
+def get_source_credit(source):
+    """Return the credit info for a data source, or None when unknown."""
+    if not source:
+        return None
+    return HTML_SOURCE_CREDITS.get(str(source).lower())
+
+
+# Safety-level wording for the map legend and the station cards.
+# Each list is positional: entry N describes rank N of the matching
+# `metric_colors` color_ranks, so colors can never drift from the markers.
+METRIC_LEVEL_TITLES = dict(
+    storage_percent="ระดับปริมาณน้ำในอ่างเก็บน้ำ",
+    water_level="ระดับน้ำ",
+    waterlevel="ระดับน้ำ",
+    waterlevel_msl="ระดับน้ำ (ม.รทก.)",
+    diff_wl_bank="ระดับน้ำเทียบตลิ่ง",
+)
+
+# The metric a station is judged by, best first. The ETL writes `diff_wl_bank`
+# and `waterlevel` for every source, so those carry the map; `storage_percent`
+# only shows up for reservoir stations.
+PRIMARY_METRIC_PREFERENCE = ["diff_wl_bank", "storage_percent", "waterlevel"]
+
+METRIC_LEVEL_LABELS = dict(
+    storage_percent=[
+        {"label": "น้ำน้อยวิกฤต", "range": "< 30%", "text": "#374151"},
+        {"label": "น้ำน้อย", "range": "30 - 50%", "text": "#0369a1"},
+        {"label": "น้ำปกติ", "range": "50 - 80%", "text": "#0c4a6e"},
+        {"label": "น้ำมาก", "range": "80 - 100%", "text": "#FFFFFF"},
+        {"label": "เฝ้าระวังน้ำล้น", "range": "> 100%", "text": "#FFFFFF"},
+    ],
+    water_level=[
+        {"label": "น้ำน้อยวิกฤต", "range": "< 5 ม.", "text": "#374151"},
+        {"label": "น้ำน้อย", "range": "5 - 30 ม.", "text": "#0369a1"},
+        {"label": "น้ำปกติ", "range": "30 - 120 ม.", "text": "#0c4a6e"},
+        {"label": "น้ำมาก", "range": "120 - 250 ม.", "text": "#FFFFFF"},
+        {"label": "เฝ้าระวัง", "range": "> 250 ม.", "text": "#FFFFFF"},
+    ],
+    waterlevel=[
+        {"label": "น้ำน้อยวิกฤต", "range": "< 5 ม.", "text": "#374151"},
+        {"label": "น้ำน้อย", "range": "5 - 30 ม.", "text": "#0369a1"},
+        {"label": "น้ำปกติ", "range": "30 - 120 ม.", "text": "#0c4a6e"},
+        {"label": "น้ำมาก", "range": "120 - 250 ม.", "text": "#FFFFFF"},
+        {"label": "เฝ้าระวัง", "range": "> 250 ม.", "text": "#FFFFFF"},
+    ],
+    waterlevel_msl=[
+        {"label": "น้ำน้อยวิกฤต", "range": "< 5 ม.รทก.", "text": "#374151"},
+        {"label": "น้ำน้อย", "range": "5 - 30 ม.รทก.", "text": "#0369a1"},
+        {"label": "น้ำปกติ", "range": "30 - 120 ม.รทก.", "text": "#0c4a6e"},
+        {"label": "น้ำมาก", "range": "120 - 250 ม.รทก.", "text": "#FFFFFF"},
+        {"label": "เฝ้าระวัง", "range": "> 250 ม.รทก.", "text": "#FFFFFF"},
+    ],
+    diff_wl_bank=[
+        {"label": "ปลอดภัย", "range": "ต่ำกว่าตลิ่งเกิน 3 ม.", "text": "#0c4a6e"},
+        {"label": "ปกติ", "range": "ต่ำกว่าตลิ่ง 1 - 3 ม.", "text": "#14532d"},
+        {"label": "เฝ้าระวัง", "range": "ต่ำกว่าตลิ่งไม่เกิน 1 ม.", "text": "#713f12"},
+        {"label": "ล้นตลิ่ง", "range": "สูงกว่าตลิ่งไม่เกิน 1 ม.", "text": "#FFFFFF"},
+        {"label": "น้ำท่วม", "range": "สูงกว่าตลิ่งเกิน 1 ม.", "text": "#FFFFFF"},
+    ],
+)
+
+
+def get_metric_levels(type_):
+    """Merge `metric_colors` ranks with the Thai safety wording above.
+
+    Returns a list of dicts with min/max/color/label/range/text so the
+    legend, the station cards and the markers all read one definition.
+    """
+    from stations.metric_colors import get_metric_color_rank
+
+    if not type_:
+        return []
+
+    type_ = str(type_).lower()
+    ranks = get_metric_color_rank(type_)
+    labels = METRIC_LEVEL_LABELS.get(type_, [])
+
+    levels = []
+    for index, rank in enumerate(ranks):
+        min_value, max_value, color = rank
+        info = labels[index] if index < len(labels) else {}
+        levels.append(
+            {
+                "min": min_value,
+                "max": max_value,
+                "color": color,
+                "label": info.get("label", ""),
+                "range": info.get("range", ""),
+                "text": info.get("text", "#374151"),
+            }
+        )
+    return levels
+
+
+def get_metric_level(type_, value):
+    """Return the level a value falls into, or None when out of scale."""
+    if value is None:
+        return None
+
+    for level in get_metric_levels(type_):
+        if level["min"] <= value <= level["max"]:
+            return level
+    return None
+
+
+def get_metric_level_title(type_):
+    """Human readable title for the legend box."""
+    if not type_:
+        return ""
+    type_ = str(type_).lower()
+    return METRIC_LEVEL_TITLES.get(
+        type_, HTML_METRIC_NAMES.get(type_, type_)
+    )
+
+
+def pick_primary_metric(metrics):
+    """Pick the metric a station is judged by, given a {type: value} mapping.
+
+    Returns (type, value), or (None, None) when the station has nothing the
+    colour scales know about.
+    """
+    if not metrics:
+        return None, None
+
+    for type_ in PRIMARY_METRIC_PREFERENCE:
+        value = metrics.get(type_)
+        if value is not None:
+            return type_, value
+    return None, None
+
+
+def get_metric_fill_percent(type_, value):
+    """Map a value onto 0-100 so the donut/tank/bubble markers can fill up.
+
+    `storage_percent` is already a percentage. Everything else is placed by
+    the colour band it falls in, so the marker still reads as "how severe"
+    even when the metric has no natural 0-100 range.
+    """
+    if value is None:
+        return 0
+
+    type_ = str(type_).lower()
+    if type_ == "storage_percent":
+        return max(0, min(value, 100))
+
+    levels = get_metric_levels(type_)
+    if not levels:
+        return 0
+
+    for index, level in enumerate(levels):
+        if level["min"] <= value <= level["max"]:
+            # Centre of the band, so neighbouring bands stay visually apart
+            return round((index + 0.5) / len(levels) * 100)
+    return 0

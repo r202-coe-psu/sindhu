@@ -4,6 +4,7 @@ import datetime
 from urllib.parse import urlencode
 
 from .base import BaseMonitor
+from stations import metric_infos
 import json
 from urllib.parse import urlencode
 
@@ -182,22 +183,45 @@ class WaterMonitor(BaseMonitor):
             self.map.marker_style = style
             aio.run(self._update_and_filter())
 
+    def get_selected_source(self):
+        """The source picked in the dropdown, or "all" when nothing narrows it."""
+        if "source_selector" in document:
+            return document["source_selector"].value
+        return "all"
+
+    def source_marker_keys(self, limit_codes=None):
+        """Marker keys of the stations the source filter keeps.
+
+        The map is filtered by `(source, code)` rather than by code alone,
+        because rid and dwr publish the same gauge codes — a code
+        filter would leave the other source's marker on the map while
+        `render_data_list` drops that station from the panel.
+
+        `limit_codes` narrows the result further, e.g. to a zone's members.
+        """
+        selected_source = self.get_selected_source()
+        allowed_codes = None if limit_codes is None else set(limit_codes)
+
+        keys = []
+        for station in self.latest_data.get("stations") or []:
+            if not station or station.get("source") != selected_source:
+                continue
+            code = station.get("code")
+            if not code:
+                continue
+            if allowed_codes is not None and code not in allowed_codes:
+                continue
+            keys.append(self.map.marker_key(selected_source, code))
+        return keys
+
     async def _update_and_filter(self):
         if not self.latest_data:
             return
         await self.map.update("waterlevel", self.latest_data)
-        if "source_selector" in document:
-            selected_source = document["source_selector"].value
-            if selected_source != "all":
-                filtered_codes = []
-                for station in self.latest_data.get("stations") or []:
-                    if station and station.get("source") == selected_source:
-                        code = station.get("code")
-                        if code:
-                            filtered_codes.append(code)
-                self.map.filter_markers_by_codes(filtered_codes)
-            else:
-                self.map.show_all_markers()
+        if self.get_selected_source() != "all":
+            self.map.filter_markers_by_keys(self.source_marker_keys())
+        else:
+            self.map.show_all_markers()
 
     def on_source_change(self, ev):
         if hasattr(self, "map") and self.latest_data:
@@ -214,24 +238,14 @@ class WaterMonitor(BaseMonitor):
 
             if selected_source == "all":
                 self.map.show_all_markers()
-                self.render_data_list()
             else:
-                filtered_codes = []
-                for station in self.latest_data.get("stations") or []:
-                    if station and station.get("source") == selected_source:
-                        code = station.get("code")
-                        if code:
-                            filtered_codes.append(code)
-                self.map.filter_markers_by_codes(filtered_codes)
-                self.render_data_list()
+                self.map.filter_markers_by_keys(self.source_marker_keys())
+
+            self.render_data_list()
 
     def on_zone_stations_found(self, nearby_stations):
         if not self.latest_data:
             return
-
-        selected_source = "all"
-        if "source_selector" in document:
-            selected_source = document["source_selector"].value
 
         zone_codes = []
         for s in nearby_stations or []:
@@ -241,30 +255,37 @@ class WaterMonitor(BaseMonitor):
             if code:
                 zone_codes.append(code)
 
-        if selected_source != "all":
-            valid_codes = set()
-            for station in self.latest_data.get("stations") or []:
-                if station and station.get("source") == selected_source:
-                    valid_codes.add(station.get("code"))
-            zone_codes = [code for code in zone_codes if code in valid_codes]
+        if self.get_selected_source() == "all":
+            self.map.filter_markers_by_codes(zone_codes)
+        else:
+            self.map.filter_markers_by_keys(self.source_marker_keys(zone_codes))
 
-        self.map.filter_markers_by_codes(zone_codes)
+        # `render_data_list` applies the source filter itself, so the raw zone
+        # codes are enough to scope the panel to this zone
         self.render_data_list(zone_codes)
+
+    def on_zone_stations_empty(self, zone):
+        if "reservoir_data_list" not in document:
+            return
+
+        zone_name = zone.get("name_th") or zone.get("name") or ""
+        name_html = ""
+        if zone_name:
+            name_html = f'<div class="text-xs text-gray-400">{zone_name}</div>'
+
+        document["reservoir_data_list"].html = f"""
+        <div class="flex flex-col items-center justify-center h-full text-center gap-2 px-4">
+            <i class="ph ph-map-trifold text-4xl text-gray-300"></i>
+            <div class="text-sm font-medium text-gray-600">ไม่มีสถานีในโซนนี้</div>
+            {name_html}
+            <div class="text-xs text-gray-400 mt-1">กด "กลับสู่มุมมองเริ่มต้น" เพื่อดูสถานีทั้งหมด</div>
+        </div>
+        """
 
     def on_zone_stations_cleared(self):
         if self.latest_data:
-            selected_source = "all"
-            if "source_selector" in document:
-                selected_source = document["source_selector"].value
-
-            if selected_source != "all":
-                filtered_codes = []
-                for station in self.latest_data.get("stations") or []:
-                    if station and station.get("source") == selected_source:
-                        code = station.get("code")
-                        if code:
-                            filtered_codes.append(code)
-                self.map.filter_markers_by_codes(filtered_codes)
+            if self.get_selected_source() != "all":
+                self.map.filter_markers_by_keys(self.source_marker_keys())
 
             self.render_data_list()
 
@@ -272,9 +293,7 @@ class WaterMonitor(BaseMonitor):
         if not self.latest_data or not nearby_stations:
             return
 
-        selected_source = "all"
-        if "source_selector" in document:
-            selected_source = document["source_selector"].value
+        selected_source = self.get_selected_source()
 
         max_risk = (
             -1
@@ -344,10 +363,7 @@ class WaterMonitor(BaseMonitor):
         if filter_codes is not None:
             stations = [s for s in stations if s.get("code") in filter_codes]
 
-        selected_source = "all"
-        if "source_selector" in document:
-            selected_source = document["source_selector"].value
-
+        selected_source = self.get_selected_source()
         if selected_source != "all":
             stations = [s for s in stations if s.get("source") == selected_source]
 
@@ -387,8 +403,7 @@ class WaterMonitor(BaseMonitor):
                 label = "ไม่ทราบสถานะ"
 
             name = station.get("name_th") or station.get("name")
-            prov = station.get("province", "ไม่ระบุจังหวัด")
-            location = f"จ.{prov}"
+            location = self.format_location(station)
 
             # format other metrics
             other_html = ""
@@ -400,26 +415,36 @@ class WaterMonitor(BaseMonitor):
                 if val is None:
                     continue
 
+                # Label from the shared metric names so the card and the map
+                # tooltip call the same reading by the same name
+                m_label = metric_infos.HTML_METRIC_NAMES.get(m_name, m_name)
+
                 if m_name == "waterlevel_msl":
-                    display_text = f'ระดับน้ำ: <span class="font-medium text-gray-700">{val} ม.รทก.</span>'
+                    display_text = f'{m_label}: <span class="font-medium text-gray-700">{val} ม.รทก.</span>'
                 elif m_name == "diff_wl_bank":
                     try:
                         v = float(val)
                         if v < 0:
-                            display_text = f'ระดับน้ำ: <span class="font-medium text-gray-700">ต่ำกว่าตลิ่ง {abs(v):.2f} ม.</span>'
+                            display_text = f'{m_label}: <span class="font-medium text-gray-700">ต่ำกว่าตลิ่ง {abs(v):.2f} ม.</span>'
                         elif v > 0:
-                            display_text = f'ระดับน้ำ: <span class="font-medium text-red-600">ล้นตลิ่ง {v:.2f} ม.</span>'
+                            display_text = f'{m_label}: <span class="font-medium text-red-600">ล้นตลิ่ง {v:.2f} ม.</span>'
                         else:
-                            display_text = f'ระดับน้ำ: <span class="font-medium text-yellow-600">เสมอระดับตลิ่งพอดี</span>'
+                            display_text = f'{m_label}: <span class="font-medium text-yellow-600">เสมอระดับตลิ่งพอดี</span>'
                     except:
-                        display_text = f'ระดับน้ำกับตลิ่ง: <span class="font-medium text-gray-700">{val} ม.</span>'
+                        display_text = f'{m_label}: <span class="font-medium text-gray-700">{val} ม.</span>'
                 else:
-                    display_text = f'{m_name}: <span class="font-medium text-gray-700">{val}</span>'
+                    unit = metric_infos.HTML_METRIC_UNITS.get(m_name, "")
+                    try:
+                        value_text = f"{float(val):.2f} {unit}".strip()
+                    except (TypeError, ValueError):
+                        value_text = f"{val} {unit}".strip()
+                    display_text = f'{m_label}: <span class="font-medium text-gray-700">{value_text}</span>'
 
                 other_html += f'<div class="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">{display_text}</div>'
 
             html_content += f"""
-            <div class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md transition-all duration-200">
+            <div data-station-code="{station.get("code", "")}" data-station-source="{station.get("source", "")}"
+                class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all duration-200 cursor-pointer">
                 <div class="flex justify-between items-start mb-2">
                     <div>
                         <h3 class="font-bold text-gray-800 text-base">{name}</h3>
@@ -439,3 +464,46 @@ class WaterMonitor(BaseMonitor):
             html_content = '<div class="flex justify-center items-center h-full text-gray-500">ไม่พบข้อมูลสถานีวัดน้ำ</div>'
 
         document["reservoir_data_list"].html = html_content
+        self.bind_station_cards()
+
+    def format_location(self, station):
+        """Province comes from the ETL inside `metadata`, not on the station."""
+        metadata = station.get("metadata") or {}
+        province = (
+            metadata.get("province_name_th")
+            or metadata.get("province")
+            or station.get("province")
+        )
+        amphoe = metadata.get("amphoe_name_th")
+
+        if province and amphoe:
+            return f"อ.{amphoe} จ.{province}"
+        if province:
+            return f"จ.{province}"
+        return "ไม่ระบุพื้นที่"
+
+    def bind_station_cards(self):
+        """Re-attach the flyTo handlers, the list markup is rebuilt every render."""
+        if "reservoir_data_list" not in document:
+            return
+
+        for card in document["reservoir_data_list"].select("[data-station-code]"):
+            code = card.getAttribute("data-station-code")
+            if not code:
+                continue
+            source = card.getAttribute("data-station-source")
+            card.bind("click", self._make_station_card_handler(card, code, source))
+
+    def _make_station_card_handler(self, card, code, source):
+        def on_click(ev):
+            # rid and dwr share station codes, so the source is what
+            # tells the two markers apart
+            self.map.fly_to_station(code, source)
+            self.highlight_station_card(card)
+
+        return on_click
+
+    def highlight_station_card(self, selected_card):
+        for card in document["reservoir_data_list"].select("[data-station-code]"):
+            card.classList.remove("ring-2", "ring-blue-500")
+        selected_card.classList.add("ring-2", "ring-blue-500")
