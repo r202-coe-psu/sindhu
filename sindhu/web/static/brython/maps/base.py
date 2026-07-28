@@ -412,8 +412,8 @@ class BaseMap(Map):
                 self.metric_markers[station["id"]] = marker
                 code = station.get("code")
                 if code:
-                    # rid and dwr_telemetry publish the same station codes, so
-                    # a code maps to a list and (source, code) is the exact key
+                    # rid and dwr publish the same station codes, so a code
+                    # maps to a list and (source, code) is the exact key
                     self.metric_markers_by_code.setdefault(code, []).append(marker)
                     self.metric_markers_by_key[
                         self.marker_key(source_lower, code)
@@ -522,7 +522,7 @@ class BaseMap(Map):
     def filter_markers_by_keys(self, station_keys):
         """Keep only the markers for these `marker_key(source, code)` keys.
 
-        rid and dwr_telemetry publish the same gauge codes, so filtering by
+        rid and dwr publish the same gauge codes, so filtering by
         code alone leaves the other source's marker on the map while the
         station panel drops it. Keying on the source as well is what keeps
         the two views describing the same set of stations.

@@ -326,7 +326,8 @@ HTML_SOURCE_CREDITS = dict(
         "name": "กรมทรัพยากรน้ำ",
         "short": "ทน.",
     },
-    # The DWR telemetry ETL writes this as the source, not plain "dwr"
+    # The DWR ETL used to write this instead of plain "dwr"; kept so stations
+    # ingested before the rename still get credited
     dwr_telemetry={
         "name": "กรมทรัพยากรน้ำ (โทรมาตร)",
         "short": "ทน.",

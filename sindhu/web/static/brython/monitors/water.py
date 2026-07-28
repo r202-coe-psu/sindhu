@@ -193,7 +193,7 @@ class WaterMonitor(BaseMonitor):
         """Marker keys of the stations the source filter keeps.
 
         The map is filtered by `(source, code)` rather than by code alone,
-        because rid and dwr_telemetry publish the same gauge codes — a code
+        because rid and dwr publish the same gauge codes — a code
         filter would leave the other source's marker on the map while
         `render_data_list` drops that station from the panel.
 
@@ -496,7 +496,7 @@ class WaterMonitor(BaseMonitor):
 
     def _make_station_card_handler(self, card, code, source):
         def on_click(ev):
-            # rid and dwr_telemetry share station codes, so the source is what
+            # rid and dwr share station codes, so the source is what
             # tells the two markers apart
             self.map.fly_to_station(code, source)
             self.highlight_station_card(card)
