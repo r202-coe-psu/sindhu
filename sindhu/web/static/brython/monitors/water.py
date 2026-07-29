@@ -122,6 +122,9 @@ class WaterMonitor(BaseMonitor):
         if "source_selector" in document:
             document["source_selector"].bind("change", self.on_source_change)
 
+        if "hide_no_data" in document:
+            document["hide_no_data"].bind("change", self.on_hide_no_data_change)
+
         if self.running:
             print(f"monitor: wake up {datetime.datetime.now()}")
             print(f"monitor: {self.monitor_name} monitor")
@@ -148,29 +151,27 @@ class WaterMonitor(BaseMonitor):
                 if not station or not isinstance(station, dict):
                     continue
                 risk, _, _ = self.calculate_risk(station)
-
-                if risk == 3:
-                    station["risk_color"] = "#9333ea"
-                    station["risk_percent"] = 100
-                elif risk == 2:
-                    station["risk_color"] = "#ef4444"
-                    station["risk_percent"] = 100
-                elif risk == 1:
-                    station["risk_color"] = "#f97316"
-                    station["risk_percent"] = 100
-                elif risk == 0:
-                    station["risk_color"] = "#22c55e"
-                    station["risk_percent"] = 100
-                else:
-                    station["risk_color"] = "#9ca3af"
-                    station["risk_percent"] = 100
+                level = metric_infos.get_risk_level(risk)
+                station["risk"] = risk
+                station["risk_color"] = level["color"]
+                station["risk_percent"] = 100
 
             self.latest_data = data
 
             if "waterlevel" not in self.map.metric_types:
                 self.map.metric_types.append("waterlevel")
 
+            # Markers are coloured by risk, not by a metric scale, so the
+            # legend has to describe the risk levels instead
+            self.map.set_legend(
+                metric_infos.RISK_LEVELS,
+                "ระดับน้ำเทียบเกณฑ์เตือนภัย",
+                metric_infos.RISK_LEVEL_TITLE,
+            )
+
             await self.map.update("waterlevel", data)
+            self.apply_marker_filters()
+            self.update_zone_risks()
             self.render_data_list()
         except Exception as e:
             print(f"monitor: error {e}")
@@ -189,6 +190,21 @@ class WaterMonitor(BaseMonitor):
             return document["source_selector"].value
         return "all"
 
+    def is_source_matched(self, selected_source, station_source):
+        """Return True if station_source matches selected_source filter.
+
+        Handles legacy source names such as 'dwr_telemetry' matching 'dwr'.
+        """
+        if not selected_source or selected_source == "all":
+            return True
+        if not station_source:
+            return False
+        s_src = str(selected_source).lower()
+        st_src = str(station_source).lower()
+        if s_src == "dwr":
+            return st_src in ("dwr", "dwr_telemetry")
+        return st_src == s_src
+
     def source_marker_keys(self, limit_codes=None):
         """Marker keys of the stations the source filter keeps.
 
@@ -204,24 +220,23 @@ class WaterMonitor(BaseMonitor):
 
         keys = []
         for station in self.latest_data.get("stations") or []:
-            if not station or station.get("source") != selected_source:
+            if not station or not self.is_source_matched(
+                selected_source, station.get("source")
+            ):
                 continue
             code = station.get("code")
             if not code:
                 continue
             if allowed_codes is not None and code not in allowed_codes:
                 continue
-            keys.append(self.map.marker_key(selected_source, code))
+            keys.append(self.map.marker_key(station.get("source"), code))
         return keys
 
     async def _update_and_filter(self):
         if not self.latest_data:
             return
         await self.map.update("waterlevel", self.latest_data)
-        if self.get_selected_source() != "all":
-            self.map.filter_markers_by_keys(self.source_marker_keys())
-        else:
-            self.map.show_all_markers()
+        self.apply_marker_filters()
 
     def on_source_change(self, ev):
         if hasattr(self, "map") and self.latest_data:
@@ -236,12 +251,91 @@ class WaterMonitor(BaseMonitor):
                 aio.run(self.on_location_received(lat, lng))
                 return
 
-            if selected_source == "all":
-                self.map.show_all_markers()
-            else:
-                self.map.filter_markers_by_keys(self.source_marker_keys())
-
+            self.apply_marker_filters()
             self.render_data_list()
+            self.update_zone_risks()
+
+    """
+    ===========================================================================
+    Risk-driven map state
+    ===========================================================================
+    """
+
+    def hide_stations_without_data(self):
+        return "hide_no_data" in document and document["hide_no_data"].checked
+
+    def station_has_data(self, station):
+        return bool(station and station.get("metrics"))
+
+    def visible_marker_keys(self, zone_codes=None):
+        """Which markers should be on the map right now.
+
+        Source, zone and the no-data toggle all narrow the same set, so they
+        are resolved together instead of each overwriting the last.
+        """
+        selected_source = "all"
+        if "source_selector" in document:
+            selected_source = document["source_selector"].value
+
+        hide_empty = self.hide_stations_without_data()
+        wanted_codes = (
+            set(str(c) for c in zone_codes) if zone_codes is not None else None
+        )
+
+        keys = []
+        for station in (self.latest_data or {}).get("stations") or []:
+            if not station:
+                continue
+            code = station.get("code")
+            if not code:
+                continue
+            if not self.is_source_matched(selected_source, station.get("source")):
+                continue
+            if wanted_codes is not None and str(code) not in wanted_codes:
+                continue
+            if hide_empty and not self.station_has_data(station):
+                continue
+            keys.append(self.map.marker_key(station.get("source"), code))
+        return keys
+
+    def apply_marker_filters(self, zone_codes=None):
+        self.map.filter_markers_by_keys(self.visible_marker_keys(zone_codes))
+
+    def zone_risk_level(self, zone):
+        """Worst risk among the stations that sit in this zone."""
+        selected_source = self.get_selected_source()
+        stations_by_code = {}
+        for station in (self.latest_data or {}).get("stations") or []:
+            if station and station.get("code"):
+                if not self.is_source_matched(selected_source, station.get("source")):
+                    continue
+                # Keep the reading that can actually be judged
+                code = str(station["code"])
+                if code not in stations_by_code or self.station_has_data(station):
+                    stations_by_code[code] = station
+
+        max_risk = -1
+        for member in zone.get("stations") or []:
+            if not member:
+                continue
+            station = stations_by_code.get(str(member.get("code")))
+            if not station:
+                continue
+            risk, _, _ = self.calculate_risk(station)
+            if risk > max_risk:
+                max_risk = risk
+        return metric_infos.get_risk_level(max_risk)
+
+    def update_zone_risks(self):
+        """Colour every zone by its worst station, so the whole province can
+        be read at a glance without picking a zone first."""
+        for zone in self.zones or []:
+            zone_id = str(zone.get("id", "") or "")
+            if zone_id:
+                self.map.set_zone_risk(zone_id, self.zone_risk_level(zone))
+
+    def on_hide_no_data_change(self, ev):
+        self.apply_marker_filters()
 
     def on_zone_stations_found(self, nearby_stations):
         if not self.latest_data:
@@ -255,13 +349,7 @@ class WaterMonitor(BaseMonitor):
             if code:
                 zone_codes.append(code)
 
-        if self.get_selected_source() == "all":
-            self.map.filter_markers_by_codes(zone_codes)
-        else:
-            self.map.filter_markers_by_keys(self.source_marker_keys(zone_codes))
-
-        # `render_data_list` applies the source filter itself, so the raw zone
-        # codes are enough to scope the panel to this zone
+        self.apply_marker_filters(zone_codes)
         self.render_data_list(zone_codes)
 
     def on_zone_stations_empty(self, zone):
@@ -283,10 +371,8 @@ class WaterMonitor(BaseMonitor):
         """
 
     def on_zone_stations_cleared(self):
+        self.apply_marker_filters()
         if self.latest_data:
-            if self.get_selected_source() != "all":
-                self.map.filter_markers_by_keys(self.source_marker_keys())
-
             self.render_data_list()
 
     def update_zone_properties(self, zone_geojson, nearby_stations):
@@ -299,11 +385,14 @@ class WaterMonitor(BaseMonitor):
             -1
         )  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical, 3 = Evacuation
 
-        stations_dict = {
-            s.get("code"): s
-            for s in (self.latest_data.get("stations") or [])
-            if s and s.get("code")
-        }
+        stations_dict = {}
+        for s in self.latest_data.get("stations") or []:
+            if s and s.get("code"):
+                if not self.is_source_matched(selected_source, s.get("source")):
+                    continue
+                code = str(s["code"])
+                if code not in stations_dict or self.station_has_data(s):
+                    stations_dict[code] = s
 
         for s in nearby_stations:
             if not s:
@@ -312,44 +401,17 @@ class WaterMonitor(BaseMonitor):
             if not code:
                 continue
 
-            db_station = stations_dict.get(code)
+            db_station = stations_dict.get(str(code))
             if db_station:
-                if (
-                    selected_source != "all"
-                    and db_station.get("source") != selected_source
-                ):
-                    continue
-
                 risk, _, _ = self.calculate_risk(db_station)
 
                 if risk > max_risk:
                     max_risk = risk
 
-        # Map risk to colors
-        if max_risk == 3:
-            fill_color = "#9333ea"  # Purple (Evacuation)
-            fill_opacity = 0.5
-            color = "#7e22ce"
-        elif max_risk == 2:
-            fill_color = "#ef4444"  # Red (Critical)
-            fill_opacity = 0.4
-            color = "#dc2626"
-        elif max_risk == 1:
-            fill_color = "#f97316"  # Orange (Warning)
-            fill_opacity = 0.3
-            color = "#ea580c"
-        elif max_risk == 0:
-            fill_color = "#22c55e"  # Green (Normal)
-            fill_opacity = 0.15
-            color = "#16a34a"
-        else:
-            fill_color = "#9ca3af"  # Gray (Unknown)
-            fill_opacity = 0.1
-            color = "#6b7280"
-
-        zone_geojson["properties"]["fillColor"] = fill_color
-        zone_geojson["properties"]["color"] = color
-        zone_geojson["properties"]["fillOpacity"] = fill_opacity
+        level = metric_infos.get_risk_level(max_risk)
+        zone_geojson["properties"]["fillColor"] = level["color"]
+        zone_geojson["properties"]["color"] = level["border"]
+        zone_geojson["properties"]["fillOpacity"] = level["fill_opacity"]
 
     def render_data_list(self, filter_codes=None):
         if "reservoir_data_list" not in document:
@@ -364,8 +426,11 @@ class WaterMonitor(BaseMonitor):
             stations = [s for s in stations if s.get("code") in filter_codes]
 
         selected_source = self.get_selected_source()
-        if selected_source != "all":
-            stations = [s for s in stations if s.get("source") == selected_source]
+        stations = [
+            s
+            for s in stations
+            if self.is_source_matched(selected_source, s.get("source"))
+        ]
 
         html_content = ""
 
@@ -381,26 +446,10 @@ class WaterMonitor(BaseMonitor):
             if waterlevel is None and diff_wl_bank is None:
                 continue
 
-            if risk == 3:
-                hex_color = "#9333ea"
-                text_color = "white"
-                label = "อพยพ"
-            elif risk == 2:
-                hex_color = "#ef4444"
-                text_color = "white"
-                label = "วิกฤต"
-            elif risk == 1:
-                hex_color = "#f97316"
-                text_color = "white"
-                label = "เฝ้าระวัง"
-            elif risk == 0:
-                hex_color = "#22c55e"
-                text_color = "white"
-                label = "ปกติ"
-            else:
-                hex_color = "#9ca3af"
-                text_color = "white"
-                label = "ไม่ทราบสถานะ"
+            level = metric_infos.get_risk_level(risk)
+            hex_color = level["color"]
+            text_color = level["text"]
+            label = level["label"]
 
             name = station.get("name_th") or station.get("name")
             location = self.format_location(station)

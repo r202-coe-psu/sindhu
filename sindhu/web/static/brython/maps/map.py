@@ -137,6 +137,53 @@ class Map:
         "opacity": 1,
         "dashArray": "",
     }
+
+    def set_zone_risk(self, zone_id, level):
+        """Colour a zone by the worst risk among its stations.
+
+        Colour then means risk and nothing else, so hover and selection are
+        shown with the line instead — solid, and thicker when selected.
+        """
+        entry = self.zone_layers_by_id.get(str(zone_id))
+        if not entry:
+            return False
+
+        entry["risk"] = level
+        if self._selected_zone_id != str(zone_id):
+            entry["layer"].setStyle(self.zone_style(str(zone_id)))
+        else:
+            entry["layer"].setStyle(self.zone_style(str(zone_id), "selected"))
+        return True
+
+    def zone_style(self, zone_id, state="normal"):
+        """Style for one zone in a given interaction state."""
+        entry = self.zone_layers_by_id.get(str(zone_id)) or {}
+        level = entry.get("risk")
+
+        if not level:
+            # No risk known yet — keep the neutral outline
+            base = {
+                "normal": self.ZONE_STYLE,
+                "hover": self.ZONE_HOVER_STYLE,
+                "selected": self.ZONE_SELECTED_STYLE,
+            }[state]
+            return dict(base)
+
+        fill_opacity = level["fill_opacity"]
+        if state == "hover":
+            fill_opacity = min(fill_opacity + 0.12, 0.7)
+        elif state == "selected":
+            fill_opacity = min(fill_opacity + 0.08, 0.7)
+
+        return {
+            "fillColor": level["color"],
+            "fillOpacity": fill_opacity,
+            "color": level["border"],
+            "weight": 3 if state == "selected" else (2 if state == "hover" else 1),
+            "opacity": 1 if state != "normal" else 0.9,
+            "dashArray": "" if state != "normal" else "4, 3",
+        }
+
     def show_all_zones(self, zones, on_select=None):
         """Draw every zone boundary so users can click a zone directly.
 
@@ -179,7 +226,7 @@ class Map:
                 {
                     "pane": "zones",
                     "renderer": zone_renderer,
-                    "style": lambda f: dict(self.ZONE_STYLE),
+                    "style": lambda f: dict(self.ZONE_STYLE),  # risk applied later
                 },
             )
             if name:
@@ -193,7 +240,11 @@ class Map:
             layer.on("click", self._make_zone_click(zone_id, zone))
             layer.addTo(self.map)
 
-            self.zone_layers_by_id[zone_id] = {"layer": layer, "zone": zone}
+            self.zone_layers_by_id[zone_id] = {
+                "layer": layer,
+                "zone": zone,
+                "risk": None,
+            }
 
     def _make_zone_hover(self, zone_id, entering):
         def handler(e):
@@ -203,7 +254,7 @@ class Map:
             if not entry:
                 return
             entry["layer"].setStyle(
-                self.ZONE_HOVER_STYLE if entering else self.ZONE_STYLE
+                self.zone_style(zone_id, "hover" if entering else "normal")
             )
 
         return handler
@@ -234,10 +285,10 @@ class Map:
         # and clickable so a different zone can be picked straight away.
         for key, other in self.zone_layers_by_id.items():
             if key == zone_id:
-                other["layer"].setStyle(self.ZONE_SELECTED_STYLE)
+                other["layer"].setStyle(self.zone_style(key, "selected"))
                 other["layer"].bringToFront()
             else:
-                other["layer"].setStyle(self.ZONE_STYLE)
+                other["layer"].setStyle(self.zone_style(key))
 
         if fit_bounds:
             self.map.fitBounds(entry["layer"].getBounds(), {"padding": [24, 24]})
@@ -247,8 +298,8 @@ class Map:
 
     def clear_zone_selection(self):
         self._selected_zone_id = None
-        for entry in self.zone_layers_by_id.values():
-            entry["layer"].setStyle(self.ZONE_STYLE)
+        for zone_id, entry in self.zone_layers_by_id.items():
+            entry["layer"].setStyle(self.zone_style(zone_id))
 
     def clear_all_zones(self):
         for entry in self.zone_layers_by_id.values():
@@ -841,7 +892,7 @@ class Map:
                 # canvas covers the whole overlay pane and would otherwise
                 # swallow every click meant for the zone polygons underneath.
                 basin_renderer = self.leaflet.canvas({"padding": 0.5})
-                self.shapes['river_basins'] = self.leaflet.geoJson(
+                self.shapes["river_basins"] = self.leaflet.geoJson(
                     geojson_data,
                     {
                         "style": river_style,

@@ -445,9 +445,7 @@ def get_metric_level_title(type_):
     if not type_:
         return ""
     type_ = str(type_).lower()
-    return METRIC_LEVEL_TITLES.get(
-        type_, HTML_METRIC_NAMES.get(type_, type_)
-    )
+    return METRIC_LEVEL_TITLES.get(type_, HTML_METRIC_NAMES.get(type_, type_))
 
 
 def pick_primary_metric(metrics):
@@ -489,3 +487,66 @@ def get_metric_fill_percent(type_, value):
             # Centre of the band, so neighbouring bands stay visually apart
             return round((index + 0.5) / len(levels) * 100)
     return 0
+
+
+# The single definition of what a risk level looks like on screen.
+# `WaterMonitor.calculate_risk` decides the level; everything that draws it —
+# the map markers, the station cards, the zone polygons and the legend — reads
+# its colours from here, so the four can never disagree.
+RISK_LEVEL_TITLE = "ระดับความปลอดภัย"
+
+RISK_LEVELS = [
+    {
+        "risk": 3,
+        "label": "อพยพ",
+        "range": "ถึงระดับอพยพ",
+        "color": "#9333ea",
+        "border": "#7e22ce",
+        "text": "#FFFFFF",
+        "fill_opacity": 0.5,
+    },
+    {
+        "risk": 2,
+        "label": "วิกฤต",
+        "range": "ถึงระดับวิกฤต",
+        "color": "#ef4444",
+        "border": "#dc2626",
+        "text": "#FFFFFF",
+        "fill_opacity": 0.4,
+    },
+    {
+        "risk": 1,
+        "label": "เฝ้าระวัง",
+        "range": "ถึงระดับเฝ้าระวัง",
+        "color": "#f97316",
+        "border": "#ea580c",
+        "text": "#FFFFFF",
+        "fill_opacity": 0.3,
+    },
+    {
+        "risk": 0,
+        "label": "ปกติ",
+        "range": "ต่ำกว่าระดับเฝ้าระวัง",
+        "color": "#22c55e",
+        "border": "#16a34a",
+        "text": "#FFFFFF",
+        "fill_opacity": 0.15,
+    },
+    {
+        "risk": -1,
+        "label": "ไม่ทราบสถานะ",
+        "range": "ไม่มีข้อมูลใน 24 ชม.",
+        "color": "#9ca3af",
+        "border": "#6b7280",
+        "text": "#FFFFFF",
+        "fill_opacity": 0.1,
+    },
+]
+
+
+def get_risk_level(risk):
+    """Look up a risk level, falling back to the unknown one."""
+    for level in RISK_LEVELS:
+        if level["risk"] == risk:
+            return level
+    return RISK_LEVELS[-1]
