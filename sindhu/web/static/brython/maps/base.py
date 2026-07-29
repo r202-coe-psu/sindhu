@@ -1,4 +1,5 @@
 from datetime import datetime, timezone, timedelta
+import json
 
 
 from browser import ajax, document, html, window, timer, aio
@@ -7,6 +8,8 @@ import javascript as js
 from .map import Map
 from stations import metric_infos
 from stations.metric_colors import get_metric_color as _get_metric_color
+
+DATA_MARKER_Z_OFFSET = 1000
 
 
 DATA_MARKER_Z_OFFSET = 1000
@@ -38,6 +41,140 @@ class BaseMap(Map):
         self.marker_style = "donut"
         self._metric_legend_container = None
         self._legend_override = False
+        self.chart_configs = {}
+        self.map.on("tooltipopen", self.on_tooltip_open)
+
+    def on_tooltip_open(self, e):
+        try:
+            # Leaflet tooltipopen event puts the tooltip on `e.tooltip` and its marker on `e.tooltip._source`
+            tooltip = getattr(e, "tooltip", None)
+            marker = (
+                getattr(tooltip, "_source", None)
+                if tooltip
+                else getattr(e, "sourceTarget", None)
+            )
+
+            if (
+                marker is None
+                or not hasattr(marker, "options")
+                or not hasattr(marker.options, "customId")
+            ):
+                return
+
+            station_id = marker.options.customId
+            if station_id not in self.chart_configs:
+                return
+            config = self.chart_configs[station_id]
+
+            def render_chart():
+                canvas = document.getElementById(f"chart-{station_id}")
+                if not canvas:
+                    window.console.log(f"Canvas not found for station {station_id}")
+                    return
+                # Destroy existing Chart instance if present to prevent memory leaks and canvas reuse errors
+                try:
+                    if hasattr(canvas, "chart_instance") and canvas.chart_instance:
+                        if hasattr(canvas.chart_instance, "destroy"):
+                            canvas.chart_instance.destroy()
+                    elif hasattr(window, "Chart") and hasattr(window.Chart, "getChart"):
+                        existing_chart = window.Chart.getChart(canvas)
+                        if existing_chart:
+                            existing_chart.destroy()
+                except Exception as destroy_err:
+                    window.console.log(
+                        f"Error destroying previous chart: {destroy_err}"
+                    )
+
+                window.console.log(f"Rendering chart for station {station_id}")
+                ctx = canvas.getContext("2d")
+                max_val = max(
+                    config["current"] * 1.2,
+                    (config.get("critical") or 0) * 1.2,
+                    (config.get("warning") or 0) * 1.2,
+                    10,
+                )
+
+                chart_data = {
+                    "type": "bar",
+                    "data": {
+                        "labels": [""],
+                        "datasets": [
+                            {
+                                "data": [config["current"]],
+                                "backgroundColor": "#3b82f6",
+                                "categoryPercentage": 1.0,
+                                "barPercentage": 1.0,
+                            }
+                        ],
+                    },
+                    "options": {
+                        "responsive": True,
+                        "maintainAspectRatio": False,
+                        "scales": {
+                            "y": {
+                                "min": 0,
+                                "max": max_val,
+                                "grid": {"color": "#e5e7eb"},
+                            },
+                            "x": {"display": False},
+                        },
+                        "plugins": {"legend": {"display": False}},
+                    },
+                }
+
+                js_code = f"""
+                ({{
+                    id: 'thresholds_{station_id}',
+                    afterDraw: function(chart) {{
+                        const yScale = chart.scales.y;
+                        const left = chart.chartArea.left;
+                        const right = chart.chartArea.right;
+                        const ctx = chart.ctx;
+                        
+                        var warning = {config['warning'] if config.get('warning') is not None else 'null'};
+                        var critical = {config['critical'] if config.get('critical') is not None else 'null'};
+                        
+                        if (warning !== null) {{
+                            const yVal = yScale.getPixelForValue(warning);
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.setLineDash([4, 4]);
+                            ctx.strokeStyle = "#eab308";
+                            ctx.lineWidth = 2;
+                            ctx.moveTo(left, yVal);
+                            ctx.lineTo(right, yVal);
+                            ctx.stroke();
+                            ctx.restore();
+                        }}
+                        if (critical !== null) {{
+                            const yVal = yScale.getPixelForValue(critical);
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.setLineDash([4, 4]);
+                            ctx.strokeStyle = "#ef4444";
+                            ctx.lineWidth = 2;
+                            ctx.moveTo(left, yVal);
+                            ctx.lineTo(right, yVal);
+                            ctx.stroke();
+                            ctx.restore();
+                        }}
+                    }}
+                }})
+                """
+
+                # Convert Python dict to pure JS object via JSON parse/serialize
+                js_config = window.JSON.parse(json.dumps(chart_data))
+                js_config.plugins = [window.eval(js_code)]
+
+                # Safely instantiate Chart class using JS wrapper function
+                create_chart = window.eval(
+                    "(function(ctx, config) { return new Chart(ctx, config); })"
+                )
+                canvas.chart_instance = create_chart(ctx, js_config)
+
+            timer.set_timeout(render_chart, 50)
+        except Exception as ex:
+            print(f"Error rendering chart: {ex}")
 
     """
     ===========================================================================
@@ -192,20 +329,24 @@ class BaseMap(Map):
                             msg = "ไม่พบข้อมูลการพยากรณ์"
                         else:
                             msg = "ไม่พบข้อมูล"
-                        metric_texts.append(f"""
+                        metric_texts.append(
+                            f"""
                             <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
                                 <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
                                 <span class="text-base-content/40 italic text-[11px]">{msg}</span>
                             </div>
-                            """)
+                            """
+                        )
                     else:
                         unit = metric_infos.HTML_METRIC_UNITS.get(metric_type, "")
-                        metric_texts.append(f"""
+                        metric_texts.append(
+                            f"""
                             <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
                                 <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
                                 <span class="font-semibold text-base-content">{value_str} <span class="text-[10px] opacity-60 font-normal">{unit}</span></span>
                             </div>
-                            """)
+                            """
+                        )
 
                     # Capture one timestamp for display
                     if not timestamp and sensor.get("timestamp"):
@@ -232,24 +373,73 @@ class BaseMap(Map):
                     </div>
                     """
 
-                tooltip_detail = f"""
-                <div class="card card-compact w-64 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
-                    <div class="card-body p-3 gap-1.5">
-                        <div class="flex justify-between items-center border-b border-base-content/10 pb-1 mb-1">
-                            <span class="badge {badge_color} badge-xs font-semibold px-2 py-1.5">{source_name.upper()}</span>
-                            <span class="text-[10px] font-mono opacity-60">#{station["code"]}</span>
+                waterlevel_sensor = metrics_dict.get("waterlevel") or metrics_dict.get(
+                    "waterlevel_msl"
+                )
+                has_waterlevel = False
+                if waterlevel_sensor and waterlevel_sensor.get("value") is not None:
+                    has_waterlevel = True
+                    waterlevel_val = waterlevel_sensor.get("value")
+                    water_level_warning = station.get("metadata", {}).get(
+                        "water_level_warning"
+                    )
+                    water_level_critical = station.get("metadata", {}).get(
+                        "water_level_critical"
+                    )
+
+                    self.chart_configs[station["id"]] = {
+                        "current": waterlevel_val,
+                        "warning": (
+                            float(water_level_warning) if water_level_warning else None
+                        ),
+                        "critical": (
+                            float(water_level_critical)
+                            if water_level_critical
+                            else None
+                        ),
+                    }
+
+                if has_waterlevel:
+                    tooltip_detail = f"""
+                    <div class="card card-compact w-72 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
+                        <div class="card-body p-3 gap-1.5">
+                            <div class="flex justify-between items-center border-b border-base-content/10 pb-1 mb-1">
+                                <span class="badge {badge_color} badge-xs font-semibold px-2 py-1.5">{source_name.upper()}</span>
+                                <span class="text-[10px] font-mono opacity-60">#{station["code"]}</span>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
+                                <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
+                            </div>
+                            <div class="mt-2 w-full h-32 relative">
+                                <canvas id="chart-{station['id']}"></canvas>
+                            </div>
+                            <div class="text-[11px] text-base-content/80 mt-1 flex justify-between items-center">
+                                <span>ระดับน้ำปัจจุบัน: <span class="font-bold text-blue-600 text-sm">{waterlevel_val:.2f}</span> ม.</span>
+                            </div>
+                            {footer_html}
                         </div>
-                        <div>
-                            <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
-                            <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
-                        </div>
-                        <div class="flex flex-col gap-0.5 mt-1">
-                            {"".join(metric_texts)}
-                        </div>
-                        {footer_html}
                     </div>
-                </div>
-                """
+                    """
+                else:
+                    tooltip_detail = f"""
+                    <div class="card card-compact w-64 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
+                        <div class="card-body p-3 gap-1.5">
+                            <div class="flex justify-between items-center border-b border-base-content/10 pb-1 mb-1">
+                                <span class="badge {badge_color} badge-xs font-semibold px-2 py-1.5">{source_name.upper()}</span>
+                                <span class="text-[10px] font-mono opacity-60">#{station["code"]}</span>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
+                                <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
+                            </div>
+                            <div class="flex flex-col gap-0.5 mt-1">
+                                {"".join(metric_texts)}
+                            </div>
+                            {footer_html}
+                        </div>
+                    </div>
+                    """
 
             # Sensor color
             # metrics = {k: v["value"] for k, v in metrics_dict.items()}
@@ -568,23 +758,6 @@ class BaseMap(Map):
                     marker.addTo(self.map)
                 elif not wanted and on_map:
                     self.map.removeLayer(marker)
-
-    def filter_markers_by_keys(self, station_keys):
-        """Keep only the markers for these `marker_key(source, code)` keys.
-
-        rid and dwr publish the same gauge codes, so filtering by
-        code alone leaves the other source's marker on the map while the
-        station panel drops it. Keying on the source as well is what keeps
-        the two views describing the same set of stations.
-        """
-        key_set = set(station_keys)
-        for key, marker in self.metric_markers_by_key.items():
-            wanted = key in key_set
-            on_map = self.map.hasLayer(marker)
-            if wanted and not on_map:
-                marker.addTo(self.map)
-            elif not wanted and on_map:
-                self.map.removeLayer(marker)
 
     def show_all_markers(self):
         for station_id, marker in self.metric_markers.items():

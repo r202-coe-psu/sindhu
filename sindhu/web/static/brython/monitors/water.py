@@ -190,6 +190,21 @@ class WaterMonitor(BaseMonitor):
             return document["source_selector"].value
         return "all"
 
+    def is_source_matched(self, selected_source, station_source):
+        """Return True if station_source matches selected_source filter.
+
+        Handles legacy source names such as 'dwr_telemetry' matching 'dwr'.
+        """
+        if not selected_source or selected_source == "all":
+            return True
+        if not station_source:
+            return False
+        s_src = str(selected_source).lower()
+        st_src = str(station_source).lower()
+        if s_src == "dwr":
+            return st_src in ("dwr", "dwr_telemetry")
+        return st_src == s_src
+
     def source_marker_keys(self, limit_codes=None):
         """Marker keys of the stations the source filter keeps.
 
@@ -205,14 +220,16 @@ class WaterMonitor(BaseMonitor):
 
         keys = []
         for station in self.latest_data.get("stations") or []:
-            if not station or station.get("source") != selected_source:
+            if not station or not self.is_source_matched(
+                selected_source, station.get("source")
+            ):
                 continue
             code = station.get("code")
             if not code:
                 continue
             if allowed_codes is not None and code not in allowed_codes:
                 continue
-            keys.append(self.map.marker_key(selected_source, code))
+            keys.append(self.map.marker_key(station.get("source"), code))
         return keys
 
     async def _update_and_filter(self):
@@ -272,7 +289,7 @@ class WaterMonitor(BaseMonitor):
             code = station.get("code")
             if not code:
                 continue
-            if selected_source != "all" and station.get("source") != selected_source:
+            if not self.is_source_matched(selected_source, station.get("source")):
                 continue
             if wanted_codes is not None and str(code) not in wanted_codes:
                 continue
@@ -286,9 +303,12 @@ class WaterMonitor(BaseMonitor):
 
     def zone_risk_level(self, zone):
         """Worst risk among the stations that sit in this zone."""
+        selected_source = self.get_selected_source()
         stations_by_code = {}
         for station in (self.latest_data or {}).get("stations") or []:
             if station and station.get("code"):
+                if not self.is_source_matched(selected_source, station.get("source")):
+                    continue
                 # Keep the reading that can actually be judged
                 code = str(station["code"])
                 if code not in stations_by_code or self.station_has_data(station):
@@ -365,11 +385,14 @@ class WaterMonitor(BaseMonitor):
             -1
         )  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical, 3 = Evacuation
 
-        stations_dict = {
-            s.get("code"): s
-            for s in (self.latest_data.get("stations") or [])
-            if s and s.get("code")
-        }
+        stations_dict = {}
+        for s in self.latest_data.get("stations") or []:
+            if s and s.get("code"):
+                if not self.is_source_matched(selected_source, s.get("source")):
+                    continue
+                code = str(s["code"])
+                if code not in stations_dict or self.station_has_data(s):
+                    stations_dict[code] = s
 
         for s in nearby_stations:
             if not s:
@@ -378,14 +401,8 @@ class WaterMonitor(BaseMonitor):
             if not code:
                 continue
 
-            db_station = stations_dict.get(code)
+            db_station = stations_dict.get(str(code))
             if db_station:
-                if (
-                    selected_source != "all"
-                    and db_station.get("source") != selected_source
-                ):
-                    continue
-
                 risk, _, _ = self.calculate_risk(db_station)
 
                 if risk > max_risk:
@@ -409,8 +426,11 @@ class WaterMonitor(BaseMonitor):
             stations = [s for s in stations if s.get("code") in filter_codes]
 
         selected_source = self.get_selected_source()
-        if selected_source != "all":
-            stations = [s for s in stations if s.get("source") == selected_source]
+        stations = [
+            s
+            for s in stations
+            if self.is_source_matched(selected_source, s.get("source"))
+        ]
 
         html_content = ""
 

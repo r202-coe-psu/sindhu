@@ -21,6 +21,7 @@
         "apexcharts": "^3.22.0",
         "brython": "^3.13.2",
         "cally": "^0.8.0",
+        "chart.js": "^4.5.1",
         "fomantic-ui-css": "^2.8.7",
         "htmx.org": "^1.9.12",
         "jquery": "^3.7.1",
