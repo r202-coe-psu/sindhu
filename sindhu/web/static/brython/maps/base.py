@@ -1,4 +1,5 @@
 from datetime import datetime, timezone, timedelta
+import json
 
 
 from browser import ajax, document, html, window, timer, aio
@@ -43,9 +44,13 @@ class BaseMap(Map):
 
     def on_tooltip_open(self, e):
         try:
-            marker = getattr(e, "sourceTarget", None)
-            if marker is None or not hasattr(marker.options, "customId"):
+            # Leaflet tooltipopen event puts the tooltip on `e.tooltip` and its marker on `e.tooltip._source`
+            tooltip = getattr(e, "tooltip", None)
+            marker = getattr(tooltip, "_source", None) if tooltip else getattr(e, "sourceTarget", None)
+            
+            if marker is None or not hasattr(marker, "options") or not hasattr(marker.options, "customId"):
                 return
+                
             station_id = marker.options.customId
             if station_id not in self.chart_configs:
                 return
@@ -54,10 +59,12 @@ class BaseMap(Map):
             def render_chart():
                 canvas = document.getElementById(f"chart-{station_id}")
                 if not canvas:
+                    window.console.log(f"Canvas not found for station {station_id}")
                     return
                 if hasattr(canvas, "chart_instance"):
                     return
                 
+                window.console.log(f"Rendering chart for station {station_id}")
                 ctx = canvas.getContext("2d")
                 max_val = max(config["current"] * 1.2, (config.get("critical") or 0) * 1.2, (config.get("warning") or 0) * 1.2, 10)
                 
@@ -72,16 +79,15 @@ class BaseMap(Map):
                         }]
                     },
                     "options": {
-                        "indexAxis": "y",
                         "responsive": True,
                         "maintainAspectRatio": False,
                         "scales": {
-                            "x": {
+                            "y": {
                                 "min": 0,
                                 "max": max_val,
                                 "grid": {"color": "#e5e7eb"}
                             },
-                            "y": {
+                            "x": {
                                 "display": False
                             }
                         },
@@ -95,44 +101,49 @@ class BaseMap(Map):
                 ({{
                     id: 'thresholds_{station_id}',
                     afterDraw: function(chart) {{
-                        const xScale = chart.scales.x;
-                        const top = chart.chartArea.top;
-                        const bottom = chart.chartArea.bottom;
+                        const yScale = chart.scales.y;
+                        const left = chart.chartArea.left;
+                        const right = chart.chartArea.right;
                         const ctx = chart.ctx;
                         
                         var warning = {config['warning'] if config.get('warning') is not None else 'null'};
                         var critical = {config['critical'] if config.get('critical') is not None else 'null'};
                         
                         if (warning !== null) {{
-                            const xVal = xScale.getPixelForValue(warning);
+                            const yVal = yScale.getPixelForValue(warning);
                             ctx.save();
                             ctx.beginPath();
                             ctx.setLineDash([4, 4]);
                             ctx.strokeStyle = "#eab308";
                             ctx.lineWidth = 2;
-                            ctx.moveTo(xVal, top);
-                            ctx.lineTo(xVal, bottom);
+                            ctx.moveTo(left, yVal);
+                            ctx.lineTo(right, yVal);
                             ctx.stroke();
                             ctx.restore();
                         }}
                         if (critical !== null) {{
-                            const xVal = xScale.getPixelForValue(critical);
+                            const yVal = yScale.getPixelForValue(critical);
                             ctx.save();
                             ctx.beginPath();
                             ctx.setLineDash([4, 4]);
                             ctx.strokeStyle = "#ef4444";
                             ctx.lineWidth = 2;
-                            ctx.moveTo(xVal, top);
-                            ctx.lineTo(xVal, bottom);
+                            ctx.moveTo(left, yVal);
+                            ctx.lineTo(right, yVal);
                             ctx.stroke();
                             ctx.restore();
                         }}
                     }}
                 }})
                 """
-                chart_data["plugins"] = [window.eval(js_code)]
                 
-                canvas.chart_instance = window.Chart.new(ctx, chart_data)
+                # Convert Python dict to pure JS object via JSON parse/serialize
+                js_config = window.JSON.parse(json.dumps(chart_data))
+                js_config.plugins = [window.eval(js_code)]
+                
+                # Safely instantiate Chart class using JS wrapper function
+                create_chart = window.eval("(function(ctx, config) { return new Chart(ctx, config); })")
+                canvas.chart_instance = create_chart(ctx, js_config)
 
             timer.set_timeout(render_chart, 50)
         except Exception as ex:
@@ -357,7 +368,7 @@ class BaseMap(Map):
                                 <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
                                 <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
                             </div>
-                            <div class="mt-2 w-full h-16 relative">
+                            <div class="mt-2 w-full h-32 relative">
                                 <canvas id="chart-{station['id']}"></canvas>
                             </div>
                             <div class="text-[11px] text-base-content/80 mt-1 flex justify-between items-center">
