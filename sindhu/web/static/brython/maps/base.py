@@ -741,23 +741,6 @@ class BaseMap(Map):
                 elif not wanted and on_map:
                     self.map.removeLayer(marker)
 
-    def filter_markers_by_keys(self, station_keys):
-        """Keep only the markers for these `marker_key(source, code)` keys.
-
-        rid and dwr publish the same gauge codes, so filtering by
-        code alone leaves the other source's marker on the map while the
-        station panel drops it. Keying on the source as well is what keeps
-        the two views describing the same set of stations.
-        """
-        key_set = set(station_keys)
-        for key, marker in self.metric_markers_by_key.items():
-            wanted = key in key_set
-            on_map = self.map.hasLayer(marker)
-            if wanted and not on_map:
-                marker.addTo(self.map)
-            elif not wanted and on_map:
-                self.map.removeLayer(marker)
-
     def show_all_markers(self):
         for station_id, marker in self.metric_markers.items():
             if not self.map.hasLayer(marker):
