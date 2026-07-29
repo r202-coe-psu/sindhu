@@ -286,9 +286,15 @@ class WaterMonitor(BaseMonitor):
 
     def zone_risk_level(self, zone):
         """Worst risk among the stations that sit in this zone."""
+        selected_source = self.get_selected_source()
         stations_by_code = {}
         for station in (self.latest_data or {}).get("stations") or []:
             if station and station.get("code"):
+                if (
+                    selected_source != "all"
+                    and station.get("source") != selected_source
+                ):
+                    continue
                 # Keep the reading that can actually be judged
                 code = str(station["code"])
                 if code not in stations_by_code or self.station_has_data(station):
@@ -365,11 +371,14 @@ class WaterMonitor(BaseMonitor):
             -1
         )  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical, 3 = Evacuation
 
-        stations_dict = {
-            s.get("code"): s
-            for s in (self.latest_data.get("stations") or [])
-            if s and s.get("code")
-        }
+        stations_dict = {}
+        for s in self.latest_data.get("stations") or []:
+            if s and s.get("code"):
+                if selected_source != "all" and s.get("source") != selected_source:
+                    continue
+                code = str(s["code"])
+                if code not in stations_dict or self.station_has_data(s):
+                    stations_dict[code] = s
 
         for s in nearby_stations:
             if not s:
@@ -378,14 +387,8 @@ class WaterMonitor(BaseMonitor):
             if not code:
                 continue
 
-            db_station = stations_dict.get(code)
+            db_station = stations_dict.get(str(code))
             if db_station:
-                if (
-                    selected_source != "all"
-                    and db_station.get("source") != selected_source
-                ):
-                    continue
-
                 risk, _, _ = self.calculate_risk(db_station)
 
                 if risk > max_risk:
