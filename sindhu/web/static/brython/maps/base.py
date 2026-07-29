@@ -12,6 +12,9 @@ from stations.metric_colors import get_metric_color as _get_metric_color
 DATA_MARKER_Z_OFFSET = 1000
 
 
+DATA_MARKER_Z_OFFSET = 1000
+
+
 class BaseMap(Map):
     def __init__(
         self,
@@ -326,20 +329,24 @@ class BaseMap(Map):
                             msg = "ไม่พบข้อมูลการพยากรณ์"
                         else:
                             msg = "ไม่พบข้อมูล"
-                        metric_texts.append(f"""
+                        metric_texts.append(
+                            f"""
                             <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
                                 <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
                                 <span class="text-base-content/40 italic text-[11px]">{msg}</span>
                             </div>
-                            """)
+                            """
+                        )
                     else:
                         unit = metric_infos.HTML_METRIC_UNITS.get(metric_type, "")
-                        metric_texts.append(f"""
+                        metric_texts.append(
+                            f"""
                             <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
                                 <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
                                 <span class="font-semibold text-base-content">{value_str} <span class="text-[10px] opacity-60 font-normal">{unit}</span></span>
                             </div>
-                            """)
+                            """
+                        )
 
                     # Capture one timestamp for display
                     if not timestamp and sensor.get("timestamp"):
