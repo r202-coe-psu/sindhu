@@ -9,6 +9,9 @@ from stations import metric_infos
 from stations.metric_colors import get_metric_color as _get_metric_color
 
 
+DATA_MARKER_Z_OFFSET = 1000
+
+
 class BaseMap(Map):
     def __init__(
         self,
@@ -34,6 +37,106 @@ class BaseMap(Map):
         self.panel_plus_sensors = []
         self.marker_style = "donut"
         self._metric_legend_container = None
+        self._legend_override = False
+        self.chart_configs = {}
+        self.map.on("tooltipopen", self.on_tooltip_open)
+
+    def on_tooltip_open(self, e):
+        try:
+            marker = getattr(e, "sourceTarget", None)
+            if marker is None or not hasattr(marker.options, "customId"):
+                return
+            station_id = marker.options.customId
+            if station_id not in self.chart_configs:
+                return
+            config = self.chart_configs[station_id]
+            
+            def render_chart():
+                canvas = document.getElementById(f"chart-{station_id}")
+                if not canvas:
+                    return
+                if hasattr(canvas, "chart_instance"):
+                    return
+                
+                ctx = canvas.getContext("2d")
+                max_val = max(config["current"] * 1.2, (config.get("critical") or 0) * 1.2, (config.get("warning") or 0) * 1.2, 10)
+                
+                chart_data = {
+                    "type": "bar",
+                    "data": {
+                        "labels": [""],
+                        "datasets": [{
+                            "data": [config["current"]],
+                            "backgroundColor": "#3b82f6",
+                            "barThickness": 15
+                        }]
+                    },
+                    "options": {
+                        "indexAxis": "y",
+                        "responsive": True,
+                        "maintainAspectRatio": False,
+                        "scales": {
+                            "x": {
+                                "min": 0,
+                                "max": max_val,
+                                "grid": {"color": "#e5e7eb"}
+                            },
+                            "y": {
+                                "display": False
+                            }
+                        },
+                        "plugins": {
+                            "legend": {"display": False}
+                        }
+                    }
+                }
+                
+                js_code = f"""
+                ({{
+                    id: 'thresholds_{station_id}',
+                    afterDraw: function(chart) {{
+                        const xScale = chart.scales.x;
+                        const top = chart.chartArea.top;
+                        const bottom = chart.chartArea.bottom;
+                        const ctx = chart.ctx;
+                        
+                        var warning = {config['warning'] if config.get('warning') is not None else 'null'};
+                        var critical = {config['critical'] if config.get('critical') is not None else 'null'};
+                        
+                        if (warning !== null) {{
+                            const xVal = xScale.getPixelForValue(warning);
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.setLineDash([4, 4]);
+                            ctx.strokeStyle = "#eab308";
+                            ctx.lineWidth = 2;
+                            ctx.moveTo(xVal, top);
+                            ctx.lineTo(xVal, bottom);
+                            ctx.stroke();
+                            ctx.restore();
+                        }}
+                        if (critical !== null) {{
+                            const xVal = xScale.getPixelForValue(critical);
+                            ctx.save();
+                            ctx.beginPath();
+                            ctx.setLineDash([4, 4]);
+                            ctx.strokeStyle = "#ef4444";
+                            ctx.lineWidth = 2;
+                            ctx.moveTo(xVal, top);
+                            ctx.lineTo(xVal, bottom);
+                            ctx.stroke();
+                            ctx.restore();
+                        }}
+                    }}
+                }})
+                """
+                chart_data["plugins"] = [window.eval(js_code)]
+                
+                canvas.chart_instance = window.Chart.new(ctx, chart_data)
+
+            timer.set_timeout(render_chart, 50)
+        except Exception as ex:
+            print(f"Error rendering chart: {ex}")
 
     """
     ===========================================================================
@@ -228,24 +331,61 @@ class BaseMap(Map):
                     </div>
                     """
 
-                tooltip_detail = f"""
-                <div class="card card-compact w-64 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
-                    <div class="card-body p-3 gap-1.5">
-                        <div class="flex justify-between items-center border-b border-base-content/10 pb-1 mb-1">
-                            <span class="badge {badge_color} badge-xs font-semibold px-2 py-1.5">{source_name.upper()}</span>
-                            <span class="text-[10px] font-mono opacity-60">#{station["code"]}</span>
+                waterlevel_sensor = metrics_dict.get("waterlevel") or metrics_dict.get("waterlevel_msl")
+                has_waterlevel = False
+                if waterlevel_sensor and waterlevel_sensor.get("value") is not None:
+                    has_waterlevel = True
+                    waterlevel_val = waterlevel_sensor.get("value")
+                    water_level_warning = station.get("metadata", {}).get("water_level_warning")
+                    water_level_critical = station.get("metadata", {}).get("water_level_critical")
+                    
+                    self.chart_configs[station["id"]] = {
+                        "current": waterlevel_val,
+                        "warning": float(water_level_warning) if water_level_warning else None,
+                        "critical": float(water_level_critical) if water_level_critical else None,
+                    }
+
+                if has_waterlevel:
+                    tooltip_detail = f"""
+                    <div class="card card-compact w-72 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
+                        <div class="card-body p-3 gap-1.5">
+                            <div class="flex justify-between items-center border-b border-base-content/10 pb-1 mb-1">
+                                <span class="badge {badge_color} badge-xs font-semibold px-2 py-1.5">{source_name.upper()}</span>
+                                <span class="text-[10px] font-mono opacity-60">#{station["code"]}</span>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
+                                <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
+                            </div>
+                            <div class="mt-2 w-full h-16 relative">
+                                <canvas id="chart-{station['id']}"></canvas>
+                            </div>
+                            <div class="text-[11px] text-base-content/80 mt-1 flex justify-between items-center">
+                                <span>ระดับน้ำปัจจุบัน: <span class="font-bold text-blue-600 text-sm">{waterlevel_val:.2f}</span> ม.</span>
+                            </div>
+                            {footer_html}
                         </div>
-                        <div>
-                            <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
-                            <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
-                        </div>
-                        <div class="flex flex-col gap-0.5 mt-1">
-                            {"".join(metric_texts)}
-                        </div>
-                        {footer_html}
                     </div>
-                </div>
-                """
+                    """
+                else:
+                    tooltip_detail = f"""
+                    <div class="card card-compact w-64 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
+                        <div class="card-body p-3 gap-1.5">
+                            <div class="flex justify-between items-center border-b border-base-content/10 pb-1 mb-1">
+                                <span class="badge {badge_color} badge-xs font-semibold px-2 py-1.5">{source_name.upper()}</span>
+                                <span class="text-[10px] font-mono opacity-60">#{station["code"]}</span>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
+                                <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
+                            </div>
+                            <div class="flex flex-col gap-0.5 mt-1">
+                                {"".join(metric_texts)}
+                            </div>
+                            {footer_html}
+                        </div>
+                    </div>
+                    """
 
             # Sensor color
             # metrics = {k: v["value"] for k, v in metrics_dict.items()}
@@ -286,6 +426,14 @@ class BaseMap(Map):
                 metric_color = await self.get_metric_color(primary_type, primary_value)
 
             marker_option = {}
+
+            # rid and dwr_telemetry publish the same station at the same
+            # coordinates, and only one of them usually has readings. Leaflet
+            # stacks markers by insertion order, so the empty one would cover
+            # the one with data and show a grey pin next to a healthy card.
+            # Lift the marker that actually has readings above its twin.
+            z_offset = DATA_MARKER_Z_OFFSET if station.get("metrics") else 0
+            marker_option["zIndexOffset"] = z_offset
 
             if has_wind:
                 wind_speed_val = metrics.get("wind_speed", 0)
@@ -415,13 +563,16 @@ class BaseMap(Map):
                     # rid and dwr publish the same station codes, so a code
                     # maps to a list and (source, code) is the exact key
                     self.metric_markers_by_code.setdefault(code, []).append(marker)
-                    self.metric_markers_by_key[
-                        self.marker_key(source_lower, code)
-                    ] = marker
+                    self.metric_markers_by_key[self.marker_key(source_lower, code)] = (
+                        marker
+                    )
             # Update marker
             else:
                 marker.setIcon(metric_marker)
                 marker.setTooltipContent(tooltip_detail)
+                # a cached marker may have gained or lost readings since the
+                # last update, so re-apply the stacking order
+                marker.setZIndexOffset(z_offset)
 
             if marker not in markers:
                 markers.append(marker)
@@ -443,6 +594,12 @@ class BaseMap(Map):
     async def get_metric_color(self, type_, value):
         return _get_metric_color(type_, value)
 
+    def set_legend(self, levels, title, subtitle=""):
+        """Let the caller own the legend when markers are not coloured by a
+        metric scale — the water monitor colours them by risk instead."""
+        self._legend_override = True
+        self.render_legend(levels, title, subtitle)
+
     async def update_metric_legend(self, document_id):
         """Draw the colour scale of the active metric on top of the map.
 
@@ -450,13 +607,26 @@ class BaseMap(Map):
         same `metric_colors` ranks the markers use, so the legend can never
         describe colours the map does not actually draw.
         """
-        from browser import document as doc
+        if self._legend_override:
+            # A caller already put its own scale there; leave it alone
+            self.metric_legends[document_id] = True
+            return
 
         metric_type = document_id.replace("empirical_", "").lower()
         levels = metric_infos.get_metric_levels(metric_type)
         if not levels:
             self.metric_legends[document_id] = True
             return
+
+        self.render_legend(
+            levels,
+            metric_infos.get_metric_level_title(metric_type),
+            "ระดับความปลอดภัย",
+        )
+        self.metric_legends[document_id] = True
+
+    def render_legend(self, levels, title, subtitle=""):
+        from browser import document as doc
 
         rows = ""
         for level in levels:
@@ -480,14 +650,17 @@ class BaseMap(Map):
             self.leaflet.DomEvent.disableClickPropagation(container)
             self.leaflet.DomEvent.disableScrollPropagation(container)
 
-        title = metric_infos.get_metric_level_title(metric_type)
+        subtitle_html = ""
+        if subtitle:
+            subtitle_html = f'<div class="text-[9px] text-gray-400">{subtitle}</div>'
+
         container.html = f"""
         <div class="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-xl shadow-md px-3 py-2">
             <div class="flex items-center gap-1.5 pb-1 mb-1.5 border-b border-gray-100">
                 <i class="ph ph-palette text-blue-600 text-sm"></i>
                 <div class="leading-tight">
                     <div class="text-[11px] font-semibold text-gray-700">{title}</div>
-                    <div class="text-[9px] text-gray-400">ระดับความปลอดภัย</div>
+                    {subtitle_html}
                 </div>
             </div>
             <div class="flex flex-col gap-1">
@@ -496,10 +669,23 @@ class BaseMap(Map):
         </div>
         """
 
-        self.metric_legends[document_id] = True
-
     def marker_key(self, source, code):
         return f"{str(source).lower()}:{code}"
+
+    def filter_markers_by_keys(self, marker_keys):
+        """Show exactly these `source:code` markers, hide the rest.
+
+        rid and dwr_telemetry publish the same station codes for different
+        stations, so anything that has to tell those two apart — such as
+        hiding only the source that has no readings — must filter by key.
+        """
+        wanted = set(marker_keys)
+        for key, marker in self.metric_markers_by_key.items():
+            on_map = self.map.hasLayer(marker)
+            if key in wanted and not on_map:
+                marker.addTo(self.map)
+            elif key not in wanted and on_map:
+                self.map.removeLayer(marker)
 
     def filter_markers_by_codes(self, station_codes):
         """Keep only the markers for these codes, whatever source they came from.

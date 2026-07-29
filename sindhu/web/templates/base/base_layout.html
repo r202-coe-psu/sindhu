@@ -20,6 +20,9 @@
   <link rel="stylesheet" type="text/css"
     href="{{ 'node_modules/@phosphor-icons/web/src/fill/style.css' | static_url }}">
 
+  {# Chart.js #}
+  <script src="{{ 'node_modules/chart.js/dist/chart.umd.js' | static_url }}"></script>
+
   {% block default_head %}{% endblock %}
   {% include "base/google_analytic.html" %}
   {% block additional_head %}{% endblock %}
