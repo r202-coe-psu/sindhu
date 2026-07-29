@@ -9,7 +9,6 @@ from .map import Map
 from stations import metric_infos
 from stations.metric_colors import get_metric_color as _get_metric_color
 
-
 DATA_MARKER_Z_OFFSET = 1000
 
 
@@ -46,16 +45,24 @@ class BaseMap(Map):
         try:
             # Leaflet tooltipopen event puts the tooltip on `e.tooltip` and its marker on `e.tooltip._source`
             tooltip = getattr(e, "tooltip", None)
-            marker = getattr(tooltip, "_source", None) if tooltip else getattr(e, "sourceTarget", None)
-            
-            if marker is None or not hasattr(marker, "options") or not hasattr(marker.options, "customId"):
+            marker = (
+                getattr(tooltip, "_source", None)
+                if tooltip
+                else getattr(e, "sourceTarget", None)
+            )
+
+            if (
+                marker is None
+                or not hasattr(marker, "options")
+                or not hasattr(marker.options, "customId")
+            ):
                 return
-                
+
             station_id = marker.options.customId
             if station_id not in self.chart_configs:
                 return
             config = self.chart_configs[station_id]
-            
+
             def render_chart():
                 canvas = document.getElementById(f"chart-{station_id}")
                 if not canvas:
@@ -63,20 +70,28 @@ class BaseMap(Map):
                     return
                 if hasattr(canvas, "chart_instance"):
                     return
-                
+
                 window.console.log(f"Rendering chart for station {station_id}")
                 ctx = canvas.getContext("2d")
-                max_val = max(config["current"] * 1.2, (config.get("critical") or 0) * 1.2, (config.get("warning") or 0) * 1.2, 10)
-                
+                max_val = max(
+                    config["current"] * 1.2,
+                    (config.get("critical") or 0) * 1.2,
+                    (config.get("warning") or 0) * 1.2,
+                    10,
+                )
+
                 chart_data = {
                     "type": "bar",
                     "data": {
                         "labels": [""],
-                        "datasets": [{
-                            "data": [config["current"]],
-                            "backgroundColor": "#3b82f6",
-                            "barThickness": 15
-                        }]
+                        "datasets": [
+                            {
+                                "data": [config["current"]],
+                                "backgroundColor": "#3b82f6",
+                                "categoryPercentage": 1.0,
+                                "barPercentage": 1.0,
+                            }
+                        ],
                     },
                     "options": {
                         "responsive": True,
@@ -85,18 +100,14 @@ class BaseMap(Map):
                             "y": {
                                 "min": 0,
                                 "max": max_val,
-                                "grid": {"color": "#e5e7eb"}
+                                "grid": {"color": "#e5e7eb"},
                             },
-                            "x": {
-                                "display": False
-                            }
+                            "x": {"display": False},
                         },
-                        "plugins": {
-                            "legend": {"display": False}
-                        }
-                    }
+                        "plugins": {"legend": {"display": False}},
+                    },
                 }
-                
+
                 js_code = f"""
                 ({{
                     id: 'thresholds_{station_id}',
@@ -136,13 +147,15 @@ class BaseMap(Map):
                     }}
                 }})
                 """
-                
+
                 # Convert Python dict to pure JS object via JSON parse/serialize
                 js_config = window.JSON.parse(json.dumps(chart_data))
                 js_config.plugins = [window.eval(js_code)]
-                
+
                 # Safely instantiate Chart class using JS wrapper function
-                create_chart = window.eval("(function(ctx, config) { return new Chart(ctx, config); })")
+                create_chart = window.eval(
+                    "(function(ctx, config) { return new Chart(ctx, config); })"
+                )
                 canvas.chart_instance = create_chart(ctx, js_config)
 
             timer.set_timeout(render_chart, 50)
@@ -342,18 +355,30 @@ class BaseMap(Map):
                     </div>
                     """
 
-                waterlevel_sensor = metrics_dict.get("waterlevel") or metrics_dict.get("waterlevel_msl")
+                waterlevel_sensor = metrics_dict.get("waterlevel") or metrics_dict.get(
+                    "waterlevel_msl"
+                )
                 has_waterlevel = False
                 if waterlevel_sensor and waterlevel_sensor.get("value") is not None:
                     has_waterlevel = True
                     waterlevel_val = waterlevel_sensor.get("value")
-                    water_level_warning = station.get("metadata", {}).get("water_level_warning")
-                    water_level_critical = station.get("metadata", {}).get("water_level_critical")
-                    
+                    water_level_warning = station.get("metadata", {}).get(
+                        "water_level_warning"
+                    )
+                    water_level_critical = station.get("metadata", {}).get(
+                        "water_level_critical"
+                    )
+
                     self.chart_configs[station["id"]] = {
                         "current": waterlevel_val,
-                        "warning": float(water_level_warning) if water_level_warning else None,
-                        "critical": float(water_level_critical) if water_level_critical else None,
+                        "warning": (
+                            float(water_level_warning) if water_level_warning else None
+                        ),
+                        "critical": (
+                            float(water_level_critical)
+                            if water_level_critical
+                            else None
+                        ),
                     }
 
                 if has_waterlevel:
