@@ -68,8 +68,19 @@ class BaseMap(Map):
                 if not canvas:
                     window.console.log(f"Canvas not found for station {station_id}")
                     return
-                if hasattr(canvas, "chart_instance"):
-                    return
+                # Destroy existing Chart instance if present to prevent memory leaks and canvas reuse errors
+                try:
+                    if hasattr(canvas, "chart_instance") and canvas.chart_instance:
+                        if hasattr(canvas.chart_instance, "destroy"):
+                            canvas.chart_instance.destroy()
+                    elif hasattr(window, "Chart") and hasattr(window.Chart, "getChart"):
+                        existing_chart = window.Chart.getChart(canvas)
+                        if existing_chart:
+                            existing_chart.destroy()
+                except Exception as destroy_err:
+                    window.console.log(
+                        f"Error destroying previous chart: {destroy_err}"
+                    )
 
                 window.console.log(f"Rendering chart for station {station_id}")
                 ctx = canvas.getContext("2d")
