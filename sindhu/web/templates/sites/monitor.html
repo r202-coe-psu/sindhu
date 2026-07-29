@@ -83,6 +83,13 @@
                 <option value="bubble">รูปแบบ: Bubble Map</option>
             </select>
         </div>
+        {# The map draws every station, the list only those with readings — let the two be lined up #}
+        <div class="px-3 pb-3 pt-0 bg-gray-50 border-b border-gray-100">
+            <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-600">
+                <input type="checkbox" id="hide_no_data" class="checkbox checkbox-xs checkbox-primary" />
+                <span>ซ่อนสถานีที่ไม่มีข้อมูลบนแผนที่</span>
+            </label>
+        </div>
 
         {# Data List #}
         <div id="reservoir_data_list" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30 custom-scrollbar">
