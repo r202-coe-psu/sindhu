@@ -14,7 +14,6 @@ class Map:
         self.markers = None
         self.user_coord = None
         self.user_mark = []
-        self.icon_types = {"default": "fire", "my_location": "my_location"}
 
         self.openstreet = self.leaflet.tileLayer(
             "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
@@ -409,22 +408,24 @@ class Map:
 
     def place_pin(self, lat, lng):
         self.user_coord = (lat, lng)
+        pin_icon = self.leaflet.divIcon(
+            {
+                "className": "",
+                "html": '<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><svg width="30" height="40" viewBox="0 0 30 40"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="#dc2626"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg></div>',
+                "iconSize": [30, 40],
+                "iconAnchor": [15, 40],
+                "popupAnchor": [0, -36],
+            }
+        )
         if (
             hasattr(self, "user_mark")
             and self.user_mark
             and not isinstance(self.user_mark, list)
         ):
             self.user_mark.setLatLng(self.user_coord)
+            self.user_mark.setIcon(pin_icon)
+            self.user_mark.setPopupContent("ตำแหน่งที่เลือก")
         else:
-            pin_icon = self.leaflet.divIcon(
-                {
-                    "className": "",
-                    "html": '<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><svg width="30" height="40" viewBox="0 0 30 40"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="#dc2626"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg></div>',
-                    "iconSize": [30, 40],
-                    "iconAnchor": [15, 40],
-                    "popupAnchor": [0, -36],
-                }
-            )
             self.user_mark = (
                 self.leaflet.marker(
                     self.user_coord,
@@ -544,18 +545,30 @@ class Map:
 
             self.map.flyTo(self.user_coord, 16)
 
+            my_location_icon = self.leaflet.divIcon(
+                {
+                    "className": "",
+                    "html": '<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><i class="ph-fill ph-map-pin text-blue-600 text-3xl"></i></div>',
+                    "iconSize": [30, 30],
+                    "iconAnchor": [15, 30],
+                    "popupAnchor": [0, -30],
+                }
+            )
+
             if (
                 hasattr(self, "user_mark")
                 and self.user_mark
                 and not isinstance(self.user_mark, list)
             ):
                 self.user_mark.setLatLng(self.user_coord)
+                self.user_mark.setIcon(my_location_icon)
+                self.user_mark.setPopupContent("ตำแหน่งของคุณ")
             else:
                 self.user_mark = (
                     self.leaflet.marker(
                         self.user_coord,
                         {
-                            "icon": self.get_icon("my_location"),
+                            "icon": my_location_icon,
                             "zIndexOffset": 1000,
                         },
                     )
@@ -861,16 +874,6 @@ class Map:
 
     def get_shape(self):
         return self.geojson
-
-    def get_icon(self, type="default"):
-        return self.leaflet.icon(
-            dict(
-                iconUrl=f"/static/resources/marks/{self.icon_types[type]}.svg",
-                iconSize=[35, 35],
-                iconAnchor=[22, 40],
-                popupAnchor=[0, -30],
-            )
-        )
 
     def load_river_basins(self, api_url):
         """ฟังก์ชันสำหรับดึงข้อมูล GeoJSON ลุ่มน้ำจาก API และวาดลงแผนที่"""
