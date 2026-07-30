@@ -551,11 +551,20 @@ class Map:
             ):
                 self.user_mark.setLatLng(self.user_coord)
             else:
+                my_location_icon = self.leaflet.divIcon(
+                    {
+                        "className": "",
+                        "html": '<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><i class="ph-fill ph-map-pin text-blue-600 text-3xl"></i></div>',
+                        "iconSize": [30, 30],
+                        "iconAnchor": [15, 30],
+                        "popupAnchor": [0, -30],
+                    }
+                )
                 self.user_mark = (
                     self.leaflet.marker(
                         self.user_coord,
                         {
-                            "icon": self.get_icon("my_location"),
+                            "icon": my_location_icon,
                             "zIndexOffset": 1000,
                         },
                     )
