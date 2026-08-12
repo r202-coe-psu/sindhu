@@ -3,3 +3,4 @@ __pycache__
 .git
 sindhu/web/static/node_modules
 mageai/mageai_home/mage_data
+backups/
