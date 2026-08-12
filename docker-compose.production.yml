@@ -2,6 +2,9 @@ services:
   mongodb:
     image: mongo:7
     container_name: sindhu-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
     ports:
       - "${PROD_INTERNAL_IP}:27017:27017"
     volumes:
