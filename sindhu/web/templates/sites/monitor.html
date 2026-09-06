@@ -150,7 +150,8 @@
   monitors = WaterMonitor(
     "{{ g.lang_code }}",
     "{{ api_url }}",
-    "{{ source }}"
+    "{{ source }}",
+    reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}"
     )
   monitors.start()
 </script>

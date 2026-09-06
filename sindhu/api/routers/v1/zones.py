@@ -75,9 +75,8 @@ async def create(
             status_code=http_status.HTTP_409_CONFLICT,
             detail="This zone already exists",
         )
-    db_stations = await models.Station.find(
-        {"_id": {"$in": zone_form.station_ids}}
-    ).to_list()
+    station_ids = [] if zone_form.zone_kind == "reference" else zone_form.station_ids
+    db_stations = await models.Station.find({"_id": {"$in": station_ids}}).to_list()
     zone = models.Zone(**zone_form.model_dump(exclude={"station_ids"}))
     zone.stations = db_stations
     await zone.insert()
@@ -96,9 +95,8 @@ async def update(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found zone",
         )
-    db_stations = await models.Station.find(
-        {"_id": {"$in": zone_form.station_ids}}
-    ).to_list()
+    station_ids = [] if zone_form.zone_kind == "reference" else zone_form.station_ids
+    db_stations = await models.Station.find({"_id": {"$in": station_ids}}).to_list()
     for key, value in zone_form.model_dump(exclude={"station_ids"}).items():
         setattr(db_zone, key, value)
     db_zone.stations = db_stations

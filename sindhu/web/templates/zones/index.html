@@ -30,6 +30,7 @@
             <h3 class="text-lg font-bold text-gray-800 mb-4" id="form-title">สร้างลุ่มน้ำใหม่</h3>
             <form id="zone-form" class="space-y-3">
                 <input type="hidden" id="zone-id" />
+                <input type="hidden" id="zone-kind" value="flood" />
                 <div>
                     <label class="label text-sm font-medium text-gray-600">ชื่อ (EN)</label>
                     <input id="zone-name" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. Songkhla Lake Basin" required />
@@ -85,7 +86,8 @@
 <script>
 const API_URL = "{{ api_url }}";
 const TOKEN_URL = "{{ url_for('accounts.get_token') }}";
-let map, drawnItems, drawControl, editingZoneId = null, allZoneLayers = {};
+const HATYAI_BOUNDARY_URL = "{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}";
+let map, drawnItems, drawControl, editingZoneId = null, allZoneLayers = {}, referenceBoundaryLayer = null;
 let allStations = [], selectedStationIds = [];
 
 async function fetchStations() {
@@ -296,19 +298,49 @@ function renderZoneList(zones) {
 function renderZonesOnMap(zones) {
     Object.values(allZoneLayers).forEach(l => map.removeLayer(l));
     allZoneLayers = {};
+    if (referenceBoundaryLayer) {
+        map.removeLayer(referenceBoundaryLayer);
+        referenceBoundaryLayer = null;
+    }
     zones.forEach(z => {
         if (!z.boundary) return;
+        const isReference = z.zone_kind === "reference";
+        if (isReference) {
+            referenceBoundaryLayer = L.geoJson({ type: "Feature", geometry: z.boundary }, {
+                interactive: false,
+                style: { fillColor: "#000000", color: "#000000", opacity: 1, weight: 2, fillOpacity: 0 }
+            }).addTo(map);
+            return;
+        }
         const layer = L.geoJson({ type: "Feature", geometry: z.boundary, properties: { name: z.name_th || z.name } }, {
+            interactive: !isReference,
             style: { fillColor: "#3b82f6", fillOpacity: 0.1, color: "#2563eb", weight: 1.5, dashArray: "5,5" }
         }).bindTooltip(z.name_th || z.name, { sticky: true }).addTo(map);
         allZoneLayers[z.id] = layer;
     });
+    if (referenceBoundaryLayer) referenceBoundaryLayer.bringToFront();
+}
+
+async function renderDefaultReferenceBoundary() {
+    try {
+        const res = await fetch(HATYAI_BOUNDARY_URL, { cache: "no-cache" });
+        if (!res.ok) return;
+        const boundary = await res.json();
+        if (referenceBoundaryLayer) map.removeLayer(referenceBoundaryLayer);
+        referenceBoundaryLayer = L.geoJson({ type: "Feature", geometry: boundary }, {
+            interactive: false,
+            style: { fillColor: "#000000", color: "#000000", opacity: 1, weight: 2, fillOpacity: 0 }
+        }).addTo(map);
+    } catch(e) { console.error(e); }
 }
 
 async function loadZones() {
     zonesCache = await fetchZones();
     renderZoneList(zonesCache);
     renderZonesOnMap(zonesCache);
+    if (!zonesCache.some(z => z.zone_kind === "reference")) {
+        await renderDefaultReferenceBoundary();
+    }
 }
 
 function selectZone(id) {
@@ -328,6 +360,7 @@ function editZone(id) {
     document.getElementById("zone-name").value = z.name || "";
     document.getElementById("zone-name-th").value = z.name_th || "";
     document.getElementById("zone-code").value = z.code || "";
+    document.getElementById("zone-kind").value = z.zone_kind || "flood";
     selectedStationIds = (z.stations || []).map(s => s.id);
     document.getElementById("station-search").value = "";
     document.getElementById("station-dropdown").classList.add("hidden");
@@ -350,6 +383,7 @@ function resetForm() {
     editingZoneId = null;
     document.getElementById("zone-form").reset();
     document.getElementById("zone-id").value = "";
+    document.getElementById("zone-kind").value = "flood";
     document.getElementById("zone-boundary").value = "";
     selectedStationIds = [];
     renderStationChips();
@@ -402,6 +436,7 @@ document.addEventListener("DOMContentLoaded", function() {
             name: document.getElementById("zone-name").value.trim(),
             name_th: document.getElementById("zone-name-th").value.trim() || null,
             code: document.getElementById("zone-code").value.trim(),
+            zone_kind: document.getElementById("zone-kind").value || "flood",
             boundary: boundaryGeom,
             station_ids: selectedStationIds,
         };

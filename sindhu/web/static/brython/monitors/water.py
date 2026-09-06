@@ -17,6 +17,7 @@ class WaterMonitor(BaseMonitor):
         source,
         center=None,
         zoom=None,
+        reference_boundary_url=None,
     ):
         super().__init__(
             lang_code=lang_code,
@@ -24,6 +25,7 @@ class WaterMonitor(BaseMonitor):
             source=source,
             center=center,
             zoom=zoom,
+            reference_boundary_url=reference_boundary_url,
         )
         self.monitor_name = "water"
 
@@ -103,7 +105,8 @@ class WaterMonitor(BaseMonitor):
         aio.run(self.monitor())
 
     async def monitor(self):
-        await self.setup()
+        if not await self.setup():
+            return
 
         # Bind UI events
         if "marker_style_selector" in document:
@@ -111,21 +114,13 @@ class WaterMonitor(BaseMonitor):
                 "change", self.on_marker_style_change
             )
 
-        # Load and render river waterways
-        try:
-            rivers_response = await aio.get("/static/resources/rivers.geojson")
-            rivers_data = json.loads(rivers_response.data)
-            self.map.set_rivers_layer(rivers_data)
-        except Exception as e:
-            print(f"Failed to load rivers: {e}")
-
         if "source_selector" in document:
             document["source_selector"].bind("change", self.on_source_change)
 
         if "hide_no_data" in document:
             document["hide_no_data"].bind("change", self.on_hide_no_data_change)
 
-        if self.running:
+        while self.running:
             print(f"monitor: wake up {datetime.datetime.now()}")
             print(f"monitor: {self.monitor_name} monitor")
             print(f"monitor: sleep {self.acquisition_interval}s")
@@ -142,17 +137,20 @@ class WaterMonitor(BaseMonitor):
         self.set_map_loading(True)
         try:
             response = await aio.get(url, cache=True)
+            if response.status != 200:
+                raise RuntimeError(f"station metrics returned HTTP {response.status}")
             data = json.loads(response.data)
             if not data or not isinstance(data, dict):
                 print(f"monitor: error data is invalid: {data}")
                 return
 
             for station in data.get("stations") or []:
-                if not station or not isinstance(station, dict):
-                    continue
-                risk, _, _ = self.calculate_risk(station)
-                level = metric_infos.get_risk_level(risk)
+                risk, waterlevel, diff_wl_bank = self.calculate_risk(station)
                 station["risk"] = risk
+                station["waterlevel"] = waterlevel
+                station["diff_wl_bank"] = diff_wl_bank
+                
+                level = metric_infos.get_risk_level(risk)
                 station["risk_color"] = level["color"]
                 station["risk_percent"] = 100
 
@@ -175,8 +173,19 @@ class WaterMonitor(BaseMonitor):
             self.render_data_list()
         except Exception as e:
             print(f"monitor: error {e}")
+            self.render_data_error("โหลดข้อมูลสถานีไม่สำเร็จ กรุณาลองใหม่อีกครั้ง")
         finally:
             self.set_map_loading(False)
+
+    def render_data_error(self, message):
+        if "reservoir_data_list" not in document:
+            return
+        document["reservoir_data_list"].html = f"""
+        <div class="flex flex-col items-center justify-center h-full text-center gap-2 px-4">
+            <i class="ph ph-warning-circle text-4xl text-amber-500"></i>
+            <div class="text-sm font-medium text-gray-600">{message}</div>
+        </div>
+        """
 
     def on_marker_style_change(self, ev):
         if hasattr(self, "map") and self.latest_data:
@@ -330,6 +339,8 @@ class WaterMonitor(BaseMonitor):
         """Colour every zone by its worst station, so the whole province can
         be read at a glance without picking a zone first."""
         for zone in self.zones or []:
+            if zone.get("zone_kind") == "reference":
+                continue
             zone_id = str(zone.get("id", "") or "")
             if zone_id:
                 self.map.set_zone_risk(zone_id, self.zone_risk_level(zone))

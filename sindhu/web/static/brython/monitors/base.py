@@ -1,4 +1,4 @@
-from browser import aio, timer, document, ajax, window
+from browser import aio, document, ajax, window
 import javascript as js
 
 import datetime
@@ -16,6 +16,7 @@ class BaseMonitor:
         source=None,
         center=None,
         zoom=None,
+        reference_boundary_url=None,
     ):
         self.lang_code = lang_code
         self.acquisition_interval = 60 * 60
@@ -26,6 +27,7 @@ class BaseMonitor:
         self.source = source
         self.center = center
         self.zoom = zoom
+        self.reference_boundary_url = reference_boundary_url
 
         self.monitor_name = "base"
 
@@ -57,33 +59,84 @@ class BaseMonitor:
             await aio.sleep(self.acquisition_interval)
 
     async def setup(self):
-        response = await aio.get(self.apis["system_settings"], cache=True)
-        self.system_setting = js.JSON.parse(response.data)
+        """Initialise the map without leaving the page in a permanent loader.
 
-        center = self.system_setting["center"]["coordinates"]
-        zoom = self.system_setting["zoom"]
-        min_zoom = self.system_setting["min_zoom"]
+        The API is the authority for map configuration and zones.  If it is
+        unavailable we deliberately do not create a map with guessed bounds;
+        instead the user gets a clear retry action and the next retry uses the
+        API again.
+        """
+        self.set_map_loading(True)
+        try:
+            response = await aio.get(self.apis["system_settings"], cache=True)
+            if response.status != 200:
+                raise RuntimeError(f"system settings returned HTTP {response.status}")
 
-        self.map = BaseMap([center[1], center[0]], zoom, min_zoom, self.lang_code)
-        self.map.load_river_basins(self.api_url)
+            self.system_setting = json.loads(response.data)
+            center = self.system_setting.get("center", {}).get("coordinates")
+            zoom = self.system_setting.get("zoom")
+            min_zoom = self.system_setting.get("min_zoom")
+            if not isinstance(center, list) or len(center) != 2:
+                raise ValueError("system settings has no valid map center")
+            if zoom is None or min_zoom is None:
+                raise ValueError("system settings has no valid zoom configuration")
+
+            if not hasattr(self, "map"):
+                self.map = BaseMap([center[1], center[0]], zoom, min_zoom, self.lang_code)
+                self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
+                self.map.load_river_basins(self.api_url)
+
+            await self.load_zones()
+
+            if "my_locate" in document and not getattr(self, "_locate_bound", False):
+                document["my_locate"].bind("click", lambda ev: self.map.fly_to_user())
+                self._locate_bound = True
+        except Exception as e:
+            print(f"monitor setup error: {e}")
+            self.set_map_error("เชื่อมต่อข้อมูลแผนที่ไม่ได้ กรุณาตรวจสอบ API แล้วลองใหม่")
+            return False
+
         self.set_map_loading(False)
-
-        self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
-
-        await self.load_zones()
-
-        if "my_locate" in document:
-            document["my_locate"].bind("click", lambda ev: self.map.fly_to_user())
+        return True
 
     async def load_zones(self):
         """Draw every zone up front so a zone can be picked without pinning."""
         try:
             response = await aio.get(self.apis["zones"], cache=True)
+            if response.status != 200:
+                raise RuntimeError(f"zones returned HTTP {response.status}")
             data = json.loads(response.data)
-            self.zones = data.get("zones", [])
-            self.map.show_all_zones(self.zones, on_select=self.on_zone_selected)
+            zones = data.get("zones", [])
+            if not isinstance(zones, list):
+                raise ValueError("zones response is invalid")
         except Exception as e:
             print(f"load_zones error: {e}")
+            # Preserve zones already rendered during a transient refresh error.
+            if self.zones:
+                return False
+            raise
+
+        self.zones = zones
+        self.map.show_all_zones(self.zones, on_select=self.on_zone_selected)
+        if not any(
+            zone.get("zone_kind", "flood") == "reference"
+            for zone in self.zones
+            if isinstance(zone, dict)
+        ):
+            await self.load_default_reference_boundary()
+        return True
+
+    async def load_default_reference_boundary(self):
+        """Keep the Hat Yai boundary visible even before the seed is rerun."""
+        if not self.reference_boundary_url:
+            return
+
+        try:
+            response = await aio.get(self.reference_boundary_url, cache=True)
+            boundary = json.loads(response.data)
+            self.map.show_reference_boundary(boundary, "ขอบเขตหาดใหญ่")
+        except Exception as e:
+            print(f"reference boundary error: {e}")
 
     def on_zone_selected(self, zone):
         """Called when a user clicks a zone polygon on the map."""
@@ -196,14 +249,39 @@ class BaseMonitor:
         pass
 
     def on_filter_clicked(self, ev):
-        timer.set_timeout(lambda: aio.run(self.on_filter(ev)), 50)
+        window.setTimeout(lambda: aio.run(self.on_filter(ev)), 50)
 
     async def on_filter(self, ev):
         return
 
     def set_map_loading(self, is_loading: bool):
         el = document["loading_map"]
+        message = document["loading_map_message"]
+        spinner = document["loading_map_spinner"]
+        retry = document["retry_map_loading"]
         if is_loading:
+            message.text = "กำลังโหลดแผนที่..."
+            message.classList.add("animate-pulse")
+            spinner.classList.remove("hidden")
+            retry.classList.add("hidden")
             el.classList.remove("opacity-0", "pointer-events-none")
         else:
             el.classList.add("opacity-0", "pointer-events-none")
+
+    def set_map_error(self, message):
+        """Replace the spinner with an actionable failure state."""
+        el = document["loading_map"]
+        message_el = document["loading_map_message"]
+        spinner = document["loading_map_spinner"]
+        retry = document["retry_map_loading"]
+        message_el.text = message
+        message_el.classList.remove("animate-pulse")
+        spinner.classList.add("hidden")
+        retry.classList.remove("hidden")
+        retry.unbind("click")
+        retry.bind("click", lambda ev: aio.run(self.retry_setup()))
+        el.classList.remove("opacity-0", "pointer-events-none")
+
+    async def retry_setup(self):
+        if await self.setup() and hasattr(self, "get_stations_metrics"):
+            await self.get_stations_metrics()

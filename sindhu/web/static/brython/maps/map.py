@@ -97,6 +97,8 @@ class Map:
         self._selected_zone_id = None
         self._on_zone_select = None
         self._zone_renderer = None
+        self.reference_boundary_layer = None
+        self._reference_boundary_renderer = None
 
         # A canvas renderer covers the whole overlay pane and would swallow
         # every click meant for the zone pane below it, so overlays that only
@@ -135,6 +137,13 @@ class Map:
         "weight": 1.5,
         "opacity": 1,
         "dashArray": "",
+    }
+    REFERENCE_BOUNDARY_STYLE = {
+        "fillColor": "#000000",
+        "color": "#000000",
+        "weight": 2,
+        "opacity": 1,
+        "fillOpacity": 0,
     }
 
     def set_zone_risk(self, zone_id, level):
@@ -191,6 +200,7 @@ class Map:
         """
         self._on_zone_select = on_select
         self.clear_all_zones()
+        self.clear_reference_boundary()
 
         if not zones:
             return
@@ -207,6 +217,13 @@ class Map:
         for zone in zones:
             boundary = zone.get("boundary")
             if not boundary:
+                continue
+
+            if zone.get("zone_kind", "flood") == "reference":
+                self.show_reference_boundary(
+                    boundary,
+                    zone.get("name_th") or zone.get("name") or "ขอบเขตหาดใหญ่",
+                )
                 continue
 
             zone_id = str(zone.get("id", ""))
@@ -305,6 +322,56 @@ class Map:
             self.map.removeLayer(entry["layer"])
         self.zone_layers_by_id = {}
         self._selected_zone_id = None
+
+    def show_reference_boundary(self, boundary, name="ขอบเขตหาดใหญ่"):
+        """Draw a permanent, non-interactive boundary reference.
+
+        This layer is intentionally kept outside ``zone_layers_by_id`` so it
+        cannot be selected or recoloured by flood-zone risk updates.
+        """
+        if not boundary:
+            return False
+
+        self.clear_reference_boundary()
+
+        pane = self.map.getPane("reference-boundary")
+        if not pane:
+            pane = self.map.createPane("reference-boundary")
+            pane.style.zIndex = "360"
+
+        if self._reference_boundary_renderer is None:
+            self._reference_boundary_renderer = self.leaflet.svg(
+                {"pane": "reference-boundary"}
+            )
+
+        feature = boundary
+        if boundary.get("type") != "Feature":
+            feature = {
+                "type": "Feature",
+                "properties": {"name": name},
+                "geometry": boundary,
+            }
+
+        layer = self.leaflet.geoJson(
+            feature,
+            {
+                "pane": "reference-boundary",
+                "renderer": self._reference_boundary_renderer,
+                "interactive": False,
+                "style": lambda f: dict(self.REFERENCE_BOUNDARY_STYLE),
+            },
+        ).addTo(self.map)
+        self.reference_boundary_layer = layer
+        self.shapes["reference_boundary"] = layer
+        return True
+
+    def clear_reference_boundary(self):
+        """Remove and forget the reference layer when reloading map data."""
+        if self.reference_boundary_layer is not None:
+            if self.map.hasLayer(self.reference_boundary_layer):
+                self.map.removeLayer(self.reference_boundary_layer)
+            self.reference_boundary_layer = None
+        self.shapes.pop("reference_boundary", None)
 
     def __del__(self):
         self.map.remove()
