@@ -102,7 +102,7 @@ class BaseMonitor:
     async def load_zones(self):
         """Draw every zone up front so a zone can be picked without pinning."""
         try:
-            response = await aio.get(self.apis["zones"], cache=True)
+            response = await aio.get(self.apis["zones"], cache=False)
             if response.status != 200:
                 raise RuntimeError(f"zones returned HTTP {response.status}")
             data = json.loads(response.data)

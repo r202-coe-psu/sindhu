@@ -14,7 +14,11 @@ router = APIRouter(prefix="/zones", tags=["zones"])
 async def get_all(
     status: str = "active",
 ) -> schemas.zones.ZoneList:
-    zones = await models.Zone.find({"status": status}, fetch_links=True).to_list()
+    if status == "all":
+        query = {"status": {"$ne": "delete"}}
+    else:
+        query = {"status": status}
+    zones = await models.Zone.find(query, fetch_links=True).to_list()
     return schemas.zones.ZoneList(zones=zones)
 
 

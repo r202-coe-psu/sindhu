@@ -17,7 +17,36 @@
 
     {# Map #}
     <div class="lg:col-span-2">
-        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden relative" style="height: 600px;">
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden relative" style="height: 680px;">
+            {# Floating Map Mode Controls #}
+            <div class="absolute top-3 right-3 z-[1000] flex items-center gap-2 bg-white/95 backdrop-blur-sm border border-gray-200 shadow-md rounded-xl p-1.5 text-xs">
+                <span class="font-bold text-gray-600 px-1 flex items-center gap-1">
+                    <i class="ph ph-sliders"></i> พรีวิว:
+                </span>
+                <div class="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200" role="group">
+                    <button id="admin-view-actual" type="button" onclick="setAdminViewShading('actual')"
+                        class="px-2 py-1 rounded-md font-bold transition-all bg-white shadow-sm text-blue-700">
+                        ตามค่าจริง
+                    </button>
+                    <button id="admin-view-outline" type="button" onclick="setAdminViewShading('outline')"
+                        class="px-2 py-1 rounded-md font-medium transition-all text-slate-600 hover:text-slate-900">
+                        เฉพาะกรอบ
+                    </button>
+                    <button id="admin-view-shaded" type="button" onclick="setAdminViewShading('shaded')"
+                        class="px-2 py-1 rounded-md font-medium transition-all text-slate-600 hover:text-slate-900">
+                        แรเงาสี
+                    </button>
+                </div>
+                <button id="btn-toggle-all-layers" type="button" onclick="toggleAllAdminLayers()" title="เปิด/ปิดแสดงโซนทั้งหมดบนแผนที่นี้"
+                    class="btn btn-ghost btn-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 px-2 flex items-center gap-1">
+                    <i id="admin-toggle-all-icon" class="ph ph-eye text-xs"></i>
+                    <span id="admin-toggle-all-text">ซ่อนทั้งหมด</span>
+                </button>
+                <button type="button" onclick="fitAllZones()" title="จัดกึ่งกลางแผนที่"
+                    class="btn btn-ghost btn-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 px-2">
+                    <i class="ph ph-arrows-out-simple"></i>
+                </button>
+            </div>
             <div id="zone-map" style="height:100%;width:100%;z-index:1;"></div>
         </div>
     </div>
@@ -25,26 +54,114 @@
     {# Panel #}
     <div class="lg:col-span-1 flex flex-col gap-4">
 
-        {# Form #}
-        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
-            <h3 class="text-lg font-bold text-gray-800 mb-4" id="form-title">สร้างลุ่มน้ำใหม่</h3>
+        {# Zone List Card #}
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden flex flex-col">
+            <div class="p-3.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5">
+                        <i class="ph ph-map-trifold text-blue-600"></i> โซนทั้งหมด
+                    </span>
+                    <span id="zone-count" class="badge badge-sm badge-primary">0</span>
+                </div>
+                <button type="button" onclick="resetForm(); scrollToForm();" class="btn btn-primary btn-xs rounded-lg gap-1">
+                    <i class="ph ph-plus text-xs"></i> สร้างใหม่
+                </button>
+            </div>
+            <div class="px-3 py-1.5 bg-blue-50/60 border-b border-blue-100/60 text-[11px] text-blue-700 flex items-center gap-1.5">
+                <i class="ph ph-info shrink-0 text-xs"></i>
+                <span>คลิกปุ่มสถานะหรือแรเงาด้านล่าง เพื่อสลับการตั้งค่าได้ทันที</span>
+            </div>
+            <div id="zone-list" class="divide-y divide-gray-100 max-h-[360px] overflow-y-auto custom-scrollbar">
+                <div class="p-4 text-center text-sm text-gray-400">กำลังโหลด...</div>
+            </div>
+        </div>
+
+        {# Form Card #}
+        <div id="zone-form-card" class="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
+            <h3 class="text-base font-bold text-gray-800 mb-3" id="form-title">สร้างลุ่มน้ำใหม่</h3>
             <form id="zone-form" class="space-y-3">
                 <input type="hidden" id="zone-id" />
                 <input type="hidden" id="zone-kind" value="flood" />
-                <div>
-                    <label class="label text-sm font-medium text-gray-600">ชื่อ (EN)</label>
-                    <input id="zone-name" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. Songkhla Lake Basin" required />
+
+                {# Status Switch #}
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                    <div>
+                        <label class="text-xs font-bold text-gray-700 block">เปิด/ปิดการแสดงผลโซน</label>
+                        <span id="zone-status-desc" class="text-[11px] text-emerald-600 font-medium flex items-center gap-1"><i class="ph ph-check-circle text-xs"></i> แสดงผลบนหน้ามอนิเตอร์สาธารณะ</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="zone-status-toggle" class="sr-only peer" checked onchange="onFormStatusChange()" />
+                        <div class="w-10 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                        <span id="zone-status-text" class="ml-2 text-xs font-bold text-emerald-600">เปิด</span>
+                    </label>
                 </div>
                 <div>
-                    <label class="label text-sm font-medium text-gray-600">ชื่อ (TH)</label>
-                    <input id="zone-name-th" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. ลุ่มน้ำทะเลสาบสงขลา" />
+                    <label class="label text-xs font-semibold text-gray-600 py-0.5">ชื่อ (EN)</label>
+                    <input id="zone-name" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. Zone 1" required />
                 </div>
                 <div>
-                    <label class="label text-sm font-medium text-gray-600">รหัส</label>
-                    <input id="zone-code" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. songkhla-lake" required />
+                    <label class="label text-xs font-semibold text-gray-600 py-0.5">ชื่อ (TH)</label>
+                    <input id="zone-name-th" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. โซน 1 (ทิศใต้)" />
                 </div>
                 <div>
-                    <label class="label text-sm font-medium text-gray-600">สถานี</label>
+                    <label class="label text-xs font-semibold text-gray-600 py-0.5">รหัส</label>
+                    <input id="zone-code" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. songkhla-zone-1" required />
+                </div>
+
+                {# Style and Shading Controls #}
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                    <div class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                        <span class="flex items-center gap-1.5">
+                            <i class="ph ph-palette text-blue-600 text-sm"></i>
+                            การแสดงผลบนแผนที่
+                        </span>
+                        <span id="form-style-badge" class="badge badge-xs badge-ghost">เฉพาะกรอบ</span>
+                    </div>
+
+                    {# Shading Mode Option #}
+                    <div>
+                        <label class="label text-xs font-semibold text-gray-600 py-0.5">รูปแบบการแสดงผล</label>
+                        <div class="grid grid-cols-2 gap-2 mt-1">
+                            <label class="flex items-center gap-2 p-2 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-blue-400 transition-colors">
+                                <input type="radio" name="form-shading-mode" value="outline" class="radio radio-xs radio-primary" checked onchange="onFormStyleChange()" />
+                                <span class="text-xs font-medium text-gray-700">เฉพาะกรอบ (Outline)</span>
+                            </label>
+                            <label class="flex items-center gap-2 p-2 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-blue-400 transition-colors">
+                                <input type="radio" name="form-shading-mode" value="shaded" class="radio radio-xs radio-primary" onchange="onFormStyleChange()" />
+                                <span class="text-xs font-medium text-gray-700">แรเงาสี (Shaded)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    {# Color Selection #}
+                    <div>
+                        <label class="label text-xs font-semibold text-gray-600 py-0.5">สีประจำโซน</label>
+                        <div class="flex items-center gap-2 mt-1">
+                            <input id="zone-color" type="color" value="#2563eb" class="w-9 h-8 p-0 border border-gray-300 rounded cursor-pointer" oninput="onColorPickerChange(this.value)" />
+                            <input id="zone-color-hex" type="text" value="#2563EB" class="input input-bordered input-sm font-mono text-xs w-28 uppercase" oninput="onColorHexChange(this.value)" />
+
+                            <div class="flex items-center gap-1.5 ml-auto">
+                                <button type="button" class="w-5 h-5 rounded-full border border-white shadow-sm hover:scale-125 transition-transform" style="background-color: #4C3F8F;" title="โซน 1 (ม่วง)" onclick="selectPresetColor('#4C3F8F')"></button>
+                                <button type="button" class="w-5 h-5 rounded-full border border-white shadow-sm hover:scale-125 transition-transform" style="background-color: #3F8F91;" title="โซน 2 (เขียวอมฟ้า)" onclick="selectPresetColor('#3F8F91')"></button>
+                                <button type="button" class="w-5 h-5 rounded-full border border-white shadow-sm hover:scale-125 transition-transform" style="background-color: #55A7D9;" title="โซน 3 (ฟ้า)" onclick="selectPresetColor('#55A7D9')"></button>
+                                <button type="button" class="w-5 h-5 rounded-full border border-white shadow-sm hover:scale-125 transition-transform" style="background-color: #6EDDE2;" title="โซน 4 (ฟ้าอ่อน)" onclick="selectPresetColor('#6EDDE2')"></button>
+                                <button type="button" class="w-5 h-5 rounded-full border border-white shadow-sm hover:scale-125 transition-transform" style="background-color: #0F172A;" title="กรอบหาดใหญ่ (ดำ/กรม)" onclick="selectPresetColor('#0F172A')"></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {# Fill Opacity Slider #}
+                    <div id="opacity-control-group">
+                        <div class="flex justify-between items-center py-0.5">
+                            <label class="text-xs font-semibold text-gray-600">ความโปร่งแสงแรเงา</label>
+                            <span id="zone-opacity-label" class="text-xs font-mono text-gray-500">28%</span>
+                        </div>
+                        <input id="zone-opacity" type="range" min="10" max="80" value="28" class="range range-xs range-primary" oninput="onOpacitySliderChange(this.value)" />
+                    </div>
+                </div>
+
+                <div>
+                    <label class="label text-xs font-semibold text-gray-600 py-0.5">สถานี</label>
                     <div class="relative">
                         <input id="station-search" type="text" autocomplete="off" class="input input-bordered input-sm w-full" placeholder="ค้นหาชื่อหรือรหัสสถานี..." />
                         <div id="station-dropdown" class="hidden absolute z-[1100] mt-1 w-full max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg custom-scrollbar"></div>
@@ -52,8 +169,8 @@
                     <div id="station-chips" class="flex flex-wrap gap-1 mt-2"></div>
                 </div>
                 <div>
-                    <label class="label text-sm font-medium text-gray-600">ขอบเขต (GeoJSON) — วาดบนแผนที่ หรือวาง/แก้พิกัด</label>
-                    <textarea id="zone-boundary" rows="5" class="textarea textarea-bordered textarea-sm w-full font-mono text-xs leading-tight" placeholder='{"type":"Polygon","coordinates":[[[100.5,7.0],[100.6,7.0],[100.6,7.1],[100.5,7.0]]]}'></textarea>
+                    <label class="label text-xs font-semibold text-gray-600 py-0.5">ขอบเขต (GeoJSON) — วาดบนแผนที่ หรือวาง/แก้พิกัด</label>
+                    <textarea id="zone-boundary" rows="4" class="textarea textarea-bordered textarea-sm w-full font-mono text-xs leading-tight" placeholder='{"type":"Polygon","coordinates":[[[100.5,7.0],[100.6,7.0],[100.6,7.1],[100.5,7.0]]]}'></textarea>
                     <div id="boundary-json-error" class="text-xs text-red-600 hidden mt-1"></div>
                 </div>
                 <div id="boundary-status" class="text-xs text-amber-600 hidden">
@@ -68,17 +185,6 @@
                     </button>
                 </div>
             </form>
-        </div>
-
-        {# Zone List #}
-        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden flex flex-col" style="max-height: 320px;">
-            <div class="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
-                <span class="font-bold text-gray-700 text-sm">ลุ่มน้ำทั้งหมด</span>
-                <span id="zone-count" class="badge badge-sm badge-primary">0</span>
-            </div>
-            <div id="zone-list" class="flex-1 overflow-y-auto divide-y divide-gray-100 custom-scrollbar">
-                <div class="p-4 text-center text-sm text-gray-400">กำลังโหลด...</div>
-            </div>
         </div>
     </div>
 </div>
@@ -235,7 +341,7 @@ function initMap() {
 
 async function fetchZones() {
     try {
-        const res = await fetch(API_URL + "/v1/zones?status=active");
+        const res = await fetch(API_URL + "/v1/zones?status=all");
         const data = await res.json();
         return data.zones || [];
     } catch(e) { console.error(e); return []; }
@@ -267,32 +373,310 @@ async function deleteZone(zoneId) {
 }
 
 let zonesCache = [];
+let adminViewMode = "actual";
+
+function setAdminViewShading(mode) {
+    adminViewMode = mode;
+    const btnActual = document.getElementById("admin-view-actual");
+    const btnOutline = document.getElementById("admin-view-outline");
+    const btnShaded = document.getElementById("admin-view-shaded");
+    [btnActual, btnOutline, btnShaded].forEach(b => {
+        if (b) {
+            b.classList.remove("bg-white", "shadow-sm", "text-blue-700", "font-bold");
+            b.classList.add("text-slate-600", "font-medium");
+        }
+    });
+    const activeBtn = mode === "actual" ? btnActual : (mode === "outline" ? btnOutline : btnShaded);
+    if (activeBtn) {
+        activeBtn.classList.add("bg-white", "shadow-sm", "text-blue-700", "font-bold");
+        activeBtn.classList.remove("text-slate-600", "font-medium");
+    }
+    renderZonesOnMap(zonesCache);
+    updateDrawnStyle();
+}
+
+function onColorPickerChange(val) {
+    document.getElementById("zone-color-hex").value = val.toUpperCase();
+    updateDrawnStyle();
+}
+
+function onColorHexChange(val) {
+    if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+        document.getElementById("zone-color").value = val;
+        updateDrawnStyle();
+    }
+}
+
+function selectPresetColor(hex) {
+    document.getElementById("zone-color").value = hex;
+    document.getElementById("zone-color-hex").value = hex.toUpperCase();
+    updateDrawnStyle();
+}
+
+function onOpacitySliderChange(val) {
+    document.getElementById("zone-opacity-label").textContent = val + "%";
+    updateDrawnStyle();
+}
+
+function onFormStyleChange() {
+    const mode = document.querySelector('input[name="form-shading-mode"]:checked')?.value || "outline";
+    const badge = document.getElementById("form-style-badge");
+    if (badge) {
+        badge.textContent = mode === "shaded" ? "แรเงา" : "เฉพาะกรอบ";
+        badge.className = `badge badge-xs ${mode === "shaded" ? "badge-info" : "badge-ghost"}`;
+    }
+    updateDrawnStyle();
+}
+
+function onFormStatusChange() {
+    const isChecked = document.getElementById("zone-status-toggle").checked;
+    const textEl = document.getElementById("zone-status-text");
+    const descEl = document.getElementById("zone-status-desc");
+    if (isChecked) {
+        textEl.textContent = "เปิด";
+        textEl.className = "ml-2 text-xs font-bold text-emerald-600";
+        descEl.innerHTML = '<i class="ph ph-check-circle text-xs"></i> แสดงผลบนหน้ามอนิเตอร์สาธารณะ';
+        descEl.className = "text-[11px] text-emerald-600 font-medium flex items-center gap-1";
+    } else {
+        textEl.textContent = "ปิด";
+        textEl.className = "ml-2 text-xs font-bold text-gray-400";
+        descEl.innerHTML = '<i class="ph ph-prohibit text-xs"></i> ซ่อนจากหน้ามอนิเตอร์สาธารณะ';
+        descEl.className = "text-[11px] text-gray-500 font-medium flex items-center gap-1";
+    }
+}
+
+function scrollToForm() {
+    const el = document.getElementById("zone-form-card");
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function updateDrawnStyle() {
+    const color = document.getElementById("zone-color")?.value || "#2563eb";
+    const mode = document.querySelector('input[name="form-shading-mode"]:checked')?.value || "outline";
+    const opacity = parseFloat(document.getElementById("zone-opacity")?.value || 28) / 100.0;
+    if (drawnItems) {
+        drawnItems.eachLayer(l => {
+            if (l.setStyle) {
+                l.setStyle({
+                    color: color,
+                    weight: 2.5,
+                    fillColor: mode === "shaded" ? color : "transparent",
+                    fillOpacity: mode === "shaded" ? opacity : 0.0
+                });
+            }
+        });
+    }
+}
+
+async function quickToggleZoneStatus(id) {
+    const z = zonesCache.find(x => x.id === id);
+    if (!z) return;
+    const newStatus = (z.status === "active") ? "inactive" : "active";
+    const stationIds = (z.stations || []).map(s => typeof s === "string" ? s : s.id);
+    const body = {
+        name: z.name,
+        name_th: z.name_th || null,
+        code: z.code,
+        boundary: z.boundary,
+        station_ids: stationIds,
+        metadata: z.metadata || {},
+        status: newStatus,
+    };
+    try {
+        await saveZone(body, id);
+        await loadZones();
+    } catch(e) {
+        alert("ไม่สามารถเปลี่ยนสถานะได้: " + e.message);
+    }
+}
+
+async function quickToggleShadingMode(id) {
+    const z = zonesCache.find(x => x.id === id);
+    if (!z) return;
+    const currentMode = (z.metadata && z.metadata.shading_mode) || "outline";
+    const newMode = (currentMode === "shaded") ? "outline" : "shaded";
+    const updatedMeta = {
+        ...(z.metadata || {}),
+        shading_mode: newMode,
+    };
+    const stationIds = (z.stations || []).map(s => typeof s === "string" ? s : s.id);
+    const body = {
+        name: z.name,
+        name_th: z.name_th || null,
+        code: z.code,
+        boundary: z.boundary,
+        station_ids: stationIds,
+        metadata: updatedMeta,
+        status: z.status || "active",
+    };
+    try {
+        await saveZone(body, id);
+        await loadZones();
+    } catch(e) {
+        alert("ไม่สามารถเปลี่ยนรูปแบบแรเงาได้: " + e.message);
+    }
+}
 
 function renderZoneList(zones) {
-    const el = document.getElementById("zone-list");
-    document.getElementById("zone-count").textContent = zones.length;
+    const countEl = document.getElementById("zone-count");
+    if (countEl) countEl.textContent = zones.length;
+    const listEl = document.getElementById("zone-list");
     if (!zones.length) {
-        el.innerHTML = '<div class="p-4 text-center text-sm text-gray-400">ยังไม่มีลุ่มน้ำ</div>';
+        listEl.innerHTML = '<div class="p-4 text-center text-sm text-gray-400">ยังไม่มีลุ่มน้ำ</div>';
         return;
     }
-    el.innerHTML = zones.map(z => `
-        <div class="zone-row p-3 hover:bg-blue-50 cursor-pointer transition-colors border-l-4 border-transparent" data-id="${z.id}" onclick="selectZone('${z.id}')">
-            <div class="flex justify-between items-start">
-                <div>
-                    <div class="font-semibold text-gray-800 text-sm">${z.name_th || z.name}</div>
-                    <div class="text-xs text-gray-500">${z.code}</div>
+    listEl.innerHTML = zones.map(z => {
+        const meta = z.metadata || {};
+        const color = meta.stroke || meta.fill || "#2563eb";
+        const mode = meta.shading_mode || "outline";
+        const isActive = (z.status === "active");
+        const isRef = meta.role === "reference_boundary";
+        const stationCount = (z.stations || []).length;
+
+        /* Quick toggle button for status */
+        const statusBtn = isActive
+            ? `<button type="button" class="btn btn-xs btn-success text-white font-medium gap-1 rounded-full shadow-xs text-[11px]" onclick="event.stopPropagation();quickToggleZoneStatus('${z.id}')" title="คลิกเพื่อปิดใช้งาน (ซ่อนจากแผนที่สาธารณะ)">
+                <i class="ph ph-check-circle text-xs"></i> เปิดใช้งาน
+               </button>`
+            : `<button type="button" class="btn btn-xs bg-slate-200 text-slate-600 border border-slate-300 font-medium gap-1 rounded-full hover:bg-slate-300 text-[11px]" onclick="event.stopPropagation();quickToggleZoneStatus('${z.id}')" title="คลิกเพื่อเปิดใช้งาน (แสดงบนแผนที่สาธารณะ)">
+                <i class="ph ph-prohibit text-xs"></i> ปิดใช้งาน
+               </button>`;
+
+        /* Quick toggle button for shading mode */
+        const shadingBtn = (mode === "shaded")
+            ? `<button type="button" class="btn btn-xs btn-info text-white font-medium gap-1 rounded-full shadow-xs text-[11px]" onclick="event.stopPropagation();quickToggleShadingMode('${z.id}')" title="คลิกเพื่อสลับเป็นเฉพาะกรอบ">
+                <i class="ph ph-paint-bucket text-xs"></i> แรเงาสี
+               </button>`
+            : `<button type="button" class="btn btn-xs bg-white text-slate-700 border border-slate-300 font-medium gap-1 rounded-full hover:bg-slate-100 text-[11px]" onclick="event.stopPropagation();quickToggleShadingMode('${z.id}')" title="คลิกเพื่อสลับเป็นแรเงาสี">
+                <i class="ph ph-bounding-box text-xs"></i> เฉพาะกรอบ
+               </button>`;
+
+        const refBadge = isRef
+            ? '<span class="badge badge-xs badge-neutral text-[10px] py-1 px-1.5">กรอบอ้างอิง</span>'
+            : '';
+
+        const rowBg = isActive ? "hover:bg-blue-50/70" : "bg-slate-50/60 opacity-80 hover:bg-slate-100/70";
+        const borderStyle = isActive ? "border-solid" : "border-dashed";
+
+        return `
+        <div class="zone-row p-3 ${rowBg} cursor-pointer transition-colors border-l-4 ${borderStyle}" style="border-left-color: ${color};" data-id="${z.id}" onclick="selectZone('${z.id}')">
+            <div class="flex justify-between items-start gap-2">
+                <div class="flex items-start gap-2.5 min-w-0 flex-1">
+                    <span class="w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 shadow-sm" style="background-color: ${color};"></span>
+                    <div class="truncate flex-1">
+                        <div class="flex items-center gap-1.5">
+                            <span class="font-bold text-gray-800 text-sm truncate">${z.name_th || z.name}</span>
+                            ${refBadge}
+                        </div>
+                        <div class="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
+                            <span class="font-mono">${z.code}</span>
+                            <span>•</span>
+                            <span>${stationCount} สถานี</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 mt-2">
+                            ${statusBtn}
+                            ${shadingBtn}
+                        </div>
+                    </div>
                 </div>
-                <div class="flex gap-1">
-                    <button class="btn btn-ghost btn-xs text-blue-600" onclick="event.stopPropagation();editZone('${z.id}')" title="แก้ไข">
-                        <i class="ph ph-pencil-simple"></i>
+                <div class="flex gap-1 shrink-0 pt-0.5">
+                    <button class="btn btn-ghost btn-xs text-slate-500 hover:text-blue-600 rounded zone-eye-btn" onclick="event.stopPropagation();toggleZoneLayer('${z.id}', this)" title="เปิด/ปิดการแสดงบนแผนที่นี้">
+                        <i class="ph ph-eye text-sm"></i>
                     </button>
-                    <button class="btn btn-ghost btn-xs text-red-500" onclick="event.stopPropagation();confirmDelete('${z.id}')" title="ลบ">
-                        <i class="ph ph-trash"></i>
+                    <button class="btn btn-ghost btn-xs text-blue-600 hover:bg-blue-100 rounded" onclick="event.stopPropagation();editZone('${z.id}')" title="แก้ไข">
+                        <i class="ph ph-pencil-simple text-sm"></i>
+                    </button>
+                    <button class="btn btn-ghost btn-xs text-red-500 hover:bg-red-100 rounded" onclick="event.stopPropagation();confirmDelete('${z.id}')" title="ลบ">
+                        <i class="ph ph-trash text-sm"></i>
                     </button>
                 </div>
             </div>
-        </div>
-    `).join("");
+        </div>`;
+    }).join("");
+}
+
+let adminAllVisible = true;
+
+function toggleZoneLayer(id, btn) {
+    const layer = allZoneLayers[id];
+    if (!layer) return;
+    const isShown = map.hasLayer(layer);
+    if (isShown) {
+        map.removeLayer(layer);
+        if (btn) {
+            btn.innerHTML = '<i class="ph ph-eye-slash text-sm text-slate-400"></i>';
+            btn.title = "แสดงบนแผนที่";
+        }
+    } else {
+        layer.addTo(map);
+        if (btn) {
+            btn.innerHTML = '<i class="ph ph-eye text-sm text-blue-600"></i>';
+            btn.title = "ซ่อนจากแผนที่";
+        }
+    }
+}
+
+function toggleAllAdminLayers() {
+    adminAllVisible = !adminAllVisible;
+    Object.entries(allZoneLayers).forEach(([id, layer]) => {
+        if (adminAllVisible) {
+            if (!map.hasLayer(layer)) layer.addTo(map);
+        } else {
+            if (map.hasLayer(layer)) map.removeLayer(layer);
+        }
+    });
+    const icon = document.getElementById("admin-toggle-all-icon");
+    const text = document.getElementById("admin-toggle-all-text");
+    if (icon && text) {
+        icon.className = adminAllVisible ? "ph ph-eye text-xs" : "ph ph-eye-slash text-xs text-amber-600";
+        text.textContent = adminAllVisible ? "ซ่อนทั้งหมด" : "แสดงทั้งหมด";
+    }
+    document.querySelectorAll(".zone-eye-btn").forEach(btn => {
+        btn.innerHTML = adminAllVisible
+            ? '<i class="ph ph-eye text-sm text-blue-600"></i>'
+            : '<i class="ph ph-eye-slash text-sm text-slate-400"></i>';
+        btn.title = adminAllVisible ? "ซ่อนจากแผนที่" : "แสดงบนแผนที่";
+    });
+}
+
+function getZoneStyle(z) {
+    const meta = z.metadata || {};
+    const color = meta.stroke || meta.fill || "#2563eb";
+    const isActive = (z.status === "active");
+    const isRef = meta.role === "reference_boundary";
+    const zoneMode = meta.shading_mode || "outline";
+
+    let isShaded = false;
+    if (adminViewMode === "shaded") {
+        isShaded = true;
+    } else if (adminViewMode === "outline") {
+        isShaded = false;
+    } else {
+        /* "actual" mode */
+        isShaded = (zoneMode === "shaded");
+    }
+
+    const opacity = parseFloat(meta["fill-opacity"] || 0.28);
+
+    if (!isActive) {
+        return {
+            color: "#94a3b8",
+            weight: 1.5,
+            dashArray: "6, 6",
+            fillColor: isShaded ? "#cbd5e1" : "transparent",
+            fillOpacity: isShaded ? 0.15 : 0.0,
+            opacity: 0.5
+        };
+    }
+
+    return {
+        color: color,
+        weight: isRef ? 3 : 2.5,
+        dashArray: isRef ? "8, 6" : "",
+        fillColor: isShaded ? (meta.fill || color) : "transparent",
+        fillOpacity: isShaded ? opacity : 0.0,
+        opacity: 0.95
+    };
 }
 
 function renderZonesOnMap(zones) {
@@ -304,18 +688,28 @@ function renderZonesOnMap(zones) {
     }
     zones.forEach(z => {
         if (!z.boundary) return;
-        const isReference = z.zone_kind === "reference";
+        const isReference = z.zone_kind === "reference"
+            || (z.metadata && z.metadata.role === "reference_boundary")
+            || z.code === "hatyai-boundary";
         if (isReference) {
+            const referenceStyle = getZoneStyle(z);
             referenceBoundaryLayer = L.geoJson({ type: "Feature", geometry: z.boundary }, {
                 interactive: false,
-                style: { fillColor: "#000000", color: "#000000", opacity: 1, weight: 2, fillOpacity: 0 }
+                style: referenceStyle
             }).addTo(map);
             return;
         }
-        const layer = L.geoJson({ type: "Feature", geometry: z.boundary, properties: { name: z.name_th || z.name } }, {
-            interactive: !isReference,
-            style: { fillColor: "#3b82f6", fillOpacity: 0.1, color: "#2563eb", weight: 1.5, dashArray: "5,5" }
-        }).bindTooltip(z.name_th || z.name, { sticky: true }).addTo(map);
+        const style = getZoneStyle(z);
+        const name = z.name_th || z.name || "";
+        const isActive = (z.status === "active");
+        const tooltipText = isActive ? name : `${name} (ปิดใช้งาน)`;
+        const layer = L.geoJson({
+            type: "Feature",
+            geometry: z.boundary,
+            properties: { name: name }
+        }, {
+            style: style
+        }).bindTooltip(tooltipText, { sticky: true }).addTo(map);
         allZoneLayers[z.id] = layer;
     });
     if (referenceBoundaryLayer) referenceBoundaryLayer.bringToFront();
@@ -332,6 +726,13 @@ async function renderDefaultReferenceBoundary() {
             style: { fillColor: "#000000", color: "#000000", opacity: 1, weight: 2, fillOpacity: 0 }
         }).addTo(map);
     } catch(e) { console.error(e); }
+}
+
+function fitAllZones() {
+    const layers = Object.values(allZoneLayers);
+    if (!layers.length) return;
+    const group = L.featureGroup(layers);
+    map.fitBounds(group.getBounds(), { padding: [30, 30] });
 }
 
 async function loadZones() {
@@ -361,22 +762,50 @@ function editZone(id) {
     document.getElementById("zone-name-th").value = z.name_th || "";
     document.getElementById("zone-code").value = z.code || "";
     document.getElementById("zone-kind").value = z.zone_kind || "flood";
-    selectedStationIds = (z.stations || []).map(s => s.id);
+    selectedStationIds = (z.stations || []).map(s => typeof s === "string" ? s : s.id);
     document.getElementById("station-search").value = "";
     document.getElementById("station-dropdown").classList.add("hidden");
     renderStationChips();
     setBoundaryText(z.boundary);
     showJsonError(null);
-    document.getElementById("form-title").textContent = "แก้ไขลุ่มน้ำ";
+    document.getElementById("form-title").textContent = "แก้ไขลุ่มน้ำ: " + (z.name_th || z.name);
     document.getElementById("btn-cancel").classList.remove("hidden");
+
+    /* Status switch */
+    const isActive = (z.status !== "inactive");
+    document.getElementById("zone-status-toggle").checked = isActive;
+    onFormStatusChange();
+
+    /* Populate Style & Shading settings */
+    const meta = z.metadata || {};
+    const color = meta.stroke || meta.fill || "#2563eb";
+    const mode = meta.shading_mode || "outline";
+    const opacity = Math.round(parseFloat(meta["fill-opacity"] || 0.28) * 100);
+
+    document.getElementById("zone-color").value = color;
+    document.getElementById("zone-color-hex").value = color.toUpperCase();
+    const modeRadios = document.querySelectorAll('input[name="form-shading-mode"]');
+    modeRadios.forEach(r => { r.checked = (r.value === mode); });
+    document.getElementById("zone-opacity").value = opacity;
+    document.getElementById("zone-opacity-label").textContent = opacity + "%";
+    onFormStyleChange();
 
     drawnItems.clearLayers();
     if (z.boundary) {
-        const layer = L.geoJson({ type: "Feature", geometry: z.boundary });
+        const isShaded = mode === "shaded";
+        const layer = L.geoJson({ type: "Feature", geometry: z.boundary }, {
+            style: {
+                color: color,
+                weight: 2.5,
+                fillColor: isShaded ? color : "transparent",
+                fillOpacity: isShaded ? (opacity / 100.0) : 0.0
+            }
+        });
         layer.eachLayer(l => drawnItems.addLayer(l));
         map.fitBounds(drawnItems.getBounds(), { padding: [40, 40] });
     }
     selectZone(id);
+    scrollToForm();
 }
 
 function resetForm() {
@@ -392,6 +821,20 @@ function resetForm() {
     document.getElementById("btn-cancel").classList.add("hidden");
     document.getElementById("boundary-status").classList.add("hidden");
     showJsonError(null);
+
+    /* Reset status */
+    document.getElementById("zone-status-toggle").checked = true;
+    onFormStatusChange();
+
+    /* Reset style defaults */
+    document.getElementById("zone-color").value = "#2563eb";
+    document.getElementById("zone-color-hex").value = "#2563EB";
+    const modeRadios = document.querySelectorAll('input[name="form-shading-mode"]');
+    modeRadios.forEach(r => { r.checked = (r.value === "outline"); });
+    document.getElementById("zone-opacity").value = 28;
+    document.getElementById("zone-opacity-label").textContent = "28%";
+    onFormStyleChange();
+
     drawnItems.clearLayers();
     document.querySelectorAll(".zone-row").forEach(r => r.classList.remove("active"));
 }
@@ -432,6 +875,22 @@ document.addEventListener("DOMContentLoaded", function() {
         catch(err) { showJsonError("JSON ไม่ถูกต้อง: " + err.message); return; }
         const gErr = validatePolygonGeometry(boundaryGeom);
         if (gErr) { showJsonError(gErr); return; }
+
+        const existingZone = zonesCache.find(x => x.id === editingZoneId);
+        const existingMeta = (existingZone && existingZone.metadata) ? existingZone.metadata : {};
+        const color = document.getElementById("zone-color").value;
+        const shadingMode = document.querySelector('input[name="form-shading-mode"]:checked')?.value || "outline";
+        const opacity = parseFloat(document.getElementById("zone-opacity").value) / 100.0;
+        const status = document.getElementById("zone-status-toggle").checked ? "active" : "inactive";
+
+        const updatedMeta = {
+            ...existingMeta,
+            stroke: color,
+            fill: color,
+            "fill-opacity": opacity,
+            shading_mode: shadingMode,
+        };
+
         const body = {
             name: document.getElementById("zone-name").value.trim(),
             name_th: document.getElementById("zone-name-th").value.trim() || null,
@@ -439,6 +898,8 @@ document.addEventListener("DOMContentLoaded", function() {
             zone_kind: document.getElementById("zone-kind").value || "flood",
             boundary: boundaryGeom,
             station_ids: selectedStationIds,
+            metadata: updatedMeta,
+            status: status,
         };
         try {
             await saveZone(body, editingZoneId);

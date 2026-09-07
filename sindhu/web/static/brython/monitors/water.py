@@ -193,6 +193,53 @@ class WaterMonitor(BaseMonitor):
             self.map.marker_style = style
             aio.run(self._update_and_filter())
 
+    def update_zone_shading_buttons(self, mode):
+        if "zone_style_outline" in document and "zone_style_shaded" in document:
+            btn_outline = document["zone_style_outline"]
+            btn_shaded = document["zone_style_shaded"]
+            if mode == "outline":
+                btn_outline.classList.add("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_outline.classList.remove("text-slate-600")
+                btn_shaded.classList.remove("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_shaded.classList.add("text-slate-600")
+            else:
+                btn_shaded.classList.add("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_shaded.classList.remove("text-slate-600")
+                btn_outline.classList.remove("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_outline.classList.add("text-slate-600")
+
+    def on_zone_shading_mode_click(self, mode):
+        self.map.set_zone_shading_mode(mode)
+        self.update_zone_shading_buttons(mode)
+        try:
+            window.localStorage.setItem("sindhu_zone_shading_mode", mode)
+        except Exception:
+            pass
+
+    def on_toggle_zones_layer(self, ev):
+        checked = bool(ev.target.checked)
+        self.map.set_zones_visible(checked)
+        for i in range(1, 5):
+            el_id = f"toggle_zone_{i}"
+            if el_id in document:
+                document[el_id].checked = checked
+
+    def on_toggle_single_zone(self, zone_num, ev):
+        checked = bool(ev.target.checked)
+        self.map.set_zone_visible(str(zone_num), checked)
+        self.map.set_zone_visible(f"songkhla-zone-{zone_num}", checked)
+        self.map.set_zone_visible(f"prototype-zone-{zone_num}", checked)
+        all_checked = all(
+            document[f"toggle_zone_{i}"].checked
+            for i in range(1, 5)
+            if f"toggle_zone_{i}" in document
+        )
+        if "toggle_zones_layer" in document:
+            document["toggle_zones_layer"].checked = all_checked
+
+    def on_toggle_boundary_layer(self, ev):
+        self.map.set_reference_boundary_visible(bool(ev.target.checked))
+
     def get_selected_source(self):
         """The source picked in the dropdown, or "all" when nothing narrows it."""
         if "source_selector" in document:
@@ -336,10 +383,15 @@ class WaterMonitor(BaseMonitor):
         return metric_infos.get_risk_level(max_risk)
 
     def update_zone_risks(self):
-        """Colour every zone by its worst station, so the whole province can
-        be read at a glance without picking a zone first."""
+        """Colour zones by active station alerts (warning, critical, evacuate).
+        Normal water levels preserve the zone's configured style."""
         for zone in self.zones or []:
-            if zone.get("zone_kind") == "reference":
+            meta = zone.get("metadata") or zone.get("style") or {}
+            if (
+                zone.get("zone_kind") == "reference"
+                or meta.get("role") == "reference_boundary"
+                or zone.get("code") == "hatyai-boundary"
+            ):
                 continue
             zone_id = str(zone.get("id", "") or "")
             if zone_id:
