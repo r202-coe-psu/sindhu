@@ -73,9 +73,7 @@ class BaseMonitor:
         try:
             response = await aio.get(self.apis["system_settings"], cache=True)
             if getattr(response, "status", 200) != 200:
-                raise RuntimeError(
-                    f"system settings returned HTTP {response.status}"
-                )
+                raise RuntimeError(f"system settings returned HTTP {response.status}")
             parsed = json.loads(response.data)
             if isinstance(parsed, dict):
                 self.system_setting = parsed
@@ -143,16 +141,20 @@ class BaseMonitor:
                         reg_label = region_th_map.get(reg, reg)
                         base_name_th = props.get("name_th", f"โซน {index + 1}")
                         display_name_th = (
-                            f"{base_name_th} ({reg_label})" if reg_label else base_name_th
+                            f"{base_name_th} ({reg_label})"
+                            if reg_label
+                            else base_name_th
                         )
-                        fallback_zones.append({
-                            "id": f"prototype-zone-{index + 1}",
-                            "name": props.get("name", f"Zone {index + 1}"),
-                            "name_th": display_name_th,
-                            "boundary": feature.get("geometry"),
-                            "style": props,
-                            "prototype": True,
-                        })
+                        fallback_zones.append(
+                            {
+                                "id": f"prototype-zone-{index + 1}",
+                                "name": props.get("name", f"Zone {index + 1}"),
+                                "name_th": display_name_th,
+                                "boundary": feature.get("geometry"),
+                                "style": props,
+                                "prototype": True,
+                            }
+                        )
                 except Exception as e:
                     print(f"load fallback zone error: {e}")
             self.zones = fallback_zones

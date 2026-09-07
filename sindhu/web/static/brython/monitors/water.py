@@ -269,14 +269,22 @@ class WaterMonitor(BaseMonitor):
             btn_outline = document["zone_style_outline"]
             btn_shaded = document["zone_style_shaded"]
             if mode == "outline":
-                btn_outline.classList.add("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_outline.classList.add(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
                 btn_outline.classList.remove("text-slate-600")
-                btn_shaded.classList.remove("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_shaded.classList.remove(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
                 btn_shaded.classList.add("text-slate-600")
             else:
-                btn_shaded.classList.add("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_shaded.classList.add(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
                 btn_shaded.classList.remove("text-slate-600")
-                btn_outline.classList.remove("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_outline.classList.remove(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
                 btn_outline.classList.add("text-slate-600")
 
     def on_zone_shading_mode_click(self, mode):
@@ -458,7 +466,10 @@ class WaterMonitor(BaseMonitor):
         Normal water levels preserve the zone's configured style."""
         for zone in self.zones or []:
             meta = zone.get("metadata") or zone.get("style") or {}
-            if meta.get("role") == "reference_boundary" or zone.get("code") == "hatyai-boundary":
+            if (
+                meta.get("role") == "reference_boundary"
+                or zone.get("code") == "hatyai-boundary"
+            ):
                 continue
             zone_id = str(zone.get("id", "") or "")
             if zone_id:
