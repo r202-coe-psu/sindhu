@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 import json
 
 
-from browser import ajax, document, html, window, timer, aio
+from browser import ajax, document, html, window, aio
 import javascript as js
 
 from .map import Map
@@ -172,7 +172,7 @@ class BaseMap(Map):
                 )
                 canvas.chart_instance = create_chart(ctx, js_config)
 
-            timer.set_timeout(render_chart, 50)
+            window.setTimeout(render_chart, 50)
         except Exception as ex:
             print(f"Error rendering chart: {ex}")
 
@@ -188,6 +188,8 @@ class BaseMap(Map):
         # logic handler
         print("Updating climate marker...")
         print(f"Document ID: {document_id}")
+        if isinstance(data, dict):
+            self.latest_stations = data.get("stations", [])
         await self.update_metric_marker(
             document_id, data, target_timestamp=target_timestamp
         )
@@ -329,24 +331,20 @@ class BaseMap(Map):
                             msg = "ไม่พบข้อมูลการพยากรณ์"
                         else:
                             msg = "ไม่พบข้อมูล"
-                        metric_texts.append(
-                            f"""
+                        metric_texts.append(f"""
                             <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
                                 <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
                                 <span class="text-base-content/40 italic text-[11px]">{msg}</span>
                             </div>
-                            """
-                        )
+                            """)
                     else:
                         unit = metric_infos.HTML_METRIC_UNITS.get(metric_type, "")
-                        metric_texts.append(
-                            f"""
+                        metric_texts.append(f"""
                             <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
                                 <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
                                 <span class="font-semibold text-base-content">{value_str} <span class="text-[10px] opacity-60 font-normal">{unit}</span></span>
                             </div>
-                            """
-                        )
+                            """)
 
                     # Capture one timestamp for display
                     if not timestamp and sensor.get("timestamp"):
@@ -399,6 +397,27 @@ class BaseMap(Map):
                         ),
                     }
 
+                matched_cctv = self.find_matching_cctv(station)
+                cctv_btn_html = ""
+                if matched_cctv:
+                    cctv_source = str(matched_cctv.get("source", ""))
+                    cctv_upstream_id = str(matched_cctv.get("upstream_id", ""))
+                    cctv_title = str(
+                        matched_cctv.get("title_th")
+                        or matched_cctv.get("name_th")
+                        or matched_cctv.get("name")
+                        or "CCTV"
+                    )
+                    cctv_btn_html = f"""
+                    <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(0,0,0,0.12);">
+                        <button type="button" onclick="if(window.open_cctv_detail)window.open_cctv_detail('{cctv_source}','{cctv_upstream_id}')"
+                            style="width:100%; background:#2563eb; color:white; font-size:11px; font-weight:600; padding:6px 10px; border-radius:6px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h10a2 2 0 0 1 2 2v2.5l4-2.5v12l-4-2.5V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+                            <span>ดูกล้อง CCTV ({cctv_title})</span>
+                        </button>
+                    </div>
+                    """
+
                 if has_waterlevel:
                     tooltip_detail = f"""
                     <div class="card card-compact w-72 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
@@ -417,6 +436,7 @@ class BaseMap(Map):
                             <div class="text-[11px] text-base-content/80 mt-1 flex justify-between items-center">
                                 <span>ระดับน้ำปัจจุบัน: <span class="font-bold text-blue-600 text-sm">{waterlevel_val:.2f}</span> ม.</span>
                             </div>
+                            {cctv_btn_html}
                             {footer_html}
                         </div>
                     </div>
@@ -436,6 +456,7 @@ class BaseMap(Map):
                             <div class="flex flex-col gap-0.5 mt-1">
                                 {"".join(metric_texts)}
                             </div>
+                            {cctv_btn_html}
                             {footer_html}
                         </div>
                     </div>
@@ -590,7 +611,11 @@ class BaseMap(Map):
                         marker_option,
                     ).bindTooltip(
                         tooltip_detail,
-                        {"offset": (0, 30), "className": "tooltip-marker"},
+                        {
+                            "offset": (0, 30),
+                            "className": "tooltip-marker",
+                            "interactive": True,
+                        },
                     )
                     # add to map
                     .addTo(self.map)

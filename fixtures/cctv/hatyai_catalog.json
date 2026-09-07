@@ -1,0 +1,39 @@
+{
+  "_fixture_provenance": "synthetic reconstructed from verified public field examples",
+  "count": 4,
+  "items": [
+    {
+      "cameraId": 22,
+      "name": "road30m",
+      "code": "S9",
+      "title": "ถนนราษฎร์ยินดี (เหล็กใต้ 30 เมตร)",
+      "enable": true,
+      "statusMsg": "",
+      "atDate": "2026-09-03T11:00:00",
+      "photo": "https://photo.hatyaicityclimate.org/cctv/road30m.jpg?token=fixture-secret&v=1"
+    },
+    {
+      "cameraId": "1",
+      "name": "hatyainai",
+      "enable": "0",
+      "statusMsg": "",
+      "atDate": "2026-09-03T11:00:00",
+      "photo": "https://hatyaicityclimate.org/cctv/hatyainai.jpg"
+    },
+    {
+      "cameraId": 9,
+      "name": "muangkong",
+      "enable": true,
+      "statusMsg": "",
+      "atDate": "not-a-timestamp",
+      "photo": "https://hatyaicityclimate.org/cctv/muangkong.jpg"
+    },
+    {
+      "cameraId": 999,
+      "name": "unregistered-source-record",
+      "enable": true,
+      "atDate": "2026-09-03T11:00:00",
+      "photo": "https://evil.example.invalid/camera.jpg?token=fixture-secret"
+    }
+  ]
+}

@@ -1,1 +1,1 @@
-from . import metrics, zones
+from . import metrics, visual_feeds, zones

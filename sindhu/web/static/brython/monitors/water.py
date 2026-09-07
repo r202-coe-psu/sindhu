@@ -1,12 +1,12 @@
-from browser import document, aio, ajax
+from browser import document, aio, window
 import javascript as js
 import datetime
 from urllib.parse import urlencode
 
 from .base import BaseMonitor
 from stations import metric_infos
+from maps.map import _haversine_distance
 import json
-from urllib.parse import urlencode
 
 
 class WaterMonitor(BaseMonitor):
@@ -17,6 +17,7 @@ class WaterMonitor(BaseMonitor):
         source,
         center=None,
         zoom=None,
+        fallback_zone_urls=None,
         reference_boundary_url=None,
     ):
         super().__init__(
@@ -25,12 +26,14 @@ class WaterMonitor(BaseMonitor):
             source=source,
             center=center,
             zoom=zoom,
+            fallback_zone_urls=fallback_zone_urls,
             reference_boundary_url=reference_boundary_url,
         )
         self.monitor_name = "water"
 
         self.params = dict()
         self.latest_data = None
+        self.visual_feed_monitor = None
 
     def calculate_risk(self, station):
         if not station or not isinstance(station, dict):
@@ -100,8 +103,77 @@ class WaterMonitor(BaseMonitor):
     ===========================================================================
     """
 
+    def find_matching_cctv(self, station):
+        """Find the nearest co-located CCTV camera for a given water station."""
+        if (
+            hasattr(self, "map")
+            and self.map
+            and hasattr(self.map, "find_matching_cctv")
+        ):
+            return self.map.find_matching_cctv(station)
+        feeds = []
+        if hasattr(self, "visual_feed_monitor") and self.visual_feed_monitor:
+            feeds = getattr(self.visual_feed_monitor, "latest_feeds", [])
+        if not feeds:
+            return None
+        st_code = str(station.get("code") or "").strip().lower()
+        scoord_obj = station.get("coordinates")
+        s_coords = (
+            scoord_obj.get("coordinates") if isinstance(scoord_obj, dict) else None
+        )
+        best = None
+        min_dist = float("inf")
+        for feed in feeds:
+            c_code = str(feed.get("code") or "").strip().lower()
+            if st_code and c_code and st_code == c_code:
+                return feed
+            ccoord_obj = feed.get("coordinates")
+            c_coords = (
+                ccoord_obj.get("coordinates") if isinstance(ccoord_obj, dict) else None
+            )
+            if s_coords and c_coords and len(s_coords) >= 2 and len(c_coords) >= 2:
+                dist = _haversine_distance(s_coords, c_coords)
+                if dist <= 300 and dist < min_dist:
+                    min_dist = dist
+                    best = feed
+        return best
+
+    def focus_station(self, code, source=None):
+        """Switch to water panel, scroll to the station card, and fly to marker."""
+        water_tab = document.getElementById("water_panel_tab")
+        if water_tab:
+            water_tab.click()
+
+        target_card = None
+        if "reservoir_data_list" in document:
+            for card in document["reservoir_data_list"].select("[data-station-code]"):
+                c_code = card.getAttribute("data-station-code")
+                c_source = card.getAttribute("data-station-source")
+                if c_code == code and (not source or c_source == source):
+                    target_card = card
+                    break
+
+        if target_card:
+            self.highlight_station_card(target_card)
+            try:
+                target_card.scrollIntoView({"behavior": "smooth", "block": "center"})
+            except Exception:
+                pass
+
+        if hasattr(self, "map") and self.map:
+            self.map.fly_to_station(code, source=source, zoom=16)
+            markers = self.map.metric_markers_by_code.get(code) or []
+            if markers:
+                markers[0].openPopup()
+
     def start(self):
         self.running = True
+        try:
+            window.focus_water_station = lambda code, source=None: self.focus_station(
+                code, source
+            )
+        except Exception:
+            pass
         aio.run(self.monitor())
 
     async def monitor(self):
@@ -145,12 +217,11 @@ class WaterMonitor(BaseMonitor):
                 return
 
             for station in data.get("stations") or []:
-                risk, waterlevel, diff_wl_bank = self.calculate_risk(station)
-                station["risk"] = risk
-                station["waterlevel"] = waterlevel
-                station["diff_wl_bank"] = diff_wl_bank
-                
+                if not station or not isinstance(station, dict):
+                    continue
+                risk, _, _ = self.calculate_risk(station)
                 level = metric_infos.get_risk_level(risk)
+                station["risk"] = risk
                 station["risk_color"] = level["color"]
                 station["risk_percent"] = 100
 
@@ -387,11 +458,7 @@ class WaterMonitor(BaseMonitor):
         Normal water levels preserve the zone's configured style."""
         for zone in self.zones or []:
             meta = zone.get("metadata") or zone.get("style") or {}
-            if (
-                zone.get("zone_kind") == "reference"
-                or meta.get("role") == "reference_boundary"
-                or zone.get("code") == "hatyai-boundary"
-            ):
+            if meta.get("role") == "reference_boundary" or zone.get("code") == "hatyai-boundary":
                 continue
             zone_id = str(zone.get("id", "") or "")
             if zone_id:
@@ -554,6 +621,30 @@ class WaterMonitor(BaseMonitor):
 
                 other_html += f'<div class="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">{display_text}</div>'
 
+            matched_cctv = self.find_matching_cctv(station)
+            cctv_btn_html = ""
+            if matched_cctv:
+                cctv_src = str(matched_cctv.get("source", ""))
+                cctv_up_id = str(matched_cctv.get("upstream_id", ""))
+                cctv_title = str(
+                    matched_cctv.get("title_th")
+                    or matched_cctv.get("name_th")
+                    or matched_cctv.get("name")
+                    or "CCTV"
+                )
+                cctv_btn_html = f"""
+                <div class="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+                    <span class="text-[11px] text-blue-600 font-medium flex items-center gap-1 truncate" title="{cctv_title}">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" class="shrink-0"><path d="M4 4h10a2 2 0 0 1 2 2v2.5l4-2.5v12l-4-2.5V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+                        <span class="truncate">มีกล้อง: {cctv_title}</span>
+                    </span>
+                    <button type="button" onclick="event.stopPropagation(); if(window.open_cctv_detail)window.open_cctv_detail('{cctv_src}','{cctv_up_id}')"
+                        class="btn btn-xs btn-primary text-white shrink-0 font-medium shadow-sm h-6 min-h-0 px-2.5">
+                        ดูกล้อง
+                    </button>
+                </div>
+                """
+
             html_content += f"""
             <div data-station-code="{station.get("code", "")}" data-station-source="{station.get("source", "")}"
                 class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all duration-200 cursor-pointer">
@@ -569,6 +660,7 @@ class WaterMonitor(BaseMonitor):
                 <div class="mt-3 flex flex-wrap gap-2">
                     {other_html}
                 </div>
+                {cctv_btn_html}
             </div>
             """
 

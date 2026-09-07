@@ -1,0 +1,46 @@
+{
+  "_fixture_provenance": "synthetic reconstructed from verified public field examples",
+  "value": {
+    "results": [
+      {
+        "provinceNameTh": "สงขลา",
+        "entity": {
+          "id": "0e976e02-8381-4f6e-988a-81ecbed96fb9",
+          "stationCode": "TA200303",
+          "stnNameTh": "คลองอู่ตะเภาตอนบนทุ่งลาน",
+          "cctvOnline": true,
+          "cctvSnapshotLink": "https://camera.invalid/live?username=fixture-user&password=fixture-secret",
+          "cctvVideoLink": "https://camera.invalid/video?token=fixture-secret",
+          "userinfo": {"username": "fixture-user", "password": "fixture-secret"}
+        }
+      },
+      {
+        "provinceNameTh": "สงขลา",
+        "entity": {
+          "id": "3e55f300-3d80-4520-acfa-7a12c2a6bef9",
+          "stationCode": "TA200304",
+          "stnNameTh": "คลองอู่ตะเภาตอนล่าง",
+          "cctvOnline": false,
+          "cctvSnapshotLink": "https://camera.invalid/live?password=fixture-secret"
+        }
+      },
+      {
+        "provinceNameTh": "พัทลุง",
+        "entity": {
+          "id": "0e976e02-8381-4f6e-988a-81ecbed96fb9",
+          "stationCode": "TA200303",
+          "stnNameTh": "wrong-province",
+          "cctvOnline": true
+        }
+      },
+      {
+        "provinceNameTh": "สงขลา",
+        "entity": {
+          "id": "not-a-canonical-camera",
+          "stationCode": "TA200303",
+          "cctvOnline": true
+        }
+      }
+    ]
+  }
+}
