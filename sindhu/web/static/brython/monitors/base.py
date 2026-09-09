@@ -16,6 +16,9 @@ class BaseMonitor:
         source=None,
         center=None,
         zoom=None,
+        fallback_zone_urls=None,
+        reference_boundary_url=None,
+        rivers_url=None,
     ):
         self.lang_code = lang_code
         self.acquisition_interval = 60 * 60
@@ -26,6 +29,11 @@ class BaseMonitor:
         self.source = source
         self.center = center
         self.zoom = zoom
+        self.fallback_zone_urls = fallback_zone_urls or []
+        self.reference_boundary_url = reference_boundary_url
+        self.rivers_url = (
+            rivers_url or "/static/resources/songkhla_rivers_direction.geojson"
+        )
 
         self.monitor_name = "base"
 
@@ -46,9 +54,9 @@ class BaseMonitor:
 
         while self.running:
             self.set_map_loading(True)
-            print(f"monitor: wake up {datetime.datetime.now()}")
-            print(f"monitor: {self.monitor_name} monitor")
-            print(f"monitor: sleep {self.acquisition_interval}s")
+            print(
+                f"[Monitor:{self.monitor_name}] Cycle running (interval: {self.acquisition_interval}s)"
+            )
 
             stations = {}
             await self.map.update(self.source, stations)
@@ -57,39 +65,162 @@ class BaseMonitor:
             await aio.sleep(self.acquisition_interval)
 
     async def setup(self):
-        response = await aio.get(self.apis["system_settings"], cache=True)
-        self.system_setting = js.JSON.parse(response.data)
+        """Initialise the map without leaving the page in a permanent loader."""
+        self.set_map_loading(True)
+        self.system_setting = {}
+        try:
+            try:
+                response = await aio.get(self.apis["system_settings"], cache=True)
+                if getattr(response, "status", 200) == 200:
+                    parsed = json.loads(response.data)
+                    if isinstance(parsed, dict):
+                        self.system_setting = parsed
+            except Exception as exc:
+                print(f"[Monitor] System settings fetch error: {exc}")
 
-        center = self.system_setting["center"]["coordinates"]
-        zoom = self.system_setting["zoom"]
-        min_zoom = self.system_setting["min_zoom"]
+            center_object = self.system_setting.get("center") or {}
+            center = center_object.get("coordinates") or self.center or [100.5, 7.0]
+            if not isinstance(center, (list, tuple)) or len(center) < 2:
+                center = [100.5, 7.0]
+            zoom = self.system_setting.get("zoom") or self.zoom or 12
+            min_zoom = self.system_setting.get("min_zoom")
+            if min_zoom is None:
+                min_zoom = 8
 
-        self.map = BaseMap([center[1], center[0]], zoom, min_zoom, self.lang_code)
-        self.map.load_river_basins(self.api_url)
+            if not hasattr(self, "map"):
+                self.map = BaseMap(
+                    [center[1], center[0]], zoom, min_zoom, self.lang_code
+                )
+                self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
+                self.map.load_river_basins(self.api_url)
+
+            await self.load_zones()
+            await self.load_rivers()
+
+            if "my_locate" in document and not getattr(self, "_locate_bound", False):
+                document["my_locate"].bind("click", lambda ev: self.map.fly_to_user())
+                self._locate_bound = True
+
+            if hasattr(self, "visual_feed_monitor") and self.visual_feed_monitor:
+                try:
+                    self.visual_feed_monitor.update_map_markers()
+                except Exception as e:
+                    print(f"update_map_markers error: {e}")
+        except Exception as e:
+            print(f"[Monitor] Setup error: {e}")
+            self.set_map_error(
+                "เชื่อมต่อข้อมูลแผนที่ไม่ได้ กรุณาตรวจสอบ API แล้วลองใหม่"
+            )
+            return False
+
         self.set_map_loading(False)
+        return True
 
-        self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
+    async def load_rivers(self):
+        """Load and render river waterways with flow animation."""
+        if not self.rivers_url:
+            return
 
-        await self.load_zones()
-
-        if "my_locate" in document:
-            document["my_locate"].bind("click", lambda ev: self.map.fly_to_user())
+        try:
+            response = await aio.get(self.rivers_url, cache=True)
+            if response.status == 200 or response.status == 0:
+                rivers_data = json.loads(response.data)
+                self.map.set_rivers_layer(rivers_data)
+        except Exception as e:
+            print(f"[Monitor] Failed to load rivers: {e}")
 
     async def load_zones(self):
-        """Draw every zone up front so a zone can be picked without pinning."""
+        """Draw API zones, or bundled prototype GeoJSON zones 1-4."""
+        db_zones = []
         try:
-            response = await aio.get(self.apis["zones"], cache=True)
+            response = await aio.get(self.apis["zones"], cache=False)
             data = json.loads(response.data)
-            self.zones = data.get("zones", [])
-            self.map.show_all_zones(self.zones, on_select=self.on_zone_selected)
+            db_zones = data.get("zones", [])
         except Exception as e:
-            print(f"load_zones error: {e}")
+            print(f"[Monitor] Failed to load zones: {e}")
+            # Preserve zones already rendered during a transient refresh error.
+            if self.zones:
+                return False
+            if not self.fallback_zone_urls:
+                raise
+
+        if db_zones:
+            for z in db_zones:
+                if not z.get("style"):
+                    z["style"] = z.get("metadata") or {}
+            self.zones = [z for z in db_zones if z.get("status") != "inactive"]
+        elif self.fallback_zone_urls:
+            region_th_map = {
+                "south": "ทิศใต้",
+                "west": "ทิศตะวันตก",
+                "central_east": "ตอนกลาง-ทิศตะวันออก",
+                "north": "ทิศเหนือ",
+            }
+            fallback_zones = []
+            for index, url in enumerate(self.fallback_zone_urls):
+                try:
+                    response = await aio.get(url, cache=True)
+                    collection = json.loads(response.data)
+                    for feature in collection.get("features", []):
+                        props = feature.get("properties") or {}
+                        reg = props.get("region", "")
+                        reg_label = region_th_map.get(reg, reg)
+                        base_name_th = props.get("name_th", f"โซน {index + 1}")
+                        display_name_th = (
+                            f"{base_name_th} ({reg_label})"
+                            if reg_label
+                            else base_name_th
+                        )
+                        fallback_zones.append(
+                            {
+                                "id": f"prototype-zone-{index + 1}",
+                                "name": props.get("name", f"Zone {index + 1}"),
+                                "name_th": display_name_th,
+                                "boundary": feature.get("geometry"),
+                                "style": props,
+                                "prototype": True,
+                            }
+                        )
+                except Exception as e:
+                    print(f"load fallback zone error: {e}")
+            self.zones = fallback_zones
+
+        self.map.show_all_zones(self.zones, on_select=self.on_zone_selected)
+        has_db_boundary = any(
+            (z.get("metadata") or {}).get("role") == "reference_boundary"
+            or z.get("code") == "hatyai-boundary"
+            for z in db_zones
+        )
+        if not has_db_boundary:
+            await self.load_reference_boundary()
+        if hasattr(self.map, "fit_to_hatyai_bounds"):
+            self.map.fit_to_hatyai_bounds()
+
+    async def load_reference_boundary(self):
+        if not self.reference_boundary_url:
+            return
+        try:
+            response = await aio.get(self.reference_boundary_url, cache=True)
+            geometry = json.loads(response.data)
+            if geometry.get("type") == "Feature":
+                geometry = geometry.get("geometry")
+            elif geometry.get("type") == "FeatureCollection":
+                features = geometry.get("features", [])
+                geometry = features[0].get("geometry") if features else None
+            self.map.show_reference_boundary(geometry)
+        except Exception as e:
+            print(f"[Monitor] Reference boundary error: {e}")
+
+    load_default_reference_boundary = load_reference_boundary
 
     def on_zone_selected(self, zone):
         """Called when a user clicks a zone polygon on the map."""
         aio.run(self.load_zone_stations(zone))
 
     async def load_zone_stations(self, zone):
+        if zone.get("prototype"):
+            self.on_zone_stations_empty(zone)
+            return
         # `Zone.stations` is only filled in when an admin links stations by
         # hand, so fall back to resolving the members geographically.
         stations = zone.get("stations", []) or []
@@ -100,7 +231,7 @@ class BaseMonitor:
                 response = await aio.get(f"{self.apis['zones']}/{zone_id}/stations")
                 stations = json.loads(response.data).get("stations", [])
             except Exception as e:
-                print(f"zone stations error: {e}")
+                print(f"[Monitor] Zone stations error: {e}")
                 stations = []
 
         if stations:
@@ -182,7 +313,7 @@ class BaseMonitor:
                         '<div class="text-sm text-amber-700 font-semibold"><i class="ph ph-warning"></i> ไม่พบลุ่มน้ำสำหรับตำแหน่งนี้</div>'
                     ).openPopup()
         except Exception as e:
-            print(f"locate error: {e}")
+            print(f"[Monitor] Locate error: {e}")
 
         self.set_map_loading(False)
 
@@ -202,8 +333,40 @@ class BaseMonitor:
         return
 
     def set_map_loading(self, is_loading: bool):
+        if "loading_map" not in document:
+            return
         el = document["loading_map"]
         if is_loading:
+            if "loading_map_message" in document:
+                message = document["loading_map_message"]
+                message.text = "กำลังโหลดแผนที่..."
+                message.classList.add("animate-pulse")
+            if "loading_map_spinner" in document:
+                document["loading_map_spinner"].classList.remove("hidden")
+            if "retry_map_loading" in document:
+                document["retry_map_loading"].classList.add("hidden")
             el.classList.remove("opacity-0", "pointer-events-none")
         else:
             el.classList.add("opacity-0", "pointer-events-none")
+
+    def set_map_error(self, message):
+        """Replace the spinner with an actionable failure state."""
+        if "loading_map" not in document:
+            return
+        el = document["loading_map"]
+        if "loading_map_message" in document:
+            message_el = document["loading_map_message"]
+            message_el.text = message
+            message_el.classList.remove("animate-pulse")
+        if "loading_map_spinner" in document:
+            document["loading_map_spinner"].classList.add("hidden")
+        if "retry_map_loading" in document:
+            retry = document["retry_map_loading"]
+            retry.classList.remove("hidden")
+            retry.unbind("click")
+            retry.bind("click", lambda ev: aio.run(self.retry_setup()))
+        el.classList.remove("opacity-0", "pointer-events-none")
+
+    async def retry_setup(self):
+        if await self.setup() and hasattr(self, "get_stations_metrics"):
+            await self.get_stations_metrics()

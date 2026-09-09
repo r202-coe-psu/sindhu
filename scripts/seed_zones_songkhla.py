@@ -1,5 +1,7 @@
 import sys
 import os
+import json
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -194,6 +196,57 @@ SONGKHLA_ZONES = [
 ]
 
 
+HATYAI_BOUNDARY_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "sindhu"
+    / "web"
+    / "static"
+    / "resources"
+    / "hatyai_boundary.geojson"
+)
+
+
+async def seed_system_settings():
+    """Create the one required map configuration only on a fresh database.
+
+    The monitor cannot construct Leaflet or request its zones without this
+    document.  Existing operator configuration is deliberately preserved.
+    """
+    existing = await models.SystemSetting.find_one(sort=[("_id", -1)])
+    if existing:
+        print("System settings: preserved existing configuration")
+        return
+
+    await models.SystemSetting(
+        # GeoJSON point order is [longitude, latitude].  This is the centre
+        # of the three Songkhla flood zones declared below.
+        center={"type": "Point", "coordinates": [100.449937, 6.990255]},
+        zoom=12,
+        min_zoom=6,
+        interpolation_coordinate_1=None,
+        interpolation_coordinate_2=None,
+    ).insert()
+    print("System settings: created Hat Yai map defaults")
+
+
+def load_hatyai_zone():
+    with HATYAI_BOUNDARY_PATH.open(encoding="utf-8") as boundary_file:
+        boundary = json.load(boundary_file)
+
+    if boundary.get("type") != "Polygon":
+        raise ValueError("Hat Yai boundary must be a GeoJSON Polygon")
+
+    return {
+        "name": "Hat Yai Boundary",
+        "name_th": "ขอบเขตหาดใหญ่",
+        "code": "hatyai-boundary",
+        "zone_kind": "reference",
+        "metadata": {"role": "reference_boundary", "always_visible": True},
+        "station_codes": [],
+        "boundary": boundary,
+    }
+
+
 async def seed_zones():
     class Setting:
         def __init__(self):
@@ -204,7 +257,9 @@ async def seed_zones():
     settings = Setting()
     await models.init_beanie(None, settings)
 
-    for zone_data in SONGKHLA_ZONES:
+    await seed_system_settings()
+
+    for zone_data in [*SONGKHLA_ZONES, load_hatyai_zone()]:
         codes = zone_data["station_codes"]
         db_stations = await models.Station.find({"code": {"$in": codes}}).to_list()
         found = {s.code for s in db_stations}
@@ -215,6 +270,9 @@ async def seed_zones():
             existing.name = zone_data["name"]
             existing.name_th = zone_data["name_th"]
             existing.boundary = zone_data["boundary"]
+            existing.zone_kind = zone_data.get("zone_kind", "flood")
+            if "metadata" in zone_data:
+                existing.metadata = zone_data["metadata"]
             existing.stations = db_stations
             existing.status = "active"
             await existing.save()

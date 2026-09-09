@@ -1,5 +1,24 @@
 from browser import alert, window, ajax
 import json
+import math
+
+
+def _haversine_distance(coord1, coord2):
+    """Calculate distance in meters between two [lon, lat] coordinates."""
+    try:
+        lon1, lat1 = float(coord1[0]), float(coord1[1])
+        lon2, lat2 = float(coord2[0]), float(coord2[1])
+        r = 6371000.0
+        phi1, phi2 = math.radians(lat1), math.radians(lat2)
+        dphi = math.radians(lat2 - lat1)
+        dlam = math.radians(lon2 - lon1)
+        a = (
+            math.sin(dphi / 2) ** 2
+            + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+        )
+        return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    except Exception:
+        return float("inf")
 
 
 class Map:
@@ -94,9 +113,22 @@ class Map:
         self._reset_btn_container = None
 
         self.zone_layers_by_id = {}
+        self.reference_boundary_layer = None
         self._selected_zone_id = None
         self._on_zone_select = None
         self._zone_renderer = None
+        self.zone_shading_mode = "outline"
+        self.zones_visible = True
+        self.reference_boundary_visible = True
+        # Visual feeds are a separate overlay. Station/source/zone filtering
+        # only operates on BaseMap.metric_markers and must never mutate this
+        # layer.
+        self.visual_feed_layer = None
+        self.visual_feed_markers = []
+        self.visual_feed_markers_by_id = {}
+        self.visual_feed_layer_visible = True
+        self.visual_feeds = []
+        self.latest_stations = []
 
         # A canvas renderer covers the whole overlay pane and would swallow
         # every click meant for the zone pane below it, so overlays that only
@@ -112,37 +144,35 @@ class Map:
     # Deliberately heavier than the river lines: the basins cover most of the
     # map, so a subtle outline disappears into them and the zone stops looking
     # clickable.
+    # Boundary lines without shaded fill: keeps the underlying map and streets
+    # clearly visible while distinctly showing zone perimeters.
     ZONE_STYLE = {
-        "fillColor": "#6366f1",
-        "fillOpacity": 0.12,
+        "fillColor": "transparent",
+        "fillOpacity": 0.0,
         "color": "#4338ca",
-        "weight": 1,
-        "opacity": 0.9,
-        "dashArray": "4, 3",
+        "weight": 2.5,
+        "opacity": 0.95,
+        "dashArray": "",
     }
     ZONE_HOVER_STYLE = {
         "fillColor": "#6366f1",
-        "fillOpacity": 0.28,
+        "fillOpacity": 0.08,
         "color": "#3730a3",
-        "weight": 1.5,
-        "opacity": 1,
+        "weight": 3.5,
+        "opacity": 1.0,
         "dashArray": "",
     }
     ZONE_SELECTED_STYLE = {
         "fillColor": "#2563eb",
-        "fillOpacity": 0.25,
+        "fillOpacity": 0.12,
         "color": "#1d4ed8",
-        "weight": 1.5,
-        "opacity": 1,
+        "weight": 4.0,
+        "opacity": 1.0,
         "dashArray": "",
     }
 
     def set_zone_risk(self, zone_id, level):
-        """Colour a zone by the worst risk among its stations.
-
-        Colour then means risk and nothing else, so hover and selection are
-        shown with the line instead — solid, and thicker when selected.
-        """
+        """Colour a zone by the worst risk among its stations."""
         entry = self.zone_layers_by_id.get(str(zone_id))
         if not entry:
             return False
@@ -158,30 +188,161 @@ class Map:
         """Style for one zone in a given interaction state."""
         entry = self.zone_layers_by_id.get(str(zone_id)) or {}
         level = entry.get("risk")
+        zone = entry.get("zone") or {}
+        custom_style = zone.get("style") or zone.get("metadata") or {}
 
-        if not level:
-            # No risk known yet — keep the neutral outline
+        fill = custom_style.get("fill", self.ZONE_STYLE["fillColor"])
+        stroke = custom_style.get("stroke") or fill or self.ZONE_STYLE["color"]
+        is_ref = (custom_style.get("role") == "reference_boundary") or (
+            zone.get("code") == "hatyai-boundary"
+        )
+        dash_array = "8, 6" if is_ref else custom_style.get("dashArray", "")
+        stroke_weight = (
+            3.0 if is_ref else max(float(custom_style.get("stroke-width", 2.5)), 2.5)
+        )
+
+        zone_shading = custom_style.get("shading_mode") or getattr(
+            self, "zone_shading_mode", "outline"
+        )
+        is_shaded = zone_shading == "shaded"
+        fill_opacity_normal = (
+            float(custom_style.get("fill-opacity", 0.28)) if is_shaded else 0.0
+        )
+        fill_color_normal = fill if is_shaded else "transparent"
+
+        risk_val = level.get("risk", -1) if level else -1
+
+        # Reference boundary or normal water level (risk <= 0):
+        # Strictly preserve the admin-configured zone color and shading mode.
+        # NEVER recolor normal zones to green!
+        if is_ref or risk_val <= 0:
+            if custom_style:
+                if state == "hover":
+                    return {
+                        "fillColor": fill if is_shaded else stroke,
+                        "fillOpacity": (
+                            min(fill_opacity_normal + 0.15, 0.65) if is_shaded else 0.08
+                        ),
+                        "color": stroke,
+                        "weight": stroke_weight + 1.0,
+                        "opacity": 1.0,
+                        "dashArray": dash_array,
+                    }
+                elif state == "selected":
+                    return {
+                        "fillColor": fill if is_shaded else stroke,
+                        "fillOpacity": (
+                            min(fill_opacity_normal + 0.22, 0.70) if is_shaded else 0.12
+                        ),
+                        "color": stroke,
+                        "weight": stroke_weight + 1.5,
+                        "opacity": 1.0,
+                        "dashArray": dash_array,
+                    }
+                return {
+                    "fillColor": fill_color_normal,
+                    "fillOpacity": fill_opacity_normal,
+                    "color": stroke,
+                    "weight": stroke_weight,
+                    "opacity": 0.95,
+                    "dashArray": dash_array,
+                }
             base = {
                 "normal": self.ZONE_STYLE,
                 "hover": self.ZONE_HOVER_STYLE,
                 "selected": self.ZONE_SELECTED_STYLE,
             }[state]
-            return dict(base)
+            style_copy = dict(base)
+            if is_shaded:
+                style_copy["fillColor"] = style_copy.get("fillColor", "#6366f1")
+                style_copy["fillOpacity"] = 0.25 if state == "normal" else 0.35
+            return style_copy
 
-        fill_opacity = level["fill_opacity"]
-        if state == "hover":
-            fill_opacity = min(fill_opacity + 0.12, 0.7)
-        elif state == "selected":
-            fill_opacity = min(fill_opacity + 0.08, 0.7)
+        # Active flood alert (risk >= 1: warning, critical)
+        alert_color = level.get("border") or level.get("color")
+        if is_shaded:
+            alert_fill = level.get("color")
+            fill_opacity = min(level.get("fill_opacity", 0.28), 0.50)
+            if state == "hover":
+                fill_opacity = min(fill_opacity + 0.12, 0.65)
+            elif state == "selected":
+                fill_opacity = min(fill_opacity + 0.20, 0.70)
+        else:
+            alert_fill = "transparent" if state == "normal" else alert_color
+            fill_opacity = (
+                0.0 if state == "normal" else (0.08 if state == "hover" else 0.12)
+            )
 
         return {
-            "fillColor": level["color"],
+            "fillColor": alert_fill,
             "fillOpacity": fill_opacity,
-            "color": level["border"],
-            "weight": 3 if state == "selected" else (2 if state == "hover" else 1),
-            "opacity": 1 if state != "normal" else 0.9,
-            "dashArray": "" if state != "normal" else "4, 3",
+            "color": alert_color,
+            "weight": (
+                stroke_weight + 1.5
+                if state == "selected"
+                else (stroke_weight + 1.0 if state == "hover" else stroke_weight)
+            ),
+            "opacity": 1.0 if state != "normal" else 0.95,
+            "dashArray": dash_array,
         }
+
+    def set_zone_shading_mode(self, mode):
+        """Toggle zone fill between outline-only (transparent) and shaded (colored fill)."""
+        self.zone_shading_mode = mode
+        for key, entry in self.zone_layers_by_id.items():
+            state = "selected" if self._selected_zone_id == key else "normal"
+            entry["layer"].setStyle(self.zone_style(key, state))
+
+    def set_zone_visible(self, zone_identifier, visible):
+        """Set visibility of an individual zone by id, code, or zone_number."""
+        ident = str(zone_identifier).strip().lower()
+        entry = self.zone_layers_by_id.get(str(zone_identifier))
+        if not entry:
+            for zid, e in self.zone_layers_by_id.items():
+                z = e.get("zone") or {}
+                meta = z.get("metadata") or {}
+                znum = str(meta.get("zone_number") or "").strip()
+                zcode = str(z.get("code") or "").strip().lower()
+                zname = str(z.get("name") or "").strip().lower()
+                zname_th = str(z.get("name_th") or "").strip().lower()
+                if ident in [str(zid).lower(), znum, zcode, zname, zname_th]:
+                    entry = e
+                    break
+        if not entry:
+            return False
+
+        layer = entry["layer"]
+        if visible:
+            if not self.map.hasLayer(layer):
+                layer.addTo(self.map)
+        else:
+            if self.map.hasLayer(layer):
+                self.map.removeLayer(layer)
+        return True
+
+    def set_zones_visible(self, visible):
+        """Show or hide all zone polygon layers."""
+        self.zones_visible = visible
+        for entry in self.zone_layers_by_id.values():
+            layer = entry["layer"]
+            if visible:
+                if not self.map.hasLayer(layer):
+                    layer.addTo(self.map)
+            else:
+                if self.map.hasLayer(layer):
+                    self.map.removeLayer(layer)
+
+    def set_reference_boundary_visible(self, visible):
+        """Show or hide the Hat Yai reference boundary layer."""
+        self.reference_boundary_visible = visible
+        if not self.reference_boundary_layer:
+            return
+        if visible:
+            if not self.map.hasLayer(self.reference_boundary_layer):
+                self.reference_boundary_layer.addTo(self.map)
+        else:
+            if self.map.hasLayer(self.reference_boundary_layer):
+                self.map.removeLayer(self.reference_boundary_layer)
 
     def show_all_zones(self, zones, on_select=None):
         """Draw every zone boundary so users can click a zone directly.
@@ -205,6 +366,9 @@ class Map:
         zone_renderer = self._zone_renderer
 
         for zone in zones:
+            if zone.get("status") == "inactive":
+                continue
+
             boundary = zone.get("boundary")
             if not boundary:
                 continue
@@ -214,10 +378,40 @@ class Map:
                 continue
 
             name = zone.get("name_th") or zone.get("name") or ""
+            style = zone.get("style") or zone.get("metadata") or {}
             feature = {
                 "type": "Feature",
                 "properties": {"name": name},
                 "geometry": boundary,
+            }
+
+            stroke_color = (
+                style.get("stroke") or style.get("fill") or self.ZONE_STYLE["color"]
+            )
+            is_ref = style.get("role") == "reference_boundary"
+            weight_val = (
+                3.0 if is_ref else max(float(style.get("stroke-width") or 2.5), 2.5)
+            )
+            dash_array = "8, 6" if is_ref else ""
+
+            zone_shading = style.get("shading_mode") or getattr(
+                self, "zone_shading_mode", "outline"
+            )
+            is_shaded = zone_shading == "shaded"
+            fill_color = (
+                style.get("fill") or stroke_color if is_shaded else "transparent"
+            )
+            fill_opacity = (
+                float(style.get("fill-opacity") or 0.28) if is_shaded else 0.0
+            )
+
+            feature_style = {
+                "fillColor": fill_color,
+                "fillOpacity": fill_opacity,
+                "color": stroke_color,
+                "weight": weight_val,
+                "opacity": 0.95,
+                "dashArray": dash_array,
             }
 
             layer = self.leaflet.geoJson(
@@ -225,25 +419,93 @@ class Map:
                 {
                     "pane": "zones",
                     "renderer": zone_renderer,
-                    "style": lambda f: dict(self.ZONE_STYLE),  # risk applied later
+                    "interactive": not is_ref,
+                    "style": feature_style,
                 },
             )
-            if name:
+            if name and not is_ref:
                 layer.bindTooltip(
                     name,
                     {"sticky": True, "direction": "top", "className": "zone-label"},
                 )
 
-            layer.on("mouseover", self._make_zone_hover(zone_id, True))
-            layer.on("mouseout", self._make_zone_hover(zone_id, False))
-            layer.on("click", self._make_zone_click(zone_id, zone))
-            layer.addTo(self.map)
+            if not is_ref:
+                layer.on("mouseover", self._make_zone_hover(zone_id, True))
+                layer.on("mouseout", self._make_zone_hover(zone_id, False))
+                layer.on("click", self._make_zone_click(zone_id, zone))
+            if self.zones_visible:
+                layer.addTo(self.map)
 
             self.zone_layers_by_id[zone_id] = {
                 "layer": layer,
                 "zone": zone,
                 "risk": None,
+                "style": style,
             }
+
+    def clear_reference_boundary(self):
+        if self.reference_boundary_layer and self.map.hasLayer(
+            self.reference_boundary_layer
+        ):
+            self.map.removeLayer(self.reference_boundary_layer)
+        self.reference_boundary_layer = None
+
+    def show_reference_boundary(self, boundary, name="กรอบพื้นที่หาดใหญ่"):
+        """Draw the Hat Yai reference boundary frame on the map."""
+        if not boundary:
+            return
+        self.clear_reference_boundary()
+
+        pane = self.map.getPane("reference_boundary")
+        if not pane:
+            pane = self.map.createPane("reference_boundary")
+            pane.style.zIndex = "340"
+        pane.style.pointerEvents = "none"
+
+        ref_renderer = self.leaflet.svg({"pane": "reference_boundary"})
+
+        ref_style = {
+            "fillColor": "#0f172a",
+            "fillOpacity": 0.0,
+            "color": "#0f172a",
+            "weight": 3,
+            "opacity": 0.85,
+            "dashArray": "8, 6",
+            "interactive": False,
+        }
+        self.reference_boundary_layer = self.leaflet.geoJson(
+            {
+                "type": "Feature",
+                "properties": {"name": "กรอบพื้นที่หาดใหญ่"},
+                "geometry": boundary,
+            },
+            {
+                "pane": "reference_boundary",
+                "renderer": ref_renderer,
+                "interactive": False,
+                "style": ref_style,
+            },
+        )
+        if self.reference_boundary_visible:
+            self.reference_boundary_layer.addTo(self.map)
+
+    def fit_to_hatyai_bounds(self):
+        """Fit map view to Hat Yai reference boundary or loaded zones."""
+        try:
+            if self.reference_boundary_layer:
+                bounds = self.reference_boundary_layer.getBounds()
+                if bounds and bounds.isValid():
+                    self.map.fitBounds(bounds, {"padding": [24, 24]})
+                    return
+            if self.zone_layers_by_id:
+                group = self.leaflet.featureGroup(
+                    [entry["layer"] for entry in self.zone_layers_by_id.values()]
+                )
+                bounds = group.getBounds()
+                if bounds and bounds.isValid():
+                    self.map.fitBounds(bounds, {"padding": [24, 24]})
+        except Exception as e:
+            print(f"fit_to_hatyai_bounds error: {e}")
 
     def _make_zone_hover(self, zone_id, entering):
         def handler(e):
@@ -301,6 +563,8 @@ class Map:
             entry["layer"].setStyle(self.zone_style(zone_id))
 
     def clear_all_zones(self):
+        # The permanent reference boundary is deliberately not part of this
+        # collection. Clearing/selecting flood zones must leave it visible.
         for entry in self.zone_layers_by_id.values():
             self.map.removeLayer(entry["layer"])
         self.zone_layers_by_id = {}
@@ -396,6 +660,237 @@ class Map:
         self.clear_zone_display()
         self.reset_view()
         self.show_reset_button(False)
+
+    def set_visual_feed_layer(self, markers):
+        """Replace the independent visual-feed layer without touching stations."""
+        if self.visual_feed_layer is not None and self.map.hasLayer(
+            self.visual_feed_layer
+        ):
+            self.map.removeLayer(self.visual_feed_layer)
+
+        self.visual_feed_markers = markers if isinstance(markers, list) else []
+        layer = self.leaflet.layerGroup()
+        for m in self.visual_feed_markers:
+            layer.addLayer(m)
+        self.visual_feed_layer = layer
+        if self.visual_feed_layer_visible:
+            self.visual_feed_layer.addTo(self.map)
+        return self.visual_feed_layer
+
+    def set_visual_feed_layer_visible(self, visible):
+        """Toggle only the visual-feed overlay; station markers are untouched."""
+        self.visual_feed_layer_visible = bool(visible)
+        if self.visual_feed_layer is None:
+            return
+
+        if self.visual_feed_layer_visible:
+            if not self.map.hasLayer(self.visual_feed_layer):
+                self.visual_feed_layer.addTo(self.map)
+        elif self.map.hasLayer(self.visual_feed_layer):
+            self.map.removeLayer(self.visual_feed_layer)
+
+    def find_matching_cctv(self, station):
+        """Find the nearest co-located CCTV camera for a given water station."""
+        if not hasattr(self, "visual_feeds") or not self.visual_feeds:
+            return None
+        st_code = str(station.get("code") or "").strip().lower()
+        scoord_obj = station.get("coordinates")
+        s_coords = (
+            scoord_obj.get("coordinates") if isinstance(scoord_obj, dict) else None
+        )
+
+        best = None
+        min_dist = float("inf")
+        for feed in self.visual_feeds:
+            c_code = str(feed.get("code") or "").strip().lower()
+            if st_code and c_code and st_code == c_code:
+                return feed
+            ccoord_obj = feed.get("coordinates")
+            c_coords = (
+                ccoord_obj.get("coordinates") if isinstance(ccoord_obj, dict) else None
+            )
+            if s_coords and c_coords and len(s_coords) >= 2 and len(c_coords) >= 2:
+                dist = _haversine_distance(s_coords, c_coords)
+                if dist <= 300 and dist < min_dist:
+                    min_dist = dist
+                    best = feed
+        return best
+
+    def find_matching_station(self, feed):
+        """Find the nearest co-located water station for a given CCTV camera."""
+        if not hasattr(self, "latest_stations") or not self.latest_stations:
+            return None
+        c_code = str(feed.get("code") or "").strip().lower()
+        ccoord_obj = feed.get("coordinates")
+        c_coords = (
+            ccoord_obj.get("coordinates") if isinstance(ccoord_obj, dict) else None
+        )
+
+        best = None
+        min_dist = float("inf")
+        for station in self.latest_stations:
+            st_code = str(station.get("code") or "").strip().lower()
+            if c_code and st_code and c_code == st_code:
+                return station
+            scoord_obj = station.get("coordinates")
+            s_coords = (
+                scoord_obj.get("coordinates") if isinstance(scoord_obj, dict) else None
+            )
+            if s_coords and c_coords and len(s_coords) >= 2 and len(c_coords) >= 2:
+                dist = _haversine_distance(s_coords, c_coords)
+                if dist <= 300 and dist < min_dist:
+                    min_dist = dist
+                    best = station
+        return best
+
+    def show_visual_feeds(self, feeds, on_feed_click=None):
+        """Create and display CCTV markers on the visual_feed_layer with custom CCTV hallmark."""
+        if not feeds or not hasattr(self, "leaflet") or not self.leaflet:
+            return
+
+        self.visual_feeds = feeds
+        markers = []
+        self.visual_feed_markers_by_id = {}
+        availability_colors = {
+            "online": "#16a34a",
+            "stale": "#d97706",
+            "degraded": "#ea580c",
+            "offline": "#dc2626",
+            "unknown": "#64748b",
+        }
+        availability_labels = {
+            "online": "ออนไลน์",
+            "stale": "ข้อมูลเก่า",
+            "degraded": "ขัดข้องบางส่วน",
+            "offline": "ออฟไลน์",
+            "unknown": "ไม่ทราบสถานะ",
+        }
+
+        for feed in feeds:
+            if not isinstance(feed, dict):
+                continue
+            coords_obj = feed.get("coordinates")
+            if not coords_obj or not isinstance(coords_obj, dict):
+                continue
+            coords = coords_obj.get("coordinates")
+            if not coords or not isinstance(coords, list) or len(coords) < 2:
+                continue
+
+            lng, lat = coords[0], coords[1]
+            if lat is None or lng is None:
+                continue
+
+            availability = str(feed.get("availability", "unknown")).lower()
+            color = availability_colors.get(availability, "#64748b")
+            status_label = availability_labels.get(availability, "ไม่ทราบสถานะ")
+
+            title = (
+                feed.get("title_th")
+                or feed.get("name_th")
+                or feed.get("name")
+                or "กล้อง CCTV"
+            )
+            source = str(feed.get("source", ""))
+            upstream_id = str(feed.get("upstream_id", ""))
+            image_url = feed.get("image_url") or ""
+
+            # Hallmark: Modern CCTV camera pin icon with status color
+            pulse_ring = (
+                f'<div class="cctv-live-glow" style="position: absolute; width: 12px; height: 12px; top: 7px; left: 8px; border-radius: 50%; pointer-events: none;"></div>'
+                if availability == "online"
+                else ""
+            )
+
+            icon_html = f"""<div class="cctv-marker-pin" style="position: relative; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.32)); cursor: pointer;">
+  {pulse_ring}
+  <svg width="28" height="35" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M17 0C7.6 0 0 7.6 0 17C0 28.5 15.2 40.8 15.8 41.3C16.5 41.9 17.5 41.9 18.2 41.3C18.8 40.8 34 28.5 34 17C34 7.6 26.4 0 17 0Z" fill="{color}"/>
+    <circle cx="17" cy="16" r="12.5" fill="white" fill-opacity="0.25"/>
+    <g transform="translate(8.5, 9.5)">
+      <rect x="0" y="2" width="11" height="8.5" rx="2" fill="white"/>
+      <path d="M11 4.5L16 2V11L11 8.5V4.5Z" fill="white"/>
+      <circle cx="5.5" cy="6.25" r="1.8" fill="{color}"/>
+    </g>
+  </svg>
+</div>"""
+
+            pin_icon = self.leaflet.divIcon(
+                {
+                    "className": "custom-cctv-pin",
+                    "html": icon_html,
+                    "iconSize": [28, 35],
+                    "iconAnchor": [14, 35],
+                    "popupAnchor": [0, -32],
+                }
+            )
+
+            marker = self.leaflet.marker(
+                [lat, lng],
+                {
+                    "icon": pin_icon,
+                    "zIndexOffset": 500,
+                    "title": title,
+                },
+            )
+
+            marker.bindTooltip(
+                f"<div style='font-family:inherit;font-size:12px;padding:2px;'><div style='font-weight:700;color:#0f172a;'>📷 {title}</div><div style='color:{color};font-weight:600;font-size:11px;margin-top:2px;'>● {status_label}</div></div>",
+                {"direction": "top", "offset": [0, -32]},
+            )
+
+            preview_img = ""
+            if image_url:
+                preview_img = f"""<div style="margin-top:6px; border-radius:8px; overflow:hidden; aspect-ratio:16/9; background:#0f172a; box-shadow:0 1px 3px rgba(0,0,0,0.1); display:flex; align-items:center; justify-content:center;">
+  <img src="{image_url}" alt="{title}" style="width:100%; height:100%; object-fit:cover; display:block;" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'color:#94a3b8; font-size:11px;\\'>ไม่มีภาพตัวอย่าง</div>'" />
+</div>"""
+
+            # Check if there is a co-located water level station
+            matched_st = self.find_matching_station(feed)
+            water_btn_html = ""
+            if matched_st:
+                st_code = str(matched_st.get("code", ""))
+                st_src = str(matched_st.get("source", ""))
+                st_name = str(matched_st.get("name_th") or matched_st.get("name", ""))
+                water_btn_html = f"""
+  <button type="button" onclick="if(window.focus_water_station)window.focus_water_station('{st_code}','{st_src}')"
+    style="margin-top:5px; width:100%; background:#0284c7; color:white; font-size:11px; font-weight:600; padding:6px 10px; border-radius:8px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:4px; box-shadow:0 1px 2px rgba(2,132,199,0.2);">
+    <span>🌊 ดูข้อมูลระดับน้ำ ({st_name})</span>
+  </button>"""
+
+            popup_html = f"""<div class="cctv-map-popup" style="font-family:inherit; min-width:240px; max-width:280px; padding:4px;">
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:6px; margin-bottom:4px;">
+    <div style="font-weight:700; font-size:13px; color:#0f172a; line-height:1.25;">{title}</div>
+    <span style="background:{color}; color:white; font-size:10px; font-weight:700; padding:2px 7px; border-radius:9999px; white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
+      {status_label}
+    </span>
+  </div>
+  {preview_img}
+  <button type="button" onclick="if(window.open_cctv_detail)window.open_cctv_detail('{source}','{upstream_id}')"
+    style="margin-top:8px; width:100%; background:#2563eb; color:white; font-size:11px; font-weight:600; padding:7px 10px; border-radius:8px; border:none; cursor:pointer; text-align:center; box-shadow:0 1px 2px rgba(37,99,235,0.2); transition:background 0.15s;">
+    🔍 ดูภาพสด / ประวัติ 7 วัน
+  </button>
+  {water_btn_html}
+</div>"""
+
+            marker.bindPopup(popup_html, {"maxWidth": 290})
+
+            if on_feed_click:
+                marker.on("click", lambda e, f=feed: on_feed_click(f))
+
+            markers.append(marker)
+            key = f"{source}_{upstream_id}"
+            self.visual_feed_markers_by_id[key] = marker
+
+        self.set_visual_feed_layer(markers)
+
+    def fly_to_visual_feed(self, source, upstream_id, zoom=17):
+        """Fly map view to the specified camera and open its popup."""
+        key = f"{source}_{upstream_id}"
+        marker = self.visual_feed_markers_by_id.get(key)
+        if marker:
+            latlng = marker.getLatLng()
+            self.map.flyTo(latlng, zoom)
+            marker.openPopup()
 
     def _handle_map_click(self, e):
         if not self._pin_mode_active:
@@ -800,6 +1295,8 @@ class Map:
                     target_layer._path.classList.add("flowing-river")
 
             def zoom_to_feature(e):
+                if getattr(self, "_pin_mode_active", False):
+                    return
                 target_layer = e.target
                 self._river_clicked = True
 
@@ -839,7 +1336,12 @@ class Map:
                 }
             )
 
-        self.geojson = self.leaflet.geoJson(
+        if "rivers" in self.shapes and self.shapes["rivers"] is not None:
+            if self.map.hasLayer(self.shapes["rivers"]):
+                self.map.removeLayer(self.shapes["rivers"])
+            self.shapes.pop("rivers", None)
+
+        self.shapes["rivers"] = self.leaflet.geoJson(
             data,
             {
                 "style": style,
@@ -847,7 +1349,6 @@ class Map:
                 "renderer": self.leaflet.svg(),
             },
         ).addTo(self.map)
-        self.shapes["rivers"] = self.geojson
 
     def set_shape_boundary(self, data):
         def style(feature):
@@ -908,11 +1409,11 @@ class Map:
                 if basin_canvas:
                     basin_canvas.style.pointerEvents = "none"
 
-                print("🎉 โหลดข้อมูลเส้นแม่น้ำสงขลาลงแผนที่สำเร็จ!")
+                print("[Map] River basins loaded successfully")
             else:
-                print(f"❌ โหลดข้อมูล GeoJSON ล้มเหลว (Status: {req.status})")
+                print(f"[Map] Failed to load river basins (status: {req.status})")
 
-        print("กำลังดึงข้อมูลแม่น้ำจาก API...")
+        print("[Map] Fetching river basins from API...")
         req = ajax.Ajax()
         req.bind("complete", on_complete)
         req.open("GET", f"{api_url}/v1/basins", True)

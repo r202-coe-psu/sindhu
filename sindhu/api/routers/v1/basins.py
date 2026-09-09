@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 import json
-import os
+from pathlib import Path
 
 router = APIRouter()
 
@@ -10,12 +10,18 @@ router = APIRouter()
 def get_basin_geojson():
     try:
 
-        geojson_path = "sindhu/web/static/data/songkhla_basins.geojson"
+        geojson_path = (
+            Path(__file__).resolve().parents[3]
+            / "web"
+            / "static"
+            / "resources"
+            / "songkhla_basins.geojson"
+        )
 
-        if not os.path.exists(geojson_path):
+        if not geojson_path.exists():
             raise HTTPException(status_code=404, detail="File not found")
 
-        with open(geojson_path, "r", encoding="utf-8") as f:
+        with geojson_path.open("r", encoding="utf-8") as f:
             geojson_data = json.load(f)
 
         return JSONResponse(content=geojson_data)

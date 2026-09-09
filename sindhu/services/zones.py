@@ -24,13 +24,19 @@ async def find_zone_by_location(longitude: float, latitude: float):
         {
             "boundary": {"$geoIntersects": {"$geometry": point}},
             "status": "active",
+            # Reference boundaries are map context only. They must never win
+            # point location or be treated as a flood-monitoring zone.
+            "$or": [
+                {"zone_kind": "flood"},
+                {"zone_kind": {"$exists": False}},
+            ],
         }
     )
     return zone
 
 
 async def find_stations_by_zone(zone, user_lng: float = 0, user_lat: float = 0) -> list:
-    if not zone:
+    if not zone or getattr(zone, "zone_kind", "flood") == "reference":
         return []
 
     zone_with_links = await models.Zone.find_one(

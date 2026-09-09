@@ -1,12 +1,12 @@
-from browser import document, aio, ajax
+from browser import document, aio, window
 import javascript as js
 import datetime
 from urllib.parse import urlencode
 
 from .base import BaseMonitor
 from stations import metric_infos
+from maps.map import _haversine_distance
 import json
-from urllib.parse import urlencode
 
 
 class WaterMonitor(BaseMonitor):
@@ -17,6 +17,9 @@ class WaterMonitor(BaseMonitor):
         source,
         center=None,
         zoom=None,
+        fallback_zone_urls=None,
+        reference_boundary_url=None,
+        rivers_url=None,
     ):
         super().__init__(
             lang_code=lang_code,
@@ -24,11 +27,15 @@ class WaterMonitor(BaseMonitor):
             source=source,
             center=center,
             zoom=zoom,
+            fallback_zone_urls=fallback_zone_urls,
+            reference_boundary_url=reference_boundary_url,
+            rivers_url=rivers_url,
         )
         self.monitor_name = "water"
 
         self.params = dict()
         self.latest_data = None
+        self.visual_feed_monitor = None
 
     def calculate_risk(self, station):
         if not station or not isinstance(station, dict):
@@ -40,12 +47,6 @@ class WaterMonitor(BaseMonitor):
 
         wl_crit = metadata.get("water_level_critical")
         wl_warn = metadata.get("water_level_warning")
-        wl_evac = metadata.get("water_level_evacuation")
-        if wl_evac is None and wl_crit is not None:
-            try:
-                wl_evac = float(wl_crit) + 0.5
-            except:
-                pass
 
         waterlevel = None
         diff_wl_bank = None
@@ -63,34 +64,36 @@ class WaterMonitor(BaseMonitor):
                 except (ValueError, TypeError):
                     pass
 
-        risk = -1
-        if waterlevel is not None and wl_crit is not None and wl_warn is not None:
+        if waterlevel is None and diff_wl_bank is None:
+            return -1, None, None
+
+        has_threshold = False
+        crit = None
+        warn = None
+        if wl_crit is not None and wl_warn is not None:
+            try:
+                c = float(wl_crit)
+                w = float(wl_warn)
+                if c > 0 and w > 0:
+                    crit = c
+                    warn = w
+                    has_threshold = True
+            except (ValueError, TypeError):
+                has_threshold = False
+
+        if has_threshold and waterlevel is not None:
             try:
                 wl = float(waterlevel)
-                crit = float(wl_crit)
-                warn = float(wl_warn)
-                evac = float(wl_evac) if wl_evac is not None else crit + 0.5
-                if wl >= evac:
-                    risk = 3
-                elif wl >= crit:
-                    risk = 2
+                if wl >= crit:
+                    return 2, waterlevel, diff_wl_bank
                 elif wl >= warn:
-                    risk = 1
+                    return 1, waterlevel, diff_wl_bank
                 else:
-                    risk = 0
+                    return 0, waterlevel, diff_wl_bank
             except:
                 pass
-        elif diff_wl_bank is not None:
-            if diff_wl_bank >= 0.5:
-                risk = 3
-            elif diff_wl_bank >= 0:
-                risk = 2
-            elif diff_wl_bank >= -0.5:
-                risk = 1
-            else:
-                risk = 0
 
-        return risk, waterlevel, diff_wl_bank
+        return 0, waterlevel, diff_wl_bank
 
     """
     ===========================================================================
@@ -98,12 +101,82 @@ class WaterMonitor(BaseMonitor):
     ===========================================================================
     """
 
+    def find_matching_cctv(self, station):
+        """Find the nearest co-located CCTV camera for a given water station."""
+        if (
+            hasattr(self, "map")
+            and self.map
+            and hasattr(self.map, "find_matching_cctv")
+        ):
+            return self.map.find_matching_cctv(station)
+        feeds = []
+        if hasattr(self, "visual_feed_monitor") and self.visual_feed_monitor:
+            feeds = getattr(self.visual_feed_monitor, "latest_feeds", [])
+        if not feeds:
+            return None
+        st_code = str(station.get("code") or "").strip().lower()
+        scoord_obj = station.get("coordinates")
+        s_coords = (
+            scoord_obj.get("coordinates") if isinstance(scoord_obj, dict) else None
+        )
+        best = None
+        min_dist = float("inf")
+        for feed in feeds:
+            c_code = str(feed.get("code") or "").strip().lower()
+            if st_code and c_code and st_code == c_code:
+                return feed
+            ccoord_obj = feed.get("coordinates")
+            c_coords = (
+                ccoord_obj.get("coordinates") if isinstance(ccoord_obj, dict) else None
+            )
+            if s_coords and c_coords and len(s_coords) >= 2 and len(c_coords) >= 2:
+                dist = _haversine_distance(s_coords, c_coords)
+                if dist <= 300 and dist < min_dist:
+                    min_dist = dist
+                    best = feed
+        return best
+
+    def focus_station(self, code, source=None):
+        """Switch to water panel, scroll to the station card, and fly to marker."""
+        water_tab = document.getElementById("water_panel_tab")
+        if water_tab:
+            water_tab.click()
+
+        target_card = None
+        if "reservoir_data_list" in document:
+            for card in document["reservoir_data_list"].select("[data-station-code]"):
+                c_code = card.getAttribute("data-station-code")
+                c_source = card.getAttribute("data-station-source")
+                if c_code == code and (not source or c_source == source):
+                    target_card = card
+                    break
+
+        if target_card:
+            self.highlight_station_card(target_card)
+            try:
+                target_card.scrollIntoView({"behavior": "smooth", "block": "center"})
+            except Exception:
+                pass
+
+        if hasattr(self, "map") and self.map:
+            self.map.fly_to_station(code, source=source, zoom=16)
+            markers = self.map.metric_markers_by_code.get(code) or []
+            if markers:
+                markers[0].openPopup()
+
     def start(self):
         self.running = True
+        try:
+            window.focus_water_station = lambda code, source=None: self.focus_station(
+                code, source
+            )
+        except Exception:
+            pass
         aio.run(self.monitor())
 
     async def monitor(self):
-        await self.setup()
+        if not await self.setup():
+            return
 
         # Bind UI events
         if "marker_style_selector" in document:
@@ -111,24 +184,16 @@ class WaterMonitor(BaseMonitor):
                 "change", self.on_marker_style_change
             )
 
-        # Load and render river waterways
-        try:
-            rivers_response = await aio.get("/static/resources/rivers.geojson")
-            rivers_data = json.loads(rivers_response.data)
-            self.map.set_rivers_layer(rivers_data)
-        except Exception as e:
-            print(f"Failed to load rivers: {e}")
-
         if "source_selector" in document:
             document["source_selector"].bind("change", self.on_source_change)
 
         if "hide_no_data" in document:
             document["hide_no_data"].bind("change", self.on_hide_no_data_change)
 
-        if self.running:
-            print(f"monitor: wake up {datetime.datetime.now()}")
-            print(f"monitor: {self.monitor_name} monitor")
-            print(f"monitor: sleep {self.acquisition_interval}s")
+        while self.running:
+            print(
+                f"[Monitor:{self.monitor_name}] Cycle running (interval: {self.acquisition_interval}s)"
+            )
 
             await self.get_stations_metrics()
 
@@ -142,17 +207,21 @@ class WaterMonitor(BaseMonitor):
         self.set_map_loading(True)
         try:
             response = await aio.get(url, cache=True)
+            if response.status != 200:
+                raise RuntimeError(f"station metrics returned HTTP {response.status}")
             data = json.loads(response.data)
             if not data or not isinstance(data, dict):
-                print(f"monitor: error data is invalid: {data}")
+                print(f"[Monitor:{self.monitor_name}] Invalid data received: {data}")
                 return
 
             for station in data.get("stations") or []:
                 if not station or not isinstance(station, dict):
                     continue
-                risk, _, _ = self.calculate_risk(station)
-                level = metric_infos.get_risk_level(risk)
+                risk, waterlevel, diff_wl_bank = self.calculate_risk(station)
                 station["risk"] = risk
+                station["waterlevel"] = waterlevel
+                station["diff_wl_bank"] = diff_wl_bank
+                level = metric_infos.get_risk_level(risk)
                 station["risk_color"] = level["color"]
                 station["risk_percent"] = 100
 
@@ -174,15 +243,81 @@ class WaterMonitor(BaseMonitor):
             self.update_zone_risks()
             self.render_data_list()
         except Exception as e:
-            print(f"monitor: error {e}")
+            print(f"[Monitor:{self.monitor_name}] Error: {e}")
+            self.render_data_error("โหลดข้อมูลสถานีไม่สำเร็จ กรุณาลองใหม่อีกครั้ง")
         finally:
             self.set_map_loading(False)
+
+    def render_data_error(self, message):
+        if "reservoir_data_list" not in document:
+            return
+        document["reservoir_data_list"].html = f"""
+        <div class="flex flex-col items-center justify-center h-full text-center gap-2 px-4">
+            <i class="ph ph-warning-circle text-4xl text-amber-500"></i>
+            <div class="text-sm font-medium text-gray-600">{message}</div>
+        </div>
+        """
 
     def on_marker_style_change(self, ev):
         if hasattr(self, "map") and self.latest_data:
             style = ev.target.value
             self.map.marker_style = style
             aio.run(self._update_and_filter())
+
+    def update_zone_shading_buttons(self, mode):
+        if "zone_style_outline" in document and "zone_style_shaded" in document:
+            btn_outline = document["zone_style_outline"]
+            btn_shaded = document["zone_style_shaded"]
+            if mode == "outline":
+                btn_outline.classList.add(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
+                btn_outline.classList.remove("text-slate-600")
+                btn_shaded.classList.remove(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
+                btn_shaded.classList.add("text-slate-600")
+            else:
+                btn_shaded.classList.add(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
+                btn_shaded.classList.remove("text-slate-600")
+                btn_outline.classList.remove(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
+                btn_outline.classList.add("text-slate-600")
+
+    def on_zone_shading_mode_click(self, mode):
+        self.map.set_zone_shading_mode(mode)
+        self.update_zone_shading_buttons(mode)
+        try:
+            window.localStorage.setItem("sindhu_zone_shading_mode", mode)
+        except Exception:
+            pass
+
+    def on_toggle_zones_layer(self, ev):
+        checked = bool(ev.target.checked)
+        self.map.set_zones_visible(checked)
+        for i in range(1, 5):
+            el_id = f"toggle_zone_{i}"
+            if el_id in document:
+                document[el_id].checked = checked
+
+    def on_toggle_single_zone(self, zone_num, ev):
+        checked = bool(ev.target.checked)
+        self.map.set_zone_visible(str(zone_num), checked)
+        self.map.set_zone_visible(f"songkhla-zone-{zone_num}", checked)
+        self.map.set_zone_visible(f"prototype-zone-{zone_num}", checked)
+        all_checked = all(
+            document[f"toggle_zone_{i}"].checked
+            for i in range(1, 5)
+            if f"toggle_zone_{i}" in document
+        )
+        if "toggle_zones_layer" in document:
+            document["toggle_zones_layer"].checked = all_checked
+
+    def on_toggle_boundary_layer(self, ev):
+        self.map.set_reference_boundary_visible(bool(ev.target.checked))
 
     def get_selected_source(self):
         """The source picked in the dropdown, or "all" when nothing narrows it."""
@@ -327,9 +462,15 @@ class WaterMonitor(BaseMonitor):
         return metric_infos.get_risk_level(max_risk)
 
     def update_zone_risks(self):
-        """Colour every zone by its worst station, so the whole province can
-        be read at a glance without picking a zone first."""
+        """Colour zones by active station alerts (warning, critical).
+        Normal water levels preserve the zone's configured style."""
         for zone in self.zones or []:
+            meta = zone.get("metadata") or zone.get("style") or {}
+            if (
+                meta.get("role") == "reference_boundary"
+                or zone.get("code") == "hatyai-boundary"
+            ):
+                continue
             zone_id = str(zone.get("id", "") or "")
             if zone_id:
                 self.map.set_zone_risk(zone_id, self.zone_risk_level(zone))
@@ -381,9 +522,7 @@ class WaterMonitor(BaseMonitor):
 
         selected_source = self.get_selected_source()
 
-        max_risk = (
-            -1
-        )  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical, 3 = Evacuation
+        max_risk = -1  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical
 
         stations_dict = {}
         for s in self.latest_data.get("stations") or []:
@@ -491,6 +630,30 @@ class WaterMonitor(BaseMonitor):
 
                 other_html += f'<div class="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">{display_text}</div>'
 
+            matched_cctv = self.find_matching_cctv(station)
+            cctv_btn_html = ""
+            if matched_cctv:
+                cctv_src = str(matched_cctv.get("source", ""))
+                cctv_up_id = str(matched_cctv.get("upstream_id", ""))
+                cctv_title = str(
+                    matched_cctv.get("title_th")
+                    or matched_cctv.get("name_th")
+                    or matched_cctv.get("name")
+                    or "CCTV"
+                )
+                cctv_btn_html = f"""
+                <div class="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+                    <span class="text-[11px] text-blue-600 font-medium flex items-center gap-1 truncate" title="{cctv_title}">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" class="shrink-0"><path d="M4 4h10a2 2 0 0 1 2 2v2.5l4-2.5v12l-4-2.5V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
+                        <span class="truncate">มีกล้อง: {cctv_title}</span>
+                    </span>
+                    <button type="button" onclick="event.stopPropagation(); if(window.open_cctv_detail)window.open_cctv_detail('{cctv_src}','{cctv_up_id}')"
+                        class="btn btn-xs btn-primary text-white shrink-0 font-medium shadow-sm h-6 min-h-0 px-2.5">
+                        ดูกล้อง
+                    </button>
+                </div>
+                """
+
             html_content += f"""
             <div data-station-code="{station.get("code", "")}" data-station-source="{station.get("source", "")}"
                 class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all duration-200 cursor-pointer">
@@ -506,6 +669,7 @@ class WaterMonitor(BaseMonitor):
                 <div class="mt-3 flex flex-wrap gap-2">
                     {other_html}
                 </div>
+                {cctv_btn_html}
             </div>
             """
 
