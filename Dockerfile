@@ -1,8 +1,6 @@
 FROM debian:sid
-RUN echo 'deb http://mirrors.psu.ac.th/debian/ sid main contrib non-free' > /etc/apt/sources.list
-# RUN echo 'deb http://mirror.kku.ac.th/debian/ sid main contrib non-free' >> /etc/apt/sources.list
-RUN apt update && apt upgrade -y
-RUN apt install -y python3.13 python3.13-dev python3.13-venv python3-pip npm locales \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.13 python3.13-dev python3.13-venv python3-pip npm locales \
     build-essential cmake libopenblas-dev gfortran cargo \
     && apt-get autoremove -y \
     && apt-get autoclean \
@@ -28,7 +26,7 @@ COPY sindhu/cmd /app/sindhu/cmd
 COPY poetry.lock pyproject.toml README.md /app/
 RUN . /venv/bin/activate \
     && poetry config virtualenvs.create false \
-    && poetry install --no-interaction --only main \	
+    && poetry install --no-interaction --only main \
     && mkdir -p sindhu/web/static/brython_modules/ \
     && poetry run brython-cli update --update-dir sindhu/web/static/brython_modules/
 
