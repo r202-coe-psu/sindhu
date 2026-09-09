@@ -69,7 +69,6 @@ class BaseMap(Map):
             def render_chart():
                 canvas = document.getElementById(f"chart-{station_id}")
                 if not canvas:
-                    window.console.log(f"Canvas not found for station {station_id}")
                     return
                 # Destroy existing Chart instance if present to prevent memory leaks and canvas reuse errors
                 try:
@@ -175,6 +174,183 @@ class BaseMap(Map):
             window.setTimeout(render_chart, 50)
         except Exception as ex:
             print(f"[Map] Chart render error: {ex}")
+
+    # --- Water-level cross-section ------------------------------------------
+    # Drawn in viewBox units. Every level above the bed is placed on one real
+    # scale; the bed itself is decorative (see build_waterlevel_section).
+    SECTION_VIEW_W = 300
+    SECTION_VIEW_H = 152
+    SECTION_BANK_Y = 46
+    SECTION_WALL_Y = 96
+    SECTION_BED_Y = 127.5
+    SECTION_CH_L = 78
+    SECTION_CH_R = 198
+    SECTION_ARROW_X = 222
+    SECTION_USABLE_PX = 68
+
+    def build_waterlevel_section(self, station, waterlevel_val, diff_val):
+        """Channel cross-section reporting the water surface against the bank.
+
+        `water_level_critical` is the bank crest in the same frame as the
+        `waterlevel` reading — crest == waterlevel - diff_wl_bank holds for
+        every source — so surface, warning and crest share one true scale,
+        set by whichever of the two gaps is taller. The bed depth is not
+        published by any source, so the channel floor is a fixed decorative
+        curve and no value is ever read off it.
+        """
+        sid = station["id"]
+        view_w = self.SECTION_VIEW_W
+        view_h = self.SECTION_VIEW_H
+        bank_y = self.SECTION_BANK_Y
+        wall_y = self.SECTION_WALL_Y
+        ch_l = self.SECTION_CH_L
+        ch_r = self.SECTION_CH_R
+        ax = self.SECTION_ARROW_X
+
+        metadata = station.get("metadata") or {}
+        try:
+            crest = metadata.get("water_level_critical")
+            crest = float(crest) if crest is not None else None
+        except (TypeError, ValueError):
+            crest = None
+        try:
+            warning = metadata.get("water_level_warning")
+            warning = float(warning) if warning is not None else None
+        except (TypeError, ValueError):
+            warning = None
+
+        gap = abs(diff_val) if diff_val is not None else 0.0
+        warn_drop = None
+        if crest is not None and warning is not None and crest > warning:
+            warn_drop = crest - warning
+
+        # Whichever band is taller fills the usable depth, so a station sitting
+        # 6 m below its bank and one sitting 0.3 m below both stay readable
+        span = max(gap, warn_drop or 0.0, 0.2)
+        px_per_m = self.SECTION_USABLE_PX / span
+
+        if diff_val is not None and diff_val > 0:
+            # Over the bank: lift the surface above the crest, capped so the
+            # dimension label keeps its headroom inside the viewBox
+            water_y = bank_y - min(diff_val * px_per_m, 30.0)
+        else:
+            water_y = bank_y + gap * px_per_m
+
+        risk_color = station.get("risk_color")
+        if not risk_color:
+            d = diff_val if diff_val is not None else -99.0
+            if d >= 0.5:
+                risk_color = "#9333ea"
+            elif d >= 0:
+                risk_color = "#ef4444"
+            elif d >= -0.5:
+                risk_color = "#f97316"
+            else:
+                risk_color = "#22c55e"
+
+        if diff_val is None:
+            gap_label = "—"
+            headline = "ไม่มีค่าเทียบตลิ่ง"
+        elif diff_val > 0:
+            gap_label = f"{diff_val:.2f} ม."
+            headline = f"ล้นตลิ่ง {diff_val:.2f} ม."
+        elif diff_val < 0:
+            gap_label = f"{gap:.2f} ม."
+            headline = f"ต่ำกว่าตลิ่ง {gap:.2f} ม."
+        else:
+            gap_label = "0.00 ม."
+            headline = "เสมอระดับตลิ่งพอดี"
+
+        # Dimension arrow spans surface to crest, whichever way round they are
+        a_top = min(water_y, bank_y)
+        a_bot = max(water_y, bank_y)
+        if a_bot - a_top >= 20:
+            text_y = (a_top + a_bot) / 2
+            arrow_html = f"""
+              <line x1="{ax}" y1="{a_top:.1f}" x2="{ax}" y2="{a_bot:.1f}"
+                    stroke="{risk_color}" stroke-width="1.6"/>
+              <path d="M {ax} {a_top:.1f} l -3.6 5.4 h 7.2 Z" fill="{risk_color}"/>
+              <path d="M {ax} {a_bot:.1f} l -3.6 -5.4 h 7.2 Z" fill="{risk_color}"/>
+            """
+        else:
+            # Too tight for arrowheads — a single tick reads better
+            text_y = a_top - 8
+            arrow_html = f"""
+              <line x1="{ax}" y1="{a_top - 4:.1f}" x2="{ax}" y2="{a_bot + 4:.1f}"
+                    stroke="{risk_color}" stroke-width="1.6"/>
+            """
+
+        warn_html = ""
+        if warn_drop is not None:
+            warn_y = bank_y + warn_drop * px_per_m
+            warn_html = f"""
+              <line x1="{ch_l - 10}" y1="{warn_y:.1f}" x2="{ch_r + 10}" y2="{warn_y:.1f}"
+                    stroke="#f97316" stroke-width="1.2" stroke-dasharray="5 3"/>
+              <text x="{ch_l - 13}" y="{warn_y - 3:.1f}" text-anchor="end"
+                    font-size="9" font-weight="600" fill="#ea580c">เฝ้าระวัง</text>
+            """
+
+        channel = (
+            f"{ch_l} V {wall_y} C {ch_l} 138 {ch_r} 138 {ch_r} {wall_y} V {bank_y}"
+        )
+        # Water starts near the bed and rises into place on every tooltip open
+        rise = max(self.SECTION_BED_Y - water_y + 6, 8.0)
+
+        svg = f"""
+        <svg viewBox="0 0 {view_w} {view_h}" class="w-full"
+             style="display:block; height:auto">
+          <defs>
+            <linearGradient id="wlg-{sid}" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#60a5fa"/>
+              <stop offset="100%" stop-color="#1e40af"/>
+            </linearGradient>
+            <clipPath id="wlc-{sid}">
+              <path d="M {ch_l} {bank_y} V {wall_y} C {ch_l} 138 {ch_r} 138 {ch_r} {wall_y} V {bank_y} Z"/>
+              <rect x="0" y="0" width="{view_w}" height="{bank_y}"/>
+            </clipPath>
+          </defs>
+
+          <path d="M 0 {bank_y} H {channel} H {view_w} V {view_h} H 0 Z" fill="#eef2f7"/>
+
+          <g clip-path="url(#wlc-{sid})">
+            <g transform="translate(0,{rise:.1f})">
+              <animateTransform attributeName="transform" type="translate"
+                    values="0 {rise:.1f};0 0" dur="0.75s" calcMode="spline"
+                    keyTimes="0;1" keySplines="0.22 0.61 0.36 1" fill="freeze"/>
+              <rect x="0" y="{water_y:.1f}" width="{view_w}" height="{view_h}"
+                    fill="url(#wlg-{sid})"/>
+              <line x1="0" y1="{water_y:.1f}" x2="{view_w}" y2="{water_y:.1f}"
+                    stroke="#dbeafe" stroke-width="2"/>
+            </g>
+          </g>
+
+          <path d="M 0 {bank_y} H {channel} H {view_w}" fill="none"
+                stroke="#64748b" stroke-width="2.4" stroke-linejoin="round"/>
+          {warn_html}
+
+          <line x1="{ch_r}" y1="{bank_y}" x2="{ax + 6}" y2="{bank_y}"
+                stroke="#475569" stroke-width="1.1" stroke-dasharray="4 3"/>
+          <text x="4" y="{bank_y - 6}" font-size="9" font-weight="600"
+                fill="#475569">ระดับตลิ่ง</text>
+
+          <line x1="{ch_r - 34}" y1="{water_y:.1f}" x2="{ax + 6}" y2="{water_y:.1f}"
+                stroke="{risk_color}" stroke-width="1" stroke-dasharray="3 2"
+                opacity="0.65"/>
+          {arrow_html}
+          <text x="{ax + 9}" y="{text_y:.1f}" font-size="11" font-weight="700"
+                fill="{risk_color}" dominant-baseline="middle">{gap_label}</text>
+        </svg>
+        """
+
+        return f"""
+        <div class="mt-1.5">
+            {svg}
+            <div class="mt-1 flex items-baseline justify-between gap-2 text-[11px]">
+                <span class="text-base-content/70">ระดับน้ำ <span class="font-bold text-blue-600 text-sm">{waterlevel_val:.2f}</span> ม.</span>
+                <span class="font-bold" style="color:{risk_color}">{headline}</span>
+            </div>
+        </div>
+        """
 
     """
     ===========================================================================
@@ -371,6 +547,8 @@ class BaseMap(Map):
                 waterlevel_sensor = metrics_dict.get("waterlevel") or metrics_dict.get(
                     "waterlevel_msl"
                 )
+                diff_sensor = metrics_dict.get("diff_wl_bank")
+                diff_val = diff_sensor.get("value") if diff_sensor else None
                 has_waterlevel = False
                 if waterlevel_sensor and waterlevel_sensor.get("value") is not None:
                     has_waterlevel = True
@@ -416,6 +594,9 @@ class BaseMap(Map):
                     """
 
                 if has_waterlevel:
+                    section_html = self.build_waterlevel_section(
+                        station, waterlevel_val, diff_val
+                    )
                     tooltip_detail = f"""
                     <div class="card card-compact w-72 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
                         <div class="card-body p-3 gap-1.5">
@@ -427,12 +608,7 @@ class BaseMap(Map):
                                 <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
                                 <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
                             </div>
-                            <div class="mt-2 w-full h-32 relative">
-                                <canvas id="chart-{station['id']}"></canvas>
-                            </div>
-                            <div class="text-[11px] text-base-content/80 mt-1 flex justify-between items-center">
-                                <span>ระดับน้ำปัจจุบัน: <span class="font-bold text-blue-600 text-sm">{waterlevel_val:.2f}</span> ม.</span>
-                            </div>
+                            {section_html}
                             {cctv_btn_html}
                             {footer_html}
                         </div>
