@@ -34,10 +34,13 @@
             style="height: 600px;">
             <div id="loading_map"
                 class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gray-50/80 backdrop-blur-sm transition-opacity duration-300">
-                <div class="flex flex-col items-center">
-                    <div class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin">
+                <div class="flex flex-col items-center p-4 text-center max-w-xs">
+                    <div id="loading_map_spinner" class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin">
                     </div>
-                    <span class="mt-3 text-sm font-medium text-gray-600 animate-pulse">Loading map..</span>
+                    <span id="loading_map_message" class="mt-3 text-sm font-medium text-gray-600 animate-pulse">กำลังโหลดแผนที่...</span>
+                    <button id="retry_map_loading" type="button" class="hidden mt-3 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition">
+                        ลองใหม่อีกครั้ง
+                    </button>
                 </div>
             </div>
             <div id="mapid" style="z-index:1; height: 100%; width:100%;"></div>

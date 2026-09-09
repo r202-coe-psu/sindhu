@@ -82,7 +82,9 @@ class BaseMonitor:
                 raise ValueError("system settings has no valid zoom configuration")
 
             if not hasattr(self, "map"):
-                self.map = BaseMap([center[1], center[0]], zoom, min_zoom, self.lang_code)
+                self.map = BaseMap(
+                    [center[1], center[0]], zoom, min_zoom, self.lang_code
+                )
                 self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
                 self.map.load_river_basins(self.api_url)
 
@@ -93,7 +95,9 @@ class BaseMonitor:
                 self._locate_bound = True
         except Exception as e:
             print(f"monitor setup error: {e}")
-            self.set_map_error("เชื่อมต่อข้อมูลแผนที่ไม่ได้ กรุณาตรวจสอบ API แล้วลองใหม่")
+            self.set_map_error(
+                "เชื่อมต่อข้อมูลแผนที่ไม่ได้ กรุณาตรวจสอบ API แล้วลองใหม่"
+            )
             return False
 
         self.set_map_loading(False)
@@ -255,31 +259,38 @@ class BaseMonitor:
         return
 
     def set_map_loading(self, is_loading: bool):
+        if "loading_map" not in document:
+            return
         el = document["loading_map"]
-        message = document["loading_map_message"]
-        spinner = document["loading_map_spinner"]
-        retry = document["retry_map_loading"]
         if is_loading:
-            message.text = "กำลังโหลดแผนที่..."
-            message.classList.add("animate-pulse")
-            spinner.classList.remove("hidden")
-            retry.classList.add("hidden")
+            if "loading_map_message" in document:
+                message = document["loading_map_message"]
+                message.text = "กำลังโหลดแผนที่..."
+                message.classList.add("animate-pulse")
+            if "loading_map_spinner" in document:
+                document["loading_map_spinner"].classList.remove("hidden")
+            if "retry_map_loading" in document:
+                document["retry_map_loading"].classList.add("hidden")
             el.classList.remove("opacity-0", "pointer-events-none")
         else:
             el.classList.add("opacity-0", "pointer-events-none")
 
     def set_map_error(self, message):
         """Replace the spinner with an actionable failure state."""
+        if "loading_map" not in document:
+            return
         el = document["loading_map"]
-        message_el = document["loading_map_message"]
-        spinner = document["loading_map_spinner"]
-        retry = document["retry_map_loading"]
-        message_el.text = message
-        message_el.classList.remove("animate-pulse")
-        spinner.classList.add("hidden")
-        retry.classList.remove("hidden")
-        retry.unbind("click")
-        retry.bind("click", lambda ev: aio.run(self.retry_setup()))
+        if "loading_map_message" in document:
+            message_el = document["loading_map_message"]
+            message_el.text = message
+            message_el.classList.remove("animate-pulse")
+        if "loading_map_spinner" in document:
+            document["loading_map_spinner"].classList.add("hidden")
+        if "retry_map_loading" in document:
+            retry = document["retry_map_loading"]
+            retry.classList.remove("hidden")
+            retry.unbind("click")
+            retry.bind("click", lambda ev: aio.run(self.retry_setup()))
         el.classList.remove("opacity-0", "pointer-events-none")
 
     async def retry_setup(self):
