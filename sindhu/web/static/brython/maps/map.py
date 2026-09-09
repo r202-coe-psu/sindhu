@@ -258,7 +258,7 @@ class Map:
                 style_copy["fillOpacity"] = 0.25 if state == "normal" else 0.35
             return style_copy
 
-        # Active flood alert (risk >= 1: warning, critical, evacuation)
+        # Active flood alert (risk >= 1: warning, critical)
         alert_color = level.get("border") or level.get("color")
         if is_shaded:
             alert_fill = level.get("color")

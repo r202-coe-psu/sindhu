@@ -47,12 +47,6 @@ class WaterMonitor(BaseMonitor):
 
         wl_crit = metadata.get("water_level_critical")
         wl_warn = metadata.get("water_level_warning")
-        wl_evac = metadata.get("water_level_evacuation")
-        if wl_evac is None and wl_crit is not None:
-            try:
-                wl_evac = float(wl_crit) + 0.5
-            except:
-                pass
 
         waterlevel = None
         diff_wl_bank = None
@@ -76,10 +70,7 @@ class WaterMonitor(BaseMonitor):
                 wl = float(waterlevel)
                 crit = float(wl_crit)
                 warn = float(wl_warn)
-                evac = float(wl_evac) if wl_evac is not None else crit + 0.5
-                if wl >= evac:
-                    risk = 3
-                elif wl >= crit:
+                if wl >= crit:
                     risk = 2
                 elif wl >= warn:
                     risk = 1
@@ -88,9 +79,7 @@ class WaterMonitor(BaseMonitor):
             except:
                 pass
         elif diff_wl_bank is not None:
-            if diff_wl_bank >= 0.5:
-                risk = 3
-            elif diff_wl_bank >= 0:
+            if diff_wl_bank >= 0:
                 risk = 2
             elif diff_wl_bank >= -0.5:
                 risk = 1
@@ -466,7 +455,7 @@ class WaterMonitor(BaseMonitor):
         return metric_infos.get_risk_level(max_risk)
 
     def update_zone_risks(self):
-        """Colour zones by active station alerts (warning, critical, evacuate).
+        """Colour zones by active station alerts (warning, critical).
         Normal water levels preserve the zone's configured style."""
         for zone in self.zones or []:
             meta = zone.get("metadata") or zone.get("style") or {}
@@ -526,9 +515,7 @@ class WaterMonitor(BaseMonitor):
 
         selected_source = self.get_selected_source()
 
-        max_risk = (
-            -1
-        )  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical, 3 = Evacuation
+        max_risk = -1  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical
 
         stations_dict = {}
         for s in self.latest_data.get("stations") or []:

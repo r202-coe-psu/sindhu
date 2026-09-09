@@ -497,15 +497,6 @@ RISK_LEVEL_TITLE = "ระดับความปลอดภัย"
 
 RISK_LEVELS = [
     {
-        "risk": 3,
-        "label": "อพยพ",
-        "range": "ถึงระดับอพยพ",
-        "color": "#9333ea",
-        "border": "#7e22ce",
-        "text": "#FFFFFF",
-        "fill_opacity": 0.5,
-    },
-    {
         "risk": 2,
         "label": "วิกฤต",
         "range": "ถึงระดับวิกฤต",
