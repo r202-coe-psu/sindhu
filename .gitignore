@@ -38,7 +38,7 @@ auto_test.sh
 
 # Ignore data file
 sindhu/web/static/data/songkhla_basins.geojson
-sindhu/web/static/resources/rivers.geojson
+sindhu/web/static/resources/*
 
 # Ignore Claude files
 .claude/*
