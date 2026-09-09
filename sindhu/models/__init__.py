@@ -12,6 +12,7 @@ from sindhu.models.zones import Zone
 from sindhu.models.system_settings import SystemSetting
 from sindhu.models.tokens import ApiToken
 from sindhu.models.logs import RequestLog
+from sindhu.models.visual_feeds import VisualFeed
 
 from sindhu.models.telemetrices.metric import Metric
 
@@ -82,7 +83,10 @@ class BeanieClient:
     async def init_beanie(self, settings):
         self.settings = settings
         uri = sanitize_mongo_uri(getattr(settings, "MONGODB_URI", ""))
-        self.client = pymongo.AsyncMongoClient(uri)
+        # Keep BSON datetimes timezone-aware on reads.  Visual-feed contracts
+        # reject naive timestamps so a legacy/default PyMongo client must not
+        # turn valid UTC values into API 500s during model validation.
+        self.client = pymongo.AsyncMongoClient(uri, tz_aware=True)
         self.db = self.client.get_default_database()
 
         documents = await gather_documents()

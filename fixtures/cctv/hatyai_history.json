@@ -1,0 +1,19 @@
+{
+  "_fixture_provenance": "synthetic reconstructed from verified public field examples",
+  "photos": [
+    {
+      "atDate": "2026-09-03T11:05:00",
+      "photoUrl": "https://photo.hatyaicityclimate.org/cctv/road30m-1105.jpg?token=fixture-secret",
+      "thumbUrl": "https://photo.hatyaicityclimate.org/cctv/road30m-1105-thumb.jpg"
+    },
+    {
+      "atDate": "2026-09-03T10:05:00",
+      "photoUrl": "https://photo.hatyaicityclimate.org/cctv/road30m-1005.jpg",
+      "thumbUrl": "https://photo.hatyaicityclimate.org/cctv/road30m-1005-thumb.jpg"
+    },
+    {
+      "atDate": "bad-time",
+      "photoUrl": "https://photo.hatyaicityclimate.org/cctv/bad-time.jpg"
+    }
+  ]
+}

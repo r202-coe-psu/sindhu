@@ -8,7 +8,7 @@ def static_url(filename: str):
 
 def add_date_url(url: str):
     now = datetime.datetime.now()
-    return f'{url}?date={now.strftime("%Y%m%d")}'
+    return f"{url}?v={int(now.timestamp())}"
 
 
 def format_date(date: datetime.datetime, formatter: str = "%d/%m/%Y"):
