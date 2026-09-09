@@ -64,29 +64,36 @@ class WaterMonitor(BaseMonitor):
                 except (ValueError, TypeError):
                     pass
 
-        risk = -1
-        if waterlevel is not None and wl_crit is not None and wl_warn is not None:
+        if waterlevel is None and diff_wl_bank is None:
+            return -1, None, None
+
+        has_threshold = False
+        crit = None
+        warn = None
+        if wl_crit is not None and wl_warn is not None:
+            try:
+                c = float(wl_crit)
+                w = float(wl_warn)
+                if c > 0 and w > 0:
+                    crit = c
+                    warn = w
+                    has_threshold = True
+            except (ValueError, TypeError):
+                has_threshold = False
+
+        if has_threshold and waterlevel is not None:
             try:
                 wl = float(waterlevel)
-                crit = float(wl_crit)
-                warn = float(wl_warn)
                 if wl >= crit:
-                    risk = 2
+                    return 2, waterlevel, diff_wl_bank
                 elif wl >= warn:
-                    risk = 1
+                    return 1, waterlevel, diff_wl_bank
                 else:
-                    risk = 0
+                    return 0, waterlevel, diff_wl_bank
             except:
                 pass
-        elif diff_wl_bank is not None:
-            if diff_wl_bank >= 0:
-                risk = 2
-            elif diff_wl_bank >= -0.5:
-                risk = 1
-            else:
-                risk = 0
 
-        return risk, waterlevel, diff_wl_bank
+        return 0, waterlevel, diff_wl_bank
 
     """
     ===========================================================================
