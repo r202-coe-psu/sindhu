@@ -419,18 +419,20 @@ class Map:
                 {
                     "pane": "zones",
                     "renderer": zone_renderer,
+                    "interactive": not is_ref,
                     "style": feature_style,
                 },
             )
-            if name:
+            if name and not is_ref:
                 layer.bindTooltip(
                     name,
                     {"sticky": True, "direction": "top", "className": "zone-label"},
                 )
 
-            layer.on("mouseover", self._make_zone_hover(zone_id, True))
-            layer.on("mouseout", self._make_zone_hover(zone_id, False))
-            layer.on("click", self._make_zone_click(zone_id, zone))
+            if not is_ref:
+                layer.on("mouseover", self._make_zone_hover(zone_id, True))
+                layer.on("mouseout", self._make_zone_hover(zone_id, False))
+                layer.on("click", self._make_zone_click(zone_id, zone))
             if self.zones_visible:
                 layer.addTo(self.map)
 
@@ -458,6 +460,7 @@ class Map:
         if not pane:
             pane = self.map.createPane("reference_boundary")
             pane.style.zIndex = "340"
+        pane.style.pointerEvents = "none"
 
         ref_renderer = self.leaflet.svg({"pane": "reference_boundary"})
 
@@ -468,6 +471,7 @@ class Map:
             "weight": 3,
             "opacity": 0.85,
             "dashArray": "8, 6",
+            "interactive": False,
         }
         self.reference_boundary_layer = self.leaflet.geoJson(
             {
@@ -478,12 +482,9 @@ class Map:
             {
                 "pane": "reference_boundary",
                 "renderer": ref_renderer,
-                "interactive": True,
+                "interactive": False,
                 "style": ref_style,
             },
-        ).bindTooltip(
-            "กรอบพื้นที่หาดใหญ่ (Reference Boundary)",
-            {"sticky": True, "direction": "top", "className": "ref-boundary-label"},
         )
         if self.reference_boundary_visible:
             self.reference_boundary_layer.addTo(self.map)
