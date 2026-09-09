@@ -17,6 +17,7 @@ class BaseMonitor:
         center=None,
         zoom=None,
         reference_boundary_url=None,
+        rivers_url=None,
     ):
         self.lang_code = lang_code
         self.acquisition_interval = 60 * 60
@@ -28,6 +29,9 @@ class BaseMonitor:
         self.center = center
         self.zoom = zoom
         self.reference_boundary_url = reference_boundary_url
+        self.rivers_url = (
+            rivers_url or "/static/resources/songkhla_rivers_direction.geojson"
+        )
 
         self.monitor_name = "base"
 
@@ -89,6 +93,7 @@ class BaseMonitor:
                 self.map.load_river_basins(self.api_url)
 
             await self.load_zones()
+            await self.load_rivers()
 
             if "my_locate" in document and not getattr(self, "_locate_bound", False):
                 document["my_locate"].bind("click", lambda ev: self.map.fly_to_user())
@@ -102,6 +107,19 @@ class BaseMonitor:
 
         self.set_map_loading(False)
         return True
+
+    async def load_rivers(self):
+        """Load and render river waterways with flow animation."""
+        if not self.rivers_url:
+            return
+
+        try:
+            response = await aio.get(self.rivers_url, cache=True)
+            if response.status == 200 or response.status == 0:
+                rivers_data = json.loads(response.data)
+                self.map.set_rivers_layer(rivers_data)
+        except Exception as e:
+            print(f"Failed to load rivers: {e}")
 
     async def load_zones(self):
         """Draw every zone up front so a zone can be picked without pinning."""

@@ -179,11 +179,17 @@ class Map:
             or zone.get("code") == "hatyai-boundary"
         )
         dash_array = "8, 6" if is_ref else custom_style.get("dashArray", "")
-        stroke_weight = 3.0 if is_ref else max(float(custom_style.get("stroke-width", 2.5)), 2.5)
+        stroke_weight = (
+            3.0 if is_ref else max(float(custom_style.get("stroke-width", 2.5)), 2.5)
+        )
 
-        zone_shading = custom_style.get("shading_mode") or getattr(self, "zone_shading_mode", "outline")
-        is_shaded = (zone_shading == "shaded")
-        fill_opacity_normal = float(custom_style.get("fill-opacity", 0.28)) if is_shaded else 0.0
+        zone_shading = custom_style.get("shading_mode") or getattr(
+            self, "zone_shading_mode", "outline"
+        )
+        is_shaded = zone_shading == "shaded"
+        fill_opacity_normal = (
+            float(custom_style.get("fill-opacity", 0.28)) if is_shaded else 0.0
+        )
         fill_color_normal = fill if is_shaded else "transparent"
 
         risk_val = level.get("risk", -1) if level else -1
@@ -196,7 +202,9 @@ class Map:
                 if state == "hover":
                     return {
                         "fillColor": fill if is_shaded else stroke,
-                        "fillOpacity": min(fill_opacity_normal + 0.15, 0.65) if is_shaded else 0.08,
+                        "fillOpacity": (
+                            min(fill_opacity_normal + 0.15, 0.65) if is_shaded else 0.08
+                        ),
                         "color": stroke,
                         "weight": stroke_weight + 1.0,
                         "opacity": 1.0,
@@ -205,7 +213,9 @@ class Map:
                 elif state == "selected":
                     return {
                         "fillColor": fill if is_shaded else stroke,
-                        "fillOpacity": min(fill_opacity_normal + 0.22, 0.70) if is_shaded else 0.12,
+                        "fillOpacity": (
+                            min(fill_opacity_normal + 0.22, 0.70) if is_shaded else 0.12
+                        ),
                         "color": stroke,
                         "weight": stroke_weight + 1.5,
                         "opacity": 1.0,
@@ -241,13 +251,19 @@ class Map:
                 fill_opacity = min(fill_opacity + 0.20, 0.70)
         else:
             alert_fill = "transparent" if state == "normal" else alert_color
-            fill_opacity = 0.0 if state == "normal" else (0.08 if state == "hover" else 0.12)
+            fill_opacity = (
+                0.0 if state == "normal" else (0.08 if state == "hover" else 0.12)
+            )
 
         return {
             "fillColor": alert_fill,
             "fillOpacity": fill_opacity,
             "color": alert_color,
-            "weight": stroke_weight + 1.5 if state == "selected" else (stroke_weight + 1.0 if state == "hover" else stroke_weight),
+            "weight": (
+                stroke_weight + 1.5
+                if state == "selected"
+                else (stroke_weight + 1.0 if state == "hover" else stroke_weight)
+            ),
             "opacity": 1.0 if state != "normal" else 0.95,
             "dashArray": dash_array,
         }
@@ -359,13 +375,21 @@ class Map:
                 "geometry": boundary,
             }
 
-            stroke_color = style.get("stroke") or style.get("fill") or self.ZONE_STYLE["color"]
+            stroke_color = (
+                style.get("stroke") or style.get("fill") or self.ZONE_STYLE["color"]
+            )
             weight_val = max(float(style.get("stroke-width") or 2.5), 2.5)
 
-            zone_shading = style.get("shading_mode") or getattr(self, "zone_shading_mode", "outline")
-            is_shaded = (zone_shading == "shaded")
-            fill_color = style.get("fill") or stroke_color if is_shaded else "transparent"
-            fill_opacity = float(style.get("fill-opacity") or 0.28) if is_shaded else 0.0
+            zone_shading = style.get("shading_mode") or getattr(
+                self, "zone_shading_mode", "outline"
+            )
+            is_shaded = zone_shading == "shaded"
+            fill_color = (
+                style.get("fill") or stroke_color if is_shaded else "transparent"
+            )
+            fill_opacity = (
+                float(style.get("fill-opacity") or 0.28) if is_shaded else 0.0
+            )
 
             feature_style = {
                 "fillColor": fill_color,
@@ -1006,6 +1030,8 @@ class Map:
                     target_layer._path.classList.add("flowing-river")
 
             def zoom_to_feature(e):
+                if getattr(self, "_pin_mode_active", False):
+                    return
                 target_layer = e.target
                 self._river_clicked = True
 
@@ -1045,7 +1071,12 @@ class Map:
                 }
             )
 
-        self.geojson = self.leaflet.geoJson(
+        if "rivers" in self.shapes and self.shapes["rivers"] is not None:
+            if self.map.hasLayer(self.shapes["rivers"]):
+                self.map.removeLayer(self.shapes["rivers"])
+            self.shapes.pop("rivers", None)
+
+        self.shapes["rivers"] = self.leaflet.geoJson(
             data,
             {
                 "style": style,
@@ -1053,7 +1084,6 @@ class Map:
                 "renderer": self.leaflet.svg(),
             },
         ).addTo(self.map)
-        self.shapes["rivers"] = self.geojson
 
     def set_shape_boundary(self, data):
         def style(feature):

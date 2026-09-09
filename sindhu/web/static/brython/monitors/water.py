@@ -18,6 +18,7 @@ class WaterMonitor(BaseMonitor):
         center=None,
         zoom=None,
         reference_boundary_url=None,
+        rivers_url=None,
     ):
         super().__init__(
             lang_code=lang_code,
@@ -26,6 +27,7 @@ class WaterMonitor(BaseMonitor):
             center=center,
             zoom=zoom,
             reference_boundary_url=reference_boundary_url,
+            rivers_url=rivers_url,
         )
         self.monitor_name = "water"
 
@@ -149,7 +151,7 @@ class WaterMonitor(BaseMonitor):
                 station["risk"] = risk
                 station["waterlevel"] = waterlevel
                 station["diff_wl_bank"] = diff_wl_bank
-                
+
                 level = metric_infos.get_risk_level(risk)
                 station["risk_color"] = level["color"]
                 station["risk_percent"] = 100
@@ -198,14 +200,22 @@ class WaterMonitor(BaseMonitor):
             btn_outline = document["zone_style_outline"]
             btn_shaded = document["zone_style_shaded"]
             if mode == "outline":
-                btn_outline.classList.add("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_outline.classList.add(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
                 btn_outline.classList.remove("text-slate-600")
-                btn_shaded.classList.remove("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_shaded.classList.remove(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
                 btn_shaded.classList.add("text-slate-600")
             else:
-                btn_shaded.classList.add("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_shaded.classList.add(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
                 btn_shaded.classList.remove("text-slate-600")
-                btn_outline.classList.remove("bg-white", "shadow-sm", "text-blue-700", "font-bold")
+                btn_outline.classList.remove(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
                 btn_outline.classList.add("text-slate-600")
 
     def on_zone_shading_mode_click(self, mode):
