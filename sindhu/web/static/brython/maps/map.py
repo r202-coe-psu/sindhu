@@ -441,14 +441,18 @@ class Map:
                 "style": style,
             }
 
-    def show_reference_boundary(self, boundary):
-        """Draw the Hat Yai reference boundary frame on the map."""
-        if not boundary:
-            return
+    def clear_reference_boundary(self):
         if self.reference_boundary_layer and self.map.hasLayer(
             self.reference_boundary_layer
         ):
             self.map.removeLayer(self.reference_boundary_layer)
+        self.reference_boundary_layer = None
+
+    def show_reference_boundary(self, boundary, name="กรอบพื้นที่หาดใหญ่"):
+        """Draw the Hat Yai reference boundary frame on the map."""
+        if not boundary:
+            return
+        self.clear_reference_boundary()
 
         pane = self.map.getPane("reference_boundary")
         if not pane:
@@ -1290,6 +1294,8 @@ class Map:
                     target_layer._path.classList.add("flowing-river")
 
             def zoom_to_feature(e):
+                if getattr(self, "_pin_mode_active", False):
+                    return
                 target_layer = e.target
                 self._river_clicked = True
 
@@ -1329,7 +1335,12 @@ class Map:
                 }
             )
 
-        self.geojson = self.leaflet.geoJson(
+        if "rivers" in self.shapes and self.shapes["rivers"] is not None:
+            if self.map.hasLayer(self.shapes["rivers"]):
+                self.map.removeLayer(self.shapes["rivers"])
+            self.shapes.pop("rivers", None)
+
+        self.shapes["rivers"] = self.leaflet.geoJson(
             data,
             {
                 "style": style,
@@ -1337,7 +1348,6 @@ class Map:
                 "renderer": self.leaflet.svg(),
             },
         ).addTo(self.map)
-        self.shapes["rivers"] = self.geojson
 
     def set_shape_boundary(self, data):
         def style(feature):
@@ -1398,11 +1408,11 @@ class Map:
                 if basin_canvas:
                     basin_canvas.style.pointerEvents = "none"
 
-                print("🎉 โหลดข้อมูลเส้นแม่น้ำสงขลาลงแผนที่สำเร็จ!")
+                print("[Map] River basins loaded successfully")
             else:
-                print(f"❌ โหลดข้อมูล GeoJSON ล้มเหลว (Status: {req.status})")
+                print(f"[Map] Failed to load river basins (status: {req.status})")
 
-        print("กำลังดึงข้อมูลแม่น้ำจาก API...")
+        print("[Map] Fetching river basins from API...")
         req = ajax.Ajax()
         req.bind("complete", on_complete)
         req.open("GET", f"{api_url}/v1/basins", True)

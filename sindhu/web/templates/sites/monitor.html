@@ -102,13 +102,12 @@
             style="height: 600px;">
             <div id="loading_map" role="status" aria-live="polite"
                 class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gray-50/80 backdrop-blur-sm transition-opacity duration-300">
-                <div class="flex flex-col items-center">
+                <div class="flex flex-col items-center p-4 text-center max-w-xs">
                     <div id="loading_map_spinner" class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin">
                     </div>
                     <span id="loading_map_message" class="mt-3 text-sm font-medium text-gray-600 animate-pulse">กำลังโหลดแผนที่...</span>
-                    <button id="retry_map_loading" type="button"
-                        class="hidden mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
-                        ลองใหม่
+                    <button id="retry_map_loading" type="button" class="hidden mt-3 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition">
+                        ลองใหม่อีกครั้ง
                     </button>
                 </div>
             </div>
@@ -384,7 +383,8 @@
       "{{ url_for('static', filename='resources/water_flow_zones/zone_3_central_east.geojson') }}",
       "{{ url_for('static', filename='resources/water_flow_zones/zone_4_north.geojson') }}"
     ],
-    reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}"
+    reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}",
+    rivers_url="{{ url_for('static', filename='resources/songkhla_rivers_direction.geojson') }}"
     )
   visual_feeds = VisualFeedMonitor("{{ api_url }}")
   monitors.visual_feed_monitor = visual_feeds

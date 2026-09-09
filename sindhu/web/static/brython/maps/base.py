@@ -174,7 +174,7 @@ class BaseMap(Map):
 
             window.setTimeout(render_chart, 50)
         except Exception as ex:
-            print(f"Error rendering chart: {ex}")
+            print(f"[Map] Chart render error: {ex}")
 
     """
     ===========================================================================
@@ -186,8 +186,6 @@ class BaseMap(Map):
         self, document_id, data, is_live_update=True, target_timestamp=None
     ):
         # logic handler
-        print("Updating climate marker...")
-        print(f"Document ID: {document_id}")
         if isinstance(data, dict):
             self.latest_stations = data.get("stations", [])
         await self.update_metric_marker(
@@ -196,9 +194,8 @@ class BaseMap(Map):
         await aio.sleep(0.5)
 
     async def update_metric_marker(self, document_id, data, target_timestamp=None):
-        print(
-            f"update_metric_marker: {document_id}, target_timestamp: {target_timestamp}"
-        )
+        target_info = f", target: {target_timestamp}" if target_timestamp else ""
+        print(f"[Map] Updating markers: {document_id}{target_info}")
         markers = []
         bangkok_timezone = timezone(timedelta(hours=7), name="Asia/Bangkok")
 
@@ -809,7 +806,7 @@ class BaseMap(Map):
             markers = self.metric_markers_by_code.get(station_code) or []
             marker = markers[0] if markers else None
         if not marker:
-            print(f"fly_to_station: no marker for code {station_code}")
+            print(f"[Map] Fly-to: marker not found for station {station_code}")
             return False
 
         if not self.map.hasLayer(marker):
@@ -827,4 +824,4 @@ class BaseMap(Map):
         return True
 
     def on_click_station(self, station_id):
-        print(f"Station clicked: {station_id}")
+        print(f"[Map] Station selected: {station_id}")

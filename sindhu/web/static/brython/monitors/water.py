@@ -19,6 +19,7 @@ class WaterMonitor(BaseMonitor):
         zoom=None,
         fallback_zone_urls=None,
         reference_boundary_url=None,
+        rivers_url=None,
     ):
         super().__init__(
             lang_code=lang_code,
@@ -28,6 +29,7 @@ class WaterMonitor(BaseMonitor):
             zoom=zoom,
             fallback_zone_urls=fallback_zone_urls,
             reference_boundary_url=reference_boundary_url,
+            rivers_url=rivers_url,
         )
         self.monitor_name = "water"
 
@@ -193,9 +195,9 @@ class WaterMonitor(BaseMonitor):
             document["hide_no_data"].bind("change", self.on_hide_no_data_change)
 
         while self.running:
-            print(f"monitor: wake up {datetime.datetime.now()}")
-            print(f"monitor: {self.monitor_name} monitor")
-            print(f"monitor: sleep {self.acquisition_interval}s")
+            print(
+                f"[Monitor:{self.monitor_name}] Cycle running (interval: {self.acquisition_interval}s)"
+            )
 
             await self.get_stations_metrics()
 
@@ -213,15 +215,17 @@ class WaterMonitor(BaseMonitor):
                 raise RuntimeError(f"station metrics returned HTTP {response.status}")
             data = json.loads(response.data)
             if not data or not isinstance(data, dict):
-                print(f"monitor: error data is invalid: {data}")
+                print(f"[Monitor:{self.monitor_name}] Invalid data received: {data}")
                 return
 
             for station in data.get("stations") or []:
                 if not station or not isinstance(station, dict):
                     continue
-                risk, _, _ = self.calculate_risk(station)
-                level = metric_infos.get_risk_level(risk)
+                risk, waterlevel, diff_wl_bank = self.calculate_risk(station)
                 station["risk"] = risk
+                station["waterlevel"] = waterlevel
+                station["diff_wl_bank"] = diff_wl_bank
+                level = metric_infos.get_risk_level(risk)
                 station["risk_color"] = level["color"]
                 station["risk_percent"] = 100
 
@@ -243,7 +247,7 @@ class WaterMonitor(BaseMonitor):
             self.update_zone_risks()
             self.render_data_list()
         except Exception as e:
-            print(f"monitor: error {e}")
+            print(f"[Monitor:{self.monitor_name}] Error: {e}")
             self.render_data_error("โหลดข้อมูลสถานีไม่สำเร็จ กรุณาลองใหม่อีกครั้ง")
         finally:
             self.set_map_loading(False)

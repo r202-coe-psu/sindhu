@@ -38,6 +38,7 @@ auto_test.sh
 
 # Ignore data file
 sindhu/web/static/data/songkhla_basins.geojson
+sindhu/web/static/resources/songkhla_rivers_direction.geojson
 sindhu/web/static/resources/rivers.geojson
 
 # Ignore Claude files
