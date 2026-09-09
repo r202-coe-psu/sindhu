@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Literal
 from pydantic import BaseModel, Field
 from beanie import PydanticObjectId
 
@@ -11,6 +11,7 @@ class BaseZone(BaseModel):
     name_th: str | None = None
     code: str
     boundary: bases.GeoPolygon
+    zone_kind: Literal["flood", "reference"] = "flood"
     status: str = Field("active")
     metadata: dict | None = None
 

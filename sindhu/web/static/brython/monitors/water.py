@@ -17,6 +17,8 @@ class WaterMonitor(BaseMonitor):
         source,
         center=None,
         zoom=None,
+        reference_boundary_url=None,
+        rivers_url=None,
     ):
         super().__init__(
             lang_code=lang_code,
@@ -24,6 +26,8 @@ class WaterMonitor(BaseMonitor):
             source=source,
             center=center,
             zoom=zoom,
+            reference_boundary_url=reference_boundary_url,
+            rivers_url=rivers_url,
         )
         self.monitor_name = "water"
 
@@ -103,7 +107,8 @@ class WaterMonitor(BaseMonitor):
         aio.run(self.monitor())
 
     async def monitor(self):
-        await self.setup()
+        if not await self.setup():
+            return
 
         # Bind UI events
         if "marker_style_selector" in document:
@@ -111,24 +116,16 @@ class WaterMonitor(BaseMonitor):
                 "change", self.on_marker_style_change
             )
 
-        # Load and render river waterways
-        try:
-            rivers_response = await aio.get("/static/resources/rivers.geojson")
-            rivers_data = json.loads(rivers_response.data)
-            self.map.set_rivers_layer(rivers_data)
-        except Exception as e:
-            print(f"Failed to load rivers: {e}")
-
         if "source_selector" in document:
             document["source_selector"].bind("change", self.on_source_change)
 
         if "hide_no_data" in document:
             document["hide_no_data"].bind("change", self.on_hide_no_data_change)
 
-        if self.running:
-            print(f"monitor: wake up {datetime.datetime.now()}")
-            print(f"monitor: {self.monitor_name} monitor")
-            print(f"monitor: sleep {self.acquisition_interval}s")
+        while self.running:
+            print(
+                f"[Monitor:{self.monitor_name}] Cycle running (interval: {self.acquisition_interval}s)"
+            )
 
             await self.get_stations_metrics()
 
@@ -142,17 +139,20 @@ class WaterMonitor(BaseMonitor):
         self.set_map_loading(True)
         try:
             response = await aio.get(url, cache=True)
+            if response.status != 200:
+                raise RuntimeError(f"station metrics returned HTTP {response.status}")
             data = json.loads(response.data)
             if not data or not isinstance(data, dict):
-                print(f"monitor: error data is invalid: {data}")
+                print(f"[Monitor:{self.monitor_name}] Invalid data received: {data}")
                 return
 
             for station in data.get("stations") or []:
-                if not station or not isinstance(station, dict):
-                    continue
-                risk, _, _ = self.calculate_risk(station)
-                level = metric_infos.get_risk_level(risk)
+                risk, waterlevel, diff_wl_bank = self.calculate_risk(station)
                 station["risk"] = risk
+                station["waterlevel"] = waterlevel
+                station["diff_wl_bank"] = diff_wl_bank
+
+                level = metric_infos.get_risk_level(risk)
                 station["risk_color"] = level["color"]
                 station["risk_percent"] = 100
 
@@ -174,15 +174,81 @@ class WaterMonitor(BaseMonitor):
             self.update_zone_risks()
             self.render_data_list()
         except Exception as e:
-            print(f"monitor: error {e}")
+            print(f"[Monitor:{self.monitor_name}] Error: {e}")
+            self.render_data_error("โหลดข้อมูลสถานีไม่สำเร็จ กรุณาลองใหม่อีกครั้ง")
         finally:
             self.set_map_loading(False)
+
+    def render_data_error(self, message):
+        if "reservoir_data_list" not in document:
+            return
+        document["reservoir_data_list"].html = f"""
+        <div class="flex flex-col items-center justify-center h-full text-center gap-2 px-4">
+            <i class="ph ph-warning-circle text-4xl text-amber-500"></i>
+            <div class="text-sm font-medium text-gray-600">{message}</div>
+        </div>
+        """
 
     def on_marker_style_change(self, ev):
         if hasattr(self, "map") and self.latest_data:
             style = ev.target.value
             self.map.marker_style = style
             aio.run(self._update_and_filter())
+
+    def update_zone_shading_buttons(self, mode):
+        if "zone_style_outline" in document and "zone_style_shaded" in document:
+            btn_outline = document["zone_style_outline"]
+            btn_shaded = document["zone_style_shaded"]
+            if mode == "outline":
+                btn_outline.classList.add(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
+                btn_outline.classList.remove("text-slate-600")
+                btn_shaded.classList.remove(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
+                btn_shaded.classList.add("text-slate-600")
+            else:
+                btn_shaded.classList.add(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
+                btn_shaded.classList.remove("text-slate-600")
+                btn_outline.classList.remove(
+                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                )
+                btn_outline.classList.add("text-slate-600")
+
+    def on_zone_shading_mode_click(self, mode):
+        self.map.set_zone_shading_mode(mode)
+        self.update_zone_shading_buttons(mode)
+        try:
+            window.localStorage.setItem("sindhu_zone_shading_mode", mode)
+        except Exception:
+            pass
+
+    def on_toggle_zones_layer(self, ev):
+        checked = bool(ev.target.checked)
+        self.map.set_zones_visible(checked)
+        for i in range(1, 5):
+            el_id = f"toggle_zone_{i}"
+            if el_id in document:
+                document[el_id].checked = checked
+
+    def on_toggle_single_zone(self, zone_num, ev):
+        checked = bool(ev.target.checked)
+        self.map.set_zone_visible(str(zone_num), checked)
+        self.map.set_zone_visible(f"songkhla-zone-{zone_num}", checked)
+        self.map.set_zone_visible(f"prototype-zone-{zone_num}", checked)
+        all_checked = all(
+            document[f"toggle_zone_{i}"].checked
+            for i in range(1, 5)
+            if f"toggle_zone_{i}" in document
+        )
+        if "toggle_zones_layer" in document:
+            document["toggle_zones_layer"].checked = all_checked
+
+    def on_toggle_boundary_layer(self, ev):
+        self.map.set_reference_boundary_visible(bool(ev.target.checked))
 
     def get_selected_source(self):
         """The source picked in the dropdown, or "all" when nothing narrows it."""
@@ -327,9 +393,16 @@ class WaterMonitor(BaseMonitor):
         return metric_infos.get_risk_level(max_risk)
 
     def update_zone_risks(self):
-        """Colour every zone by its worst station, so the whole province can
-        be read at a glance without picking a zone first."""
+        """Colour zones by active station alerts (warning, critical, evacuate).
+        Normal water levels preserve the zone's configured style."""
         for zone in self.zones or []:
+            meta = zone.get("metadata") or zone.get("style") or {}
+            if (
+                zone.get("zone_kind") == "reference"
+                or meta.get("role") == "reference_boundary"
+                or zone.get("code") == "hatyai-boundary"
+            ):
+                continue
             zone_id = str(zone.get("id", "") or "")
             if zone_id:
                 self.map.set_zone_risk(zone_id, self.zone_risk_level(zone))

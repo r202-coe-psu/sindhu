@@ -9,12 +9,12 @@ def on_ajax_complete(req):
         river_style = {"color": "#3388ff", "weight": 2, "opacity": 0.8}
 
         window.L.geoJSON(geojson_data, {"style": river_style}).addTo(window.map)
-        print(" โหลดข้อมูลแม่น้ำลงแผนที่สำเร็จ")
+        print("[Map:Basin] River basins loaded successfully")
     else:
-        print(f" โหลดข้อมูลล้มเหลว Status: {req.status}")
+        print(f"[Map:Basin] Failed to load river basins (status: {req.status})")
 
 
-print("กำลังโหลดข้อมูลแม่น้ำ...")
+print("[Map:Basin] Fetching river basins from API...")
 req = ajax.Ajax()
 req.bind("complete", on_ajax_complete)
 req.open("GET", "/v1/basins", True)

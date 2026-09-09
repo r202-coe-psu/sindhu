@@ -174,7 +174,7 @@ class BaseMap(Map):
 
             timer.set_timeout(render_chart, 50)
         except Exception as ex:
-            print(f"Error rendering chart: {ex}")
+            print(f"[Map] Chart render error: {ex}")
 
     """
     ===========================================================================
@@ -186,17 +186,14 @@ class BaseMap(Map):
         self, document_id, data, is_live_update=True, target_timestamp=None
     ):
         # logic handler
-        print("Updating climate marker...")
-        print(f"Document ID: {document_id}")
         await self.update_metric_marker(
             document_id, data, target_timestamp=target_timestamp
         )
         await aio.sleep(0.5)
 
     async def update_metric_marker(self, document_id, data, target_timestamp=None):
-        print(
-            f"update_metric_marker: {document_id}, target_timestamp: {target_timestamp}"
-        )
+        target_info = f", target: {target_timestamp}" if target_timestamp else ""
+        print(f"[Map] Updating markers: {document_id}{target_info}")
         markers = []
         bangkok_timezone = timezone(timedelta(hours=7), name="Asia/Bangkok")
 
@@ -329,24 +326,20 @@ class BaseMap(Map):
                             msg = "ไม่พบข้อมูลการพยากรณ์"
                         else:
                             msg = "ไม่พบข้อมูล"
-                        metric_texts.append(
-                            f"""
+                        metric_texts.append(f"""
                             <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
                                 <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
                                 <span class="text-base-content/40 italic text-[11px]">{msg}</span>
                             </div>
-                            """
-                        )
+                            """)
                     else:
                         unit = metric_infos.HTML_METRIC_UNITS.get(metric_type, "")
-                        metric_texts.append(
-                            f"""
+                        metric_texts.append(f"""
                             <div class="flex justify-between items-center text-xs py-0.5 border-b border-base-content/5 last:border-0">
                                 <span class="opacity-70">{metric_infos.HTML_METRIC_NAMES.get(metric_type, metric_type)}</span>
                                 <span class="font-semibold text-base-content">{value_str} <span class="text-[10px] opacity-60 font-normal">{unit}</span></span>
                             </div>
-                            """
-                        )
+                            """)
 
                     # Capture one timestamp for display
                     if not timestamp and sensor.get("timestamp"):
@@ -784,7 +777,7 @@ class BaseMap(Map):
             markers = self.metric_markers_by_code.get(station_code) or []
             marker = markers[0] if markers else None
         if not marker:
-            print(f"fly_to_station: no marker for code {station_code}")
+            print(f"[Map] Fly-to: marker not found for station {station_code}")
             return False
 
         if not self.map.hasLayer(marker):
@@ -802,4 +795,4 @@ class BaseMap(Map):
         return True
 
     def on_click_station(self, station_id):
-        print(f"Station clicked: {station_id}")
+        print(f"[Map] Station selected: {station_id}")
