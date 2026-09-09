@@ -1144,11 +1144,11 @@ class Map:
                 if basin_canvas:
                     basin_canvas.style.pointerEvents = "none"
 
-                print("🎉 โหลดข้อมูลเส้นแม่น้ำสงขลาลงแผนที่สำเร็จ!")
+                print("[Map] River basins loaded successfully")
             else:
-                print(f"❌ โหลดข้อมูล GeoJSON ล้มเหลว (Status: {req.status})")
+                print(f"[Map] Failed to load river basins (status: {req.status})")
 
-        print("กำลังดึงข้อมูลแม่น้ำจาก API...")
+        print("[Map] Fetching river basins from API...")
         req = ajax.Ajax()
         req.bind("complete", on_complete)
         req.open("GET", f"{api_url}/v1/basins", True)

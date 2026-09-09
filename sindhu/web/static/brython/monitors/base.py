@@ -52,9 +52,9 @@ class BaseMonitor:
 
         while self.running:
             self.set_map_loading(True)
-            print(f"monitor: wake up {datetime.datetime.now()}")
-            print(f"monitor: {self.monitor_name} monitor")
-            print(f"monitor: sleep {self.acquisition_interval}s")
+            print(
+                f"[Monitor:{self.monitor_name}] Cycle running (interval: {self.acquisition_interval}s)"
+            )
 
             stations = {}
             await self.map.update(self.source, stations)
@@ -99,7 +99,7 @@ class BaseMonitor:
                 document["my_locate"].bind("click", lambda ev: self.map.fly_to_user())
                 self._locate_bound = True
         except Exception as e:
-            print(f"monitor setup error: {e}")
+            print(f"[Monitor] Setup error: {e}")
             self.set_map_error(
                 "เชื่อมต่อข้อมูลแผนที่ไม่ได้ กรุณาตรวจสอบ API แล้วลองใหม่"
             )
@@ -119,7 +119,7 @@ class BaseMonitor:
                 rivers_data = json.loads(response.data)
                 self.map.set_rivers_layer(rivers_data)
         except Exception as e:
-            print(f"Failed to load rivers: {e}")
+            print(f"[Monitor] Failed to load rivers: {e}")
 
     async def load_zones(self):
         """Draw every zone up front so a zone can be picked without pinning."""
@@ -132,7 +132,7 @@ class BaseMonitor:
             if not isinstance(zones, list):
                 raise ValueError("zones response is invalid")
         except Exception as e:
-            print(f"load_zones error: {e}")
+            print(f"[Monitor] Failed to load zones: {e}")
             # Preserve zones already rendered during a transient refresh error.
             if self.zones:
                 return False
@@ -158,7 +158,7 @@ class BaseMonitor:
             boundary = json.loads(response.data)
             self.map.show_reference_boundary(boundary, "ขอบเขตหาดใหญ่")
         except Exception as e:
-            print(f"reference boundary error: {e}")
+            print(f"[Monitor] Reference boundary error: {e}")
 
     def on_zone_selected(self, zone):
         """Called when a user clicks a zone polygon on the map."""
@@ -175,7 +175,7 @@ class BaseMonitor:
                 response = await aio.get(f"{self.apis['zones']}/{zone_id}/stations")
                 stations = json.loads(response.data).get("stations", [])
             except Exception as e:
-                print(f"zone stations error: {e}")
+                print(f"[Monitor] Zone stations error: {e}")
                 stations = []
 
         if stations:
@@ -257,7 +257,7 @@ class BaseMonitor:
                         '<div class="text-sm text-amber-700 font-semibold"><i class="ph ph-warning"></i> ไม่พบลุ่มน้ำสำหรับตำแหน่งนี้</div>'
                     ).openPopup()
         except Exception as e:
-            print(f"locate error: {e}")
+            print(f"[Monitor] Locate error: {e}")
 
         self.set_map_loading(False)
 
