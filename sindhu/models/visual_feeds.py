@@ -4,10 +4,10 @@ from beanie import Document, PydanticObjectId
 from pydantic import Field
 import pymongo
 
-from sindhu import schemas
+from sindhu.schemas.visual_feeds import VisualFeed as VisualFeedSchema
 
 
-class VisualFeed(schemas.visual_feeds.VisualFeed, Document):
+class VisualFeed(VisualFeedSchema, Document):
     id: PydanticObjectId = Field(
         default_factory=PydanticObjectId,
         alias="_id",

@@ -2,10 +2,10 @@ from beanie import Document, PydanticObjectId
 from datetime import datetime, timezone
 from pydantic import Field
 
-from sindhu import schemas
+from sindhu.schemas.tokens import ApiToken as ApiTokenSchema
 
 
-class ApiToken(schemas.tokens.ApiToken, Document):
+class ApiToken(ApiTokenSchema, Document):
     id: PydanticObjectId = Field(
         default_factory=PydanticObjectId,
         alias="_id",

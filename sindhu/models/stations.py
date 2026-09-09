@@ -4,10 +4,10 @@ from beanie import Document, Indexed, PydanticObjectId
 
 import datetime
 import pymongo
-from sindhu import schemas
+from sindhu.schemas.stations import Station as StationSchema
 
 
-class Station(schemas.stations.Station, Document):
+class Station(StationSchema, Document):
     id: PydanticObjectId = Field(
         default_factory=PydanticObjectId,
         alias="_id",
