@@ -1,4 +1,5 @@
 import datetime
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as http_status
 from beanie import PydanticObjectId
@@ -12,7 +13,7 @@ router = APIRouter(prefix="/zones", tags=["zones"])
 
 @router.get("")
 async def get_all(
-    status: str = "active",
+    status: Literal["active", "inactive", "all"] = Query(default="active"),
 ) -> schemas.zones.ZoneList:
     if status == "all":
         query = {"status": {"$ne": "delete"}}
