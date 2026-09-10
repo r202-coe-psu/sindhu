@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import datetime
-from enum import StrEnum
-from typing import Any, Literal, Self
-from urllib.parse import parse_qsl, urlsplit
+from enum import Enum
 import re
+from typing import Any, Literal
+from urllib.parse import parse_qsl, urlsplit
+
+from typing_extensions import Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -18,20 +20,20 @@ HATYAI_IMAGE_HOSTS = {
 }
 
 
-class MediaType(StrEnum):
+class MediaType(str, Enum):
     CCTV = "cctv"
     RADAR = "radar"
     SATELLITE = "satellite"
     WEATHER_MAP = "weather_map"
 
 
-class CoordinateStatus(StrEnum):
+class CoordinateStatus(str, Enum):
     VERIFIED = "verified"
     UNVERIFIED = "unverified"
     NOT_APPLICABLE = "not_applicable"
 
 
-class Availability(StrEnum):
+class Availability(str, Enum):
     ONLINE = "online"
     STALE = "stale"
     DEGRADED = "degraded"
@@ -39,7 +41,7 @@ class Availability(StrEnum):
     UNKNOWN = "unknown"
 
 
-class SourceHealthStatus(StrEnum):
+class SourceHealthStatus(str, Enum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     OFFLINE = "offline"
