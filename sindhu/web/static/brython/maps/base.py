@@ -1,5 +1,4 @@
 from datetime import datetime, timezone, timedelta
-import json
 
 
 from browser import ajax, document, html, window, aio
@@ -41,139 +40,6 @@ class BaseMap(Map):
         self.marker_style = "donut"
         self._metric_legend_container = None
         self._legend_override = False
-        self.chart_configs = {}
-        self.map.on("tooltipopen", self.on_tooltip_open)
-
-    def on_tooltip_open(self, e):
-        try:
-            # Leaflet tooltipopen event puts the tooltip on `e.tooltip` and its marker on `e.tooltip._source`
-            tooltip = getattr(e, "tooltip", None)
-            marker = (
-                getattr(tooltip, "_source", None)
-                if tooltip
-                else getattr(e, "sourceTarget", None)
-            )
-
-            if (
-                marker is None
-                or not hasattr(marker, "options")
-                or not hasattr(marker.options, "customId")
-            ):
-                return
-
-            station_id = marker.options.customId
-            if station_id not in self.chart_configs:
-                return
-            config = self.chart_configs[station_id]
-
-            def render_chart():
-                canvas = document.getElementById(f"chart-{station_id}")
-                if not canvas:
-                    return
-                # Destroy existing Chart instance if present to prevent memory leaks and canvas reuse errors
-                try:
-                    if hasattr(canvas, "chart_instance") and canvas.chart_instance:
-                        if hasattr(canvas.chart_instance, "destroy"):
-                            canvas.chart_instance.destroy()
-                    elif hasattr(window, "Chart") and hasattr(window.Chart, "getChart"):
-                        existing_chart = window.Chart.getChart(canvas)
-                        if existing_chart:
-                            existing_chart.destroy()
-                except Exception as destroy_err:
-                    window.console.log(
-                        f"Error destroying previous chart: {destroy_err}"
-                    )
-
-                window.console.log(f"Rendering chart for station {station_id}")
-                ctx = canvas.getContext("2d")
-                max_val = max(
-                    config["current"] * 1.2,
-                    (config.get("critical") or 0) * 1.2,
-                    (config.get("warning") or 0) * 1.2,
-                    10,
-                )
-
-                chart_data = {
-                    "type": "bar",
-                    "data": {
-                        "labels": [""],
-                        "datasets": [
-                            {
-                                "data": [config["current"]],
-                                "backgroundColor": "#3b82f6",
-                                "categoryPercentage": 1.0,
-                                "barPercentage": 1.0,
-                            }
-                        ],
-                    },
-                    "options": {
-                        "responsive": True,
-                        "maintainAspectRatio": False,
-                        "scales": {
-                            "y": {
-                                "min": 0,
-                                "max": max_val,
-                                "grid": {"color": "#e5e7eb"},
-                            },
-                            "x": {"display": False},
-                        },
-                        "plugins": {"legend": {"display": False}},
-                    },
-                }
-
-                js_code = f"""
-                ({{
-                    id: 'thresholds_{station_id}',
-                    afterDraw: function(chart) {{
-                        const yScale = chart.scales.y;
-                        const left = chart.chartArea.left;
-                        const right = chart.chartArea.right;
-                        const ctx = chart.ctx;
-                        
-                        var warning = {config['warning'] if config.get('warning') is not None else 'null'};
-                        var critical = {config['critical'] if config.get('critical') is not None else 'null'};
-                        
-                        if (warning !== null) {{
-                            const yVal = yScale.getPixelForValue(warning);
-                            ctx.save();
-                            ctx.beginPath();
-                            ctx.setLineDash([4, 4]);
-                            ctx.strokeStyle = "#eab308";
-                            ctx.lineWidth = 2;
-                            ctx.moveTo(left, yVal);
-                            ctx.lineTo(right, yVal);
-                            ctx.stroke();
-                            ctx.restore();
-                        }}
-                        if (critical !== null) {{
-                            const yVal = yScale.getPixelForValue(critical);
-                            ctx.save();
-                            ctx.beginPath();
-                            ctx.setLineDash([4, 4]);
-                            ctx.strokeStyle = "#ef4444";
-                            ctx.lineWidth = 2;
-                            ctx.moveTo(left, yVal);
-                            ctx.lineTo(right, yVal);
-                            ctx.stroke();
-                            ctx.restore();
-                        }}
-                    }}
-                }})
-                """
-
-                # Convert Python dict to pure JS object via JSON parse/serialize
-                js_config = window.JSON.parse(json.dumps(chart_data))
-                js_config.plugins = [window.eval(js_code)]
-
-                # Safely instantiate Chart class using JS wrapper function
-                create_chart = window.eval(
-                    "(function(ctx, config) { return new Chart(ctx, config); })"
-                )
-                canvas.chart_instance = create_chart(ctx, js_config)
-
-            window.setTimeout(render_chart, 50)
-        except Exception as ex:
-            print(f"[Map] Chart render error: {ex}")
 
     SECTION_VIEW_W = 176
     SECTION_VIEW_H = 150
@@ -296,7 +162,9 @@ class BaseMap(Map):
             </div>
             """
 
-        channel = f"{ch_l} V {wall_y} C {ch_l} 132 {ch_r} 132 {ch_r} {wall_y} V {bank_y}"
+        channel = (
+            f"{ch_l} V {wall_y} C {ch_l} 132 {ch_r} 132 {ch_r} {wall_y} V {bank_y}"
+        )
         rise = max(self.SECTION_BED_Y - water_y + 6, 8.0)
 
         svg = f"""
@@ -552,24 +420,6 @@ class BaseMap(Map):
                 if waterlevel_sensor and waterlevel_sensor.get("value") is not None:
                     has_waterlevel = True
                     waterlevel_val = waterlevel_sensor.get("value")
-                    water_level_warning = station.get("metadata", {}).get(
-                        "water_level_warning"
-                    )
-                    water_level_critical = station.get("metadata", {}).get(
-                        "water_level_critical"
-                    )
-
-                    self.chart_configs[station["id"]] = {
-                        "current": waterlevel_val,
-                        "warning": (
-                            float(water_level_warning) if water_level_warning else None
-                        ),
-                        "critical": (
-                            float(water_level_critical)
-                            if water_level_critical
-                            else None
-                        ),
-                    }
 
                 matched_cctv = self.find_matching_cctv(station)
                 cctv_btn_html = ""
