@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import datetime
-from enum import StrEnum
-from typing import Any, Literal, Self
-from urllib.parse import parse_qsl, urlsplit
+from enum import Enum
 import re
+from typing import Any, Dict, List, Literal
+from urllib.parse import parse_qsl, urlsplit
+
+from typing_extensions import Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -18,20 +20,20 @@ HATYAI_IMAGE_HOSTS = {
 }
 
 
-class MediaType(StrEnum):
+class MediaType(str, Enum):
     CCTV = "cctv"
     RADAR = "radar"
     SATELLITE = "satellite"
     WEATHER_MAP = "weather_map"
 
 
-class CoordinateStatus(StrEnum):
+class CoordinateStatus(str, Enum):
     VERIFIED = "verified"
     UNVERIFIED = "unverified"
     NOT_APPLICABLE = "not_applicable"
 
 
-class Availability(StrEnum):
+class Availability(str, Enum):
     ONLINE = "online"
     STALE = "stale"
     DEGRADED = "degraded"
@@ -39,7 +41,7 @@ class Availability(StrEnum):
     UNKNOWN = "unknown"
 
 
-class SourceHealthStatus(StrEnum):
+class SourceHealthStatus(str, Enum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     OFFLINE = "offline"
@@ -66,11 +68,11 @@ class GeoJSONPoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: str = Field(default="Point", pattern="^Point$")
-    coordinates: list[float] = Field(min_length=2, max_length=2)
+    coordinates: List[float] = Field(min_length=2, max_length=2)
 
     @field_validator("coordinates")
     @classmethod
-    def validate_coordinates(cls, value: list[float]) -> list[float]:
+    def validate_coordinates(cls, value: List[float]) -> List[float]:
         longitude, latitude = value
         if not -180 <= longitude <= 180:
             raise ValueError("longitude must be between -180 and 180")
@@ -140,8 +142,8 @@ class VisualFeed(bases.BaseSchema):
         default_factory=lambda: datetime.datetime.now(UTC)
     )
     provider_status: str | None = Field(default=None, max_length=500)
-    attribution: dict[str, Any] = Field(default_factory=dict)
-    raw_payload: dict[str, Any] = Field(default_factory=dict)
+    attribution: Dict[str, Any] = Field(default_factory=dict)
+    raw_payload: Dict[str, Any] = Field(default_factory=dict)
     registry_version: str | None = Field(default=None, max_length=100)
     last_seen_at: datetime.datetime | None = None
     created_at: datetime.datetime = Field(
@@ -232,10 +234,10 @@ class SourceHealth(BaseModel):
 
 
 class VisualFeedList(BaseModel):
-    visual_feeds: list[VisualFeed] = Field(default_factory=list)
+    visual_feeds: List[VisualFeed] = Field(default_factory=list)
     count: int = Field(ge=0)
     generated_at: datetime.datetime
-    source_health: dict[str, SourceHealth] = Field(default_factory=dict)
+    source_health: Dict[str, SourceHealth] = Field(default_factory=dict)
 
     @field_validator("generated_at", mode="before")
     @classmethod
@@ -370,10 +372,10 @@ class PublicSourceHealth(SourceHealth):
 
 class PublicVisualFeedList(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    visual_feeds: list[PublicVisualFeed] = Field(default_factory=list)
+    visual_feeds: List[PublicVisualFeed] = Field(default_factory=list)
     count: int = Field(ge=0)
     generated_at: datetime.datetime
-    source_health: dict[str, PublicSourceHealth] = Field(default_factory=dict)
+    source_health: Dict[str, PublicSourceHealth] = Field(default_factory=dict)
 
     @field_validator("generated_at", mode="before")
     @classmethod
@@ -407,7 +409,7 @@ class VisualFeedHistory(BaseModel):
     upstream_id: str
     date: datetime.date
     timezone: Literal["Asia/Bangkok"] = "Asia/Bangkok"
-    frames: list[HistoryFrame] = Field(default_factory=list, max_length=144)
+    frames: List[HistoryFrame] = Field(default_factory=list, max_length=144)
     fetched_at: datetime.datetime
     possibly_truncated: bool = False
 
