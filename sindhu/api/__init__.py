@@ -14,6 +14,7 @@ from sindhu.api.routers import init_router
 from sindhu.api.core.config import get_app_settings
 from sindhu.api.core.caching import init_redis_cache
 from sindhu import models
+
 import httpx
 from sindhu.api.core import caching
 from sindhu.services import visual_feeds

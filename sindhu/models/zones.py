@@ -5,11 +5,11 @@ from pydantic import Field
 from beanie import Document, PydanticObjectId, Link
 import pymongo
 
-from sindhu import schemas
+from sindhu.schemas.zones import Zone as ZoneSchema
 from .stations import Station as StationModel
 
 
-class Zone(schemas.zones.Zone, Document):
+class Zone(ZoneSchema, Document):
     id: PydanticObjectId = Field(
         default_factory=PydanticObjectId,
         alias="_id",

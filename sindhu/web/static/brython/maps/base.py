@@ -1,5 +1,4 @@
 from datetime import datetime, timezone, timedelta
-import json
 
 
 from browser import ajax, document, html, window, aio
@@ -41,140 +40,184 @@ class BaseMap(Map):
         self.marker_style = "donut"
         self._metric_legend_container = None
         self._legend_override = False
-        self.chart_configs = {}
-        self.map.on("tooltipopen", self.on_tooltip_open)
 
-    def on_tooltip_open(self, e):
+    SECTION_VIEW_W = 176
+    SECTION_VIEW_H = 150
+    SECTION_BANK_Y = 44
+    SECTION_WALL_Y = 88
+    SECTION_BED_Y = 121
+    SECTION_CH_L = 30
+    SECTION_CH_R = 146
+    SECTION_ARROW_X = 164
+    SECTION_USABLE_PX = 62
+    SECTION_HEADROOM = 1.25
+    SECTION_OVERFLOW_PX = 26
+    SECTION_RISK_TINTS = {
+        3: ("#9333ea", "#f3e8ff"),
+        2: ("#ef4444", "#fee2e2"),
+        1: ("#f97316", "#ffedd5"),
+        0: ("#16a34a", "#dcfce7"),
+    }
+
+    def build_waterlevel_section(self, station, waterlevel_val, diff_val):
+        sid = station["id"]
+        view_w = self.SECTION_VIEW_W
+        view_h = self.SECTION_VIEW_H
+        bank_y = self.SECTION_BANK_Y
+        wall_y = self.SECTION_WALL_Y
+        ch_l = self.SECTION_CH_L
+        ch_r = self.SECTION_CH_R
+        ax = self.SECTION_ARROW_X
+
+        metadata = station.get("metadata") or {}
         try:
-            # Leaflet tooltipopen event puts the tooltip on `e.tooltip` and its marker on `e.tooltip._source`
-            tooltip = getattr(e, "tooltip", None)
-            marker = (
-                getattr(tooltip, "_source", None)
-                if tooltip
-                else getattr(e, "sourceTarget", None)
-            )
+            crest = metadata.get("water_level_critical")
+            crest = float(crest) if crest is not None else None
+        except (TypeError, ValueError):
+            crest = None
+        try:
+            warning = metadata.get("water_level_warning")
+            warning = float(warning) if warning is not None else None
+        except (TypeError, ValueError):
+            warning = None
 
-            if (
-                marker is None
-                or not hasattr(marker, "options")
-                or not hasattr(marker.options, "customId")
-            ):
-                return
+        gap = abs(diff_val) if diff_val is not None else 0.0
+        warn_drop = None
+        if crest is not None and warning is not None and crest > warning:
+            warn_drop = crest - warning
 
-            station_id = marker.options.customId
-            if station_id not in self.chart_configs:
-                return
-            config = self.chart_configs[station_id]
+        span = max(gap, warn_drop or 0.0, 0.2) * self.SECTION_HEADROOM
+        px_per_m = self.SECTION_USABLE_PX / span
 
-            def render_chart():
-                canvas = document.getElementById(f"chart-{station_id}")
-                if not canvas:
-                    window.console.log(f"Canvas not found for station {station_id}")
-                    return
-                # Destroy existing Chart instance if present to prevent memory leaks and canvas reuse errors
-                try:
-                    if hasattr(canvas, "chart_instance") and canvas.chart_instance:
-                        if hasattr(canvas.chart_instance, "destroy"):
-                            canvas.chart_instance.destroy()
-                    elif hasattr(window, "Chart") and hasattr(window.Chart, "getChart"):
-                        existing_chart = window.Chart.getChart(canvas)
-                        if existing_chart:
-                            existing_chart.destroy()
-                except Exception as destroy_err:
-                    window.console.log(
-                        f"Error destroying previous chart: {destroy_err}"
-                    )
+        if diff_val is None:
+            water_y = bank_y + self.SECTION_USABLE_PX * 0.6
+        elif diff_val > 0:
+            water_y = bank_y - min(diff_val * px_per_m, self.SECTION_OVERFLOW_PX)
+        else:
+            water_y = bank_y + gap * px_per_m
 
-                window.console.log(f"Rendering chart for station {station_id}")
-                ctx = canvas.getContext("2d")
-                max_val = max(
-                    config["current"] * 1.2,
-                    (config.get("critical") or 0) * 1.2,
-                    (config.get("warning") or 0) * 1.2,
-                    10,
-                )
+        color, tint = self.SECTION_RISK_TINTS.get(station.get("risk"), (None, None))
+        if color is None:
+            d = diff_val if diff_val is not None else None
+            if d is None:
+                color, tint = "#64748b", "#f1f5f9"
+            elif d >= 0.5:
+                color, tint = self.SECTION_RISK_TINTS[3]
+            elif d >= 0:
+                color, tint = self.SECTION_RISK_TINTS[2]
+            elif d >= -0.5:
+                color, tint = self.SECTION_RISK_TINTS[1]
+            else:
+                color, tint = self.SECTION_RISK_TINTS[0]
 
-                chart_data = {
-                    "type": "bar",
-                    "data": {
-                        "labels": [""],
-                        "datasets": [
-                            {
-                                "data": [config["current"]],
-                                "backgroundColor": "#3b82f6",
-                                "categoryPercentage": 1.0,
-                                "barPercentage": 1.0,
-                            }
-                        ],
-                    },
-                    "options": {
-                        "responsive": True,
-                        "maintainAspectRatio": False,
-                        "scales": {
-                            "y": {
-                                "min": 0,
-                                "max": max_val,
-                                "grid": {"color": "#e5e7eb"},
-                            },
-                            "x": {"display": False},
-                        },
-                        "plugins": {"legend": {"display": False}},
-                    },
-                }
+        if diff_val is None:
+            headline = "ไม่มีค่าเทียบตลิ่ง"
+        elif diff_val > 0:
+            headline = f"ล้นตลิ่ง {diff_val:.2f} ม."
+        elif diff_val < 0:
+            headline = f"ต่ำกว่าตลิ่ง {gap:.2f} ม."
+        else:
+            headline = "เสมอระดับตลิ่งพอดี"
 
-                js_code = f"""
-                ({{
-                    id: 'thresholds_{station_id}',
-                    afterDraw: function(chart) {{
-                        const yScale = chart.scales.y;
-                        const left = chart.chartArea.left;
-                        const right = chart.chartArea.right;
-                        const ctx = chart.ctx;
-                        
-                        var warning = {config['warning'] if config.get('warning') is not None else 'null'};
-                        var critical = {config['critical'] if config.get('critical') is not None else 'null'};
-                        
-                        if (warning !== null) {{
-                            const yVal = yScale.getPixelForValue(warning);
-                            ctx.save();
-                            ctx.beginPath();
-                            ctx.setLineDash([4, 4]);
-                            ctx.strokeStyle = "#eab308";
-                            ctx.lineWidth = 2;
-                            ctx.moveTo(left, yVal);
-                            ctx.lineTo(right, yVal);
-                            ctx.stroke();
-                            ctx.restore();
-                        }}
-                        if (critical !== null) {{
-                            const yVal = yScale.getPixelForValue(critical);
-                            ctx.save();
-                            ctx.beginPath();
-                            ctx.setLineDash([4, 4]);
-                            ctx.strokeStyle = "#ef4444";
-                            ctx.lineWidth = 2;
-                            ctx.moveTo(left, yVal);
-                            ctx.lineTo(right, yVal);
-                            ctx.stroke();
-                            ctx.restore();
-                        }}
-                    }}
-                }})
+        a_top = min(water_y, bank_y)
+        a_bot = max(water_y, bank_y)
+        arrow_html = ""
+        if diff_val is not None:
+            if a_bot - a_top >= 12:
+                arrow_html = f"""
+                  <line x1="{ax}" y1="{a_top:.1f}" x2="{ax}" y2="{a_bot:.1f}"
+                        stroke="{color}" stroke-width="1.8"/>
+                  <path d="M {ax} {a_top:.1f} l -3.4 5 h 6.8 Z" fill="{color}"/>
+                  <path d="M {ax} {a_bot:.1f} l -3.4 -5 h 6.8 Z" fill="{color}"/>
+                """
+            else:
+                arrow_html = f"""
+                  <line x1="{ax - 5}" y1="{a_top:.1f}" x2="{ax + 5}" y2="{a_top:.1f}"
+                        stroke="{color}" stroke-width="2.2"/>
                 """
 
-                # Convert Python dict to pure JS object via JSON parse/serialize
-                js_config = window.JSON.parse(json.dumps(chart_data))
-                js_config.plugins = [window.eval(js_code)]
+        warn_line = ""
+        warn_row = ""
+        if warn_drop is not None:
+            warn_y = bank_y + warn_drop * px_per_m
+            warn_line = f"""
+              <line x1="{ch_l - 16}" y1="{warn_y:.1f}" x2="{ch_r + 16}" y2="{warn_y:.1f}"
+                    stroke="#f97316" stroke-width="1.4" stroke-dasharray="4 3"/>
+            """
+            warn_row = f"""
+            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:rgba(15,23,42,0.6);">
+                <span style="width:8px; height:2px; background:#f97316; flex:none;"></span>
+                <span>เฝ้าระวัง</span>
+                <b style="color:#0f172a; font-weight:600; margin-left:auto;">{warning:.2f}</b>
+            </div>
+            """
 
-                # Safely instantiate Chart class using JS wrapper function
-                create_chart = window.eval(
-                    "(function(ctx, config) { return new Chart(ctx, config); })"
-                )
-                canvas.chart_instance = create_chart(ctx, js_config)
+        crest_row = ""
+        if crest is not None:
+            crest_row = f"""
+            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:rgba(15,23,42,0.6);">
+                <span style="width:8px; height:2px; background:#475569; flex:none;"></span>
+                <span>ตลิ่ง</span>
+                <b style="color:#0f172a; font-weight:600; margin-left:auto;">{crest:.2f}</b>
+            </div>
+            """
 
-            window.setTimeout(render_chart, 50)
-        except Exception as ex:
-            print(f"[Map] Chart render error: {ex}")
+        channel = (
+            f"{ch_l} V {wall_y} C {ch_l} 132 {ch_r} 132 {ch_r} {wall_y} V {bank_y}"
+        )
+        rise = max(self.SECTION_BED_Y - water_y + 6, 8.0)
+
+        svg = f"""
+        <svg viewBox="0 0 {view_w} {view_h}" style="display:block; width:100%; height:auto;">
+          <defs>
+            <linearGradient id="wlg-{sid}" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#60a5fa"/>
+              <stop offset="100%" stop-color="#1d4ed8"/>
+            </linearGradient>
+            <clipPath id="wlc-{sid}">
+              <path d="M {ch_l} {bank_y} V {wall_y} C {ch_l} 132 {ch_r} 132 {ch_r} {wall_y} V {bank_y} Z"/>
+              <rect x="0" y="0" width="{view_w}" height="{bank_y}"/>
+            </clipPath>
+          </defs>
+          <path d="M 0 {bank_y} H {channel} H {view_w} V {view_h} H 0 Z" fill="#eef2f7"/>
+          <g clip-path="url(#wlc-{sid})">
+            <g transform="translate(0,{rise:.1f})">
+              <animateTransform attributeName="transform" type="translate"
+                    values="0 {rise:.1f};0 0" dur="0.75s" calcMode="spline"
+                    keyTimes="0;1" keySplines="0.22 0.61 0.36 1" fill="freeze"/>
+              <rect x="0" y="{water_y:.1f}" width="{view_w}" height="{view_h}"
+                    fill="url(#wlg-{sid})"/>
+              <line x1="0" y1="{water_y:.1f}" x2="{view_w}" y2="{water_y:.1f}"
+                    stroke="#dbeafe" stroke-width="2"/>
+            </g>
+          </g>
+          <path d="M 0 {bank_y} H {channel} H {view_w}" fill="none"
+                stroke="#64748b" stroke-width="2.2" stroke-linejoin="round"/>
+          {warn_line}
+          <line x1="{ch_l - 16}" y1="{bank_y}" x2="{ch_r + 16}" y2="{bank_y}"
+                stroke="#475569" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.85"/>
+          {arrow_html}
+        </svg>
+        """
+
+        return f"""
+        <div style="margin-top:8px;">
+            <div style="display:flex; gap:10px; align-items:stretch;">
+                <div style="flex:0 0 172px;">{svg}</div>
+                <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:10px;">
+                    <div>
+                        <div style="font-size:10px; color:rgba(15,23,42,0.55); line-height:1; margin-bottom:4px;">ระดับน้ำ</div>
+                        <div style="font-size:21px; font-weight:800; color:#1d4ed8; line-height:1; letter-spacing:-0.02em;">{waterlevel_val:.2f}<span style="font-size:11px; font-weight:600; color:rgba(15,23,42,0.5); margin-left:2px;">ม.</span></div>
+                    </div>
+                    <div style="display:flex; flex-direction:column; gap:4px;">
+                        {crest_row}
+                        {warn_row}
+                    </div>
+                </div>
+            </div>
+            <div style="margin-top:8px; text-align:center; font-size:12px; font-weight:700; border-radius:7px; padding:4px 0; color:{color}; background:{tint};">{headline}</div>
+        </div>
+        """
 
     """
     ===========================================================================
@@ -371,28 +414,12 @@ class BaseMap(Map):
                 waterlevel_sensor = metrics_dict.get("waterlevel") or metrics_dict.get(
                     "waterlevel_msl"
                 )
+                diff_sensor = metrics_dict.get("diff_wl_bank")
+                diff_val = diff_sensor.get("value") if diff_sensor else None
                 has_waterlevel = False
                 if waterlevel_sensor and waterlevel_sensor.get("value") is not None:
                     has_waterlevel = True
                     waterlevel_val = waterlevel_sensor.get("value")
-                    water_level_warning = station.get("metadata", {}).get(
-                        "water_level_warning"
-                    )
-                    water_level_critical = station.get("metadata", {}).get(
-                        "water_level_critical"
-                    )
-
-                    self.chart_configs[station["id"]] = {
-                        "current": waterlevel_val,
-                        "warning": (
-                            float(water_level_warning) if water_level_warning else None
-                        ),
-                        "critical": (
-                            float(water_level_critical)
-                            if water_level_critical
-                            else None
-                        ),
-                    }
 
                 matched_cctv = self.find_matching_cctv(station)
                 cctv_btn_html = ""
@@ -416,6 +443,9 @@ class BaseMap(Map):
                     """
 
                 if has_waterlevel:
+                    section_html = self.build_waterlevel_section(
+                        station, waterlevel_val, diff_val
+                    )
                     tooltip_detail = f"""
                     <div class="card card-compact w-72 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
                         <div class="card-body p-3 gap-1.5">
@@ -427,12 +457,7 @@ class BaseMap(Map):
                                 <h3 class="font-bold text-sm text-base-content leading-snug">{station["name_th"]}</h3>
                                 <p class="text-[11px] text-base-content/60 font-mono mt-0.5">{station["name"]}</p>
                             </div>
-                            <div class="mt-2 w-full h-32 relative">
-                                <canvas id="chart-{station['id']}"></canvas>
-                            </div>
-                            <div class="text-[11px] text-base-content/80 mt-1 flex justify-between items-center">
-                                <span>ระดับน้ำปัจจุบัน: <span class="font-bold text-blue-600 text-sm">{waterlevel_val:.2f}</span> ม.</span>
-                            </div>
+                            {section_html}
                             {cctv_btn_html}
                             {footer_html}
                         </div>
@@ -612,6 +637,7 @@ class BaseMap(Map):
                             "offset": (0, 30),
                             "className": "tooltip-marker",
                             "interactive": True,
+                            "opacity": 1,
                         },
                     )
                     # add to map
