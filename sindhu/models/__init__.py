@@ -12,6 +12,7 @@ from sindhu.models.zones import Zone
 from sindhu.models.system_settings import SystemSetting
 from sindhu.models.tokens import ApiToken
 from sindhu.models.logs import RequestLog
+from sindhu.models.visual_feeds import VisualFeed
 
 from sindhu.models.telemetrices.metric import Metric
 
