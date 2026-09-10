@@ -2,10 +2,10 @@ from beanie import Document, TimeSeriesConfig, PydanticObjectId, Link
 from datetime import datetime
 from pydantic import Field
 
-from sindhu import schemas
+from sindhu.schemas.metrics import Metric as MetricSchema
 
 
-class Metric(schemas.metrics.Metric, Document):
+class Metric(MetricSchema, Document):
     id: PydanticObjectId = Field(
         default_factory=PydanticObjectId,
         alias="_id",

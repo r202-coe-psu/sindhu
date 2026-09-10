@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import List
 
-from .. import schemas
+from ..schemas.users import User as UserSchema
 
 from beanie import Document, Indexed, PydanticObjectId
 from pydantic import Field
@@ -11,7 +11,7 @@ from pydantic import Field
 # pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
-class User(schemas.users.User, Document):
+class User(UserSchema, Document):
     # id: PydanticObjectId = Field(
     #     default_factory=PydanticObjectId,
     #     alias="_id",
