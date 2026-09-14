@@ -171,8 +171,8 @@ class BaseMap(Map):
         <svg viewBox="0 0 {view_w} {view_h}" style="display:block; width:100%; height:auto;">
           <defs>
             <linearGradient id="wlg-{sid}" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#60a5fa"/>
-              <stop offset="100%" stop-color="#1d4ed8"/>
+              <stop offset="0%" style="stop-color:var(--color-brand-400)"/>
+              <stop offset="100%" style="stop-color:var(--color-brand-700)"/>
             </linearGradient>
             <clipPath id="wlc-{sid}">
               <path d="M {ch_l} {bank_y} V {wall_y} C {ch_l} 132 {ch_r} 132 {ch_r} {wall_y} V {bank_y} Z"/>
@@ -188,7 +188,7 @@ class BaseMap(Map):
               <rect x="0" y="{water_y:.1f}" width="{view_w}" height="{view_h}"
                     fill="url(#wlg-{sid})"/>
               <line x1="0" y1="{water_y:.1f}" x2="{view_w}" y2="{water_y:.1f}"
-                    stroke="#dbeafe" stroke-width="2"/>
+                    style="stroke:var(--color-brand-100)" stroke-width="2"/>
             </g>
           </g>
           <path d="M 0 {bank_y} H {channel} H {view_w}" fill="none"
@@ -207,7 +207,7 @@ class BaseMap(Map):
                 <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:10px;">
                     <div>
                         <div style="font-size:10px; color:rgba(15,23,42,0.55); line-height:1; margin-bottom:4px;">ระดับน้ำ</div>
-                        <div style="font-size:21px; font-weight:800; color:#1d4ed8; line-height:1; letter-spacing:-0.02em;">{waterlevel_val:.2f}<span style="font-size:11px; font-weight:600; color:rgba(15,23,42,0.5); margin-left:2px;">ม.</span></div>
+                        <div style="font-size:21px; font-weight:800; color:var(--color-brand-700); line-height:1; letter-spacing:-0.02em;">{waterlevel_val:.2f}<span style="font-size:11px; font-weight:600; color:rgba(15,23,42,0.5); margin-left:2px;">ม.</span></div>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:4px;">
                         {crest_row}
@@ -435,7 +435,7 @@ class BaseMap(Map):
                     cctv_btn_html = f"""
                     <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(0,0,0,0.12);">
                         <button type="button" onclick="if(window.open_cctv_detail)window.open_cctv_detail('{cctv_source}','{cctv_upstream_id}')"
-                            style="width:100%; background:#2563eb; color:white; font-size:11px; font-weight:600; padding:6px 10px; border-radius:6px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            style="width:100%; background:var(--color-brand-600); color:white; font-size:11px; font-weight:600; padding:6px 10px; border-radius:6px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:6px;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h10a2 2 0 0 1 2 2v2.5l4-2.5v12l-4-2.5V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
                             <span>ดูกล้อง CCTV ({cctv_title})</span>
                         </button>
@@ -734,9 +734,9 @@ class BaseMap(Map):
         for level in levels:
             rows += f"""
             <div class="flex items-center gap-2">
-                <span class="inline-block w-4 h-3 rounded-sm shrink-0 border border-gray-300" style="background-color: {level["color"]};"></span>
-                <span class="text-[11px] text-gray-700 leading-tight">{level["label"]}</span>
-                <span class="text-[10px] text-gray-400 leading-tight ml-auto pl-2 whitespace-nowrap">{level["range"]}</span>
+                <span class="inline-block w-4 h-3 rounded-sm shrink-0 border border-ink-300" style="background-color: {level["color"]};"></span>
+                <span class="text-[11px] text-ink-700 leading-tight">{level["label"]}</span>
+                <span class="text-[10px] text-ink-400 leading-tight ml-auto pl-2 whitespace-nowrap">{level["range"]}</span>
             </div>
             """
 
@@ -754,14 +754,14 @@ class BaseMap(Map):
 
         subtitle_html = ""
         if subtitle:
-            subtitle_html = f'<div class="text-[9px] text-gray-400">{subtitle}</div>'
+            subtitle_html = f'<div class="text-[9px] text-ink-400">{subtitle}</div>'
 
         container.html = f"""
-        <div class="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-xl shadow-md px-3 py-2">
-            <div class="flex items-center gap-1.5 pb-1 mb-1.5 border-b border-gray-100">
-                <i class="ph ph-palette text-blue-600 text-sm"></i>
+        <div class="bg-white/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
+            <div class="flex items-center gap-1.5 pb-1 mb-1.5 border-b border-ink-100">
+                <i class="ph ph-palette text-brand-600 text-sm"></i>
                 <div class="leading-tight">
-                    <div class="text-[11px] font-semibold text-gray-700">{title}</div>
+                    <div class="text-[11px] font-semibold text-ink-700">{title}</div>
                     {subtitle_html}
                 </div>
             </div>

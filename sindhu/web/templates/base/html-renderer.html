@@ -479,7 +479,7 @@
       if (!hasMatch) {
         if (!noResultElement) {
           noResultElement = document.createElement('li');
-          noResultElement.className = 'no-results text-center text-gray-500 w-50';
+          noResultElement.className = 'no-results text-center text-ink-500 w-50';
           noResultElement.textContent = 'No results match';
           dropdown.appendChild(noResultElement);
         }
@@ -539,14 +539,14 @@
     {% if field.flags.required %}<span class="text-error">*</span>{% endif %}
   </legend>
   <div id="dropzone-{{ field.id }}"
-    class="dropzone border-dashed border-2 border-gray-300 rounded-lg p-6 text-center cursor-pointer {{ class_ }}"
+    class="dropzone border-dashed border-2 border-ink-300 rounded-lg p-6 text-center cursor-pointer {{ class_ }}"
     style="transition: border-color 0.2s" onclick="document.getElementById('fileinput-{{ field.id }}').click();"
-    ondragover="event.preventDefault(); this.style.borderColor='#3b82f6';"
-    ondragleave="event.preventDefault(); this.style.borderColor='#d1d5db';"
+    ondragover="event.preventDefault(); this.style.borderColor='var(--color-brand-500)';"
+    ondragleave="event.preventDefault(); this.style.borderColor='';"
     ondrop="handleDrop(event, '{{ field.id }}', {{ max_files }});">
-    <div class="dz-message text-gray-500">
+    <div class="dz-message text-ink-500">
       <span class="block mb-2">{{ help_text }}</span>
-      <span class="text-xs text-gray-400">Accepted: PDF (.pdf), XLSX (.xlsx), PNG (.png), JPG/JPEG (.jpg/.jpeg)</span>
+      <span class="text-xs text-ink-400">Accepted: PDF (.pdf), XLSX (.xlsx), PNG (.png), JPG/JPEG (.jpg/.jpeg)</span>
     </div>
     <ul id="file-list-{{ field.id }}" class="mt-4 text-left text-sm" onclick="event.stopPropagation();">
     </ul>
@@ -589,7 +589,7 @@
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const li = document.createElement('li');
-      li.className = 'flex items-center justify-between p-2 bg-gray-50 rounded mb-2';
+      li.className = 'flex items-center justify-between p-2 bg-ink-50 rounded mb-2';
       li.onclick = function (e) {
         e.stopPropagation();
       }; // Prevent triggering dropzone click
@@ -647,7 +647,7 @@
 </script>
 <style>
   .dropzone:hover {
-    border-color: #3b82f6;
+    border-color: var(--color-brand-500);
   }
 
   .dropzone ul {
@@ -1015,7 +1015,7 @@ label_class="font-semibold text-xs text-black", input_class="input input-bordere
       value="{{ initial_text }}" autocomplete="off">
 
     <button type="button" id="{{ clear_btn_id }}"
-      class="absolute right-2 top-3 text-gray-400 hover:text-gray-600 z-20 {% if not field.data %}hidden{% endif %}">
+      class="absolute right-2 top-3 text-ink-400 hover:text-ink-600 z-20 {% if not field.data %}hidden{% endif %}">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
         <path fill-rule="evenodd"
           d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
