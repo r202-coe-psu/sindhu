@@ -38,6 +38,10 @@ class Station(bases.BaseSchema, BaseStation):
     created_date: datetime.datetime
     updated_date: datetime.datetime
     status: str
+    # Admin switch for the public map. Kept apart from `status`, which the ETL
+    # pipelines use to find stations, so hiding a station never stops ingest.
+    # Kept off CreateUpdateStation so a generic update cannot reset it.
+    is_visible: bool = True
 
 
 class StationList(BaseModel):
@@ -49,4 +53,9 @@ class StationWithMetrics(Station):
 
 
 class StationWithMetricsList(BaseModel):
-    stations: list[StationWithMetrics]
+    stations: List[StationWithMetrics]
+
+
+class UpdateStationVisibility(BaseModel):
+    station_ids: List[PydanticObjectId] = Field(min_length=1)
+    is_visible: bool
