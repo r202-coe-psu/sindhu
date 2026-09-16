@@ -689,6 +689,53 @@ class BaseMap(Map):
 
     """
     ===========================================================================
+    Interpolations
+    ===========================================================================
+    """
+
+    INTERPOLATION_PANE = "interpolationPane"
+    INTERPOLATION_FILL_OPACITY = 0.45
+
+    def set_interpolation_layer(self, key, geojson):
+        """Draw an interpolated surface (contour GeoJSON) under the overlays."""
+        self.remove_interpolation_layer(key)
+        if not geojson:
+            return
+
+        # Between the tiles (200) and the overlay pane (400), and transparent to
+        # the mouse, so zones and station markers stay clickable on top of it
+        if not self.map.getPane(self.INTERPOLATION_PANE):
+            pane = self.map.createPane(self.INTERPOLATION_PANE)
+            pane.style.zIndex = 350
+            pane.style.pointerEvents = "none"
+
+        fill_opacity = self.INTERPOLATION_FILL_OPACITY
+
+        def style(feature):
+            properties = getattr(feature, "properties", None)
+            fill = getattr(properties, "fill", "#C6C6C6")
+            return {
+                "fillColor": fill,
+                "fillOpacity": fill_opacity,
+                "stroke": False,
+            }
+
+        self.interpolate_layers[key] = self.leaflet.geoJson(
+            geojson,
+            {
+                "pane": self.INTERPOLATION_PANE,
+                "interactive": False,
+                "style": style,
+            },
+        ).addTo(self.map)
+
+    def remove_interpolation_layer(self, key):
+        layer = self.interpolate_layers.pop(key, None)
+        if layer:
+            self.map.removeLayer(layer)
+
+    """
+    ===========================================================================
     Helper functions
     ===========================================================================
     """
