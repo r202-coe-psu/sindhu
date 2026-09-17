@@ -81,6 +81,17 @@ class BaseMap(Map):
         except (TypeError, ValueError):
             warning = None
 
+        if diff_val is None and waterlevel_val is not None and crest is not None:
+            try:
+                diff_val = float(waterlevel_val) - float(crest)
+            except (TypeError, ValueError):
+                pass
+        if waterlevel_val is None and diff_val is not None and crest is not None:
+            try:
+                waterlevel_val = float(crest) + float(diff_val)
+            except (TypeError, ValueError):
+                pass
+
         gap = abs(diff_val) if diff_val is not None else 0.0
         warn_drop = None
         if crest is not None and warning is not None and crest > warning:
@@ -207,7 +218,7 @@ class BaseMap(Map):
                 <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:10px;">
                     <div>
                         <div style="font-size:10px; color:rgba(15,23,42,0.55); line-height:1; margin-bottom:4px;">ระดับน้ำ</div>
-                        <div style="font-size:21px; font-weight:800; color:var(--color-brand-700); line-height:1; letter-spacing:-0.02em;">{waterlevel_val:.2f}<span style="font-size:11px; font-weight:600; color:rgba(15,23,42,0.5); margin-left:2px;">ม.</span></div>
+                        <div style="font-size:21px; font-weight:800; color:var(--color-brand-700); line-height:1; letter-spacing:-0.02em;">{f"{waterlevel_val:.2f}" if waterlevel_val is not None else "—"}<span style="font-size:11px; font-weight:600; color:rgba(15,23,42,0.5); margin-left:2px;">ม.</span></div>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:4px;">
                         {crest_row}
@@ -411,15 +422,27 @@ class BaseMap(Map):
                     </div>
                     """
 
-                waterlevel_sensor = metrics_dict.get("waterlevel") or metrics_dict.get(
-                    "waterlevel_msl"
+                waterlevel_sensor = (
+                    metrics_dict.get("waterlevel")
+                    or metrics_dict.get("waterlevel_msl")
+                    or metrics_dict.get("water_level")
+                    or metrics_dict.get("waterlevel_m")
                 )
                 diff_sensor = metrics_dict.get("diff_wl_bank")
                 diff_val = diff_sensor.get("value") if diff_sensor else None
-                has_waterlevel = False
-                if waterlevel_sensor and waterlevel_sensor.get("value") is not None:
-                    has_waterlevel = True
-                    waterlevel_val = waterlevel_sensor.get("value")
+                waterlevel_val = (
+                    waterlevel_sensor.get("value") if waterlevel_sensor else None
+                )
+
+                if waterlevel_val is None and diff_val is not None:
+                    crest = (station.get("metadata") or {}).get("water_level_critical")
+                    if crest is not None:
+                        try:
+                            waterlevel_val = float(crest) + float(diff_val)
+                        except (TypeError, ValueError):
+                            pass
+
+                has_waterlevel = waterlevel_val is not None or diff_val is not None
 
                 matched_cctv = self.find_matching_cctv(station)
                 cctv_btn_html = ""
