@@ -195,6 +195,7 @@ class BaseMonitor:
             await self.load_reference_boundary()
         if hasattr(self.map, "fit_to_hatyai_bounds"):
             self.map.fit_to_hatyai_bounds()
+            window.setTimeout(self.map.fit_to_hatyai_bounds, 100)
 
     async def load_reference_boundary(self):
         if not self.reference_boundary_url:
