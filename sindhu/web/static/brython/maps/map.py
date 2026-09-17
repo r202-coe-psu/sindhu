@@ -1,6 +1,24 @@
 from browser import alert, window, ajax
+import datetime
 import json
 import math
+
+THAI_DAYS_SHORT = ["จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."]
+THAI_MONTHS_SHORT = [
+    "",
+    "ม.ค.",
+    "ก.พ.",
+    "มี.ค.",
+    "เม.ย.",
+    "พ.ค.",
+    "มิ.ย.",
+    "ก.ค.",
+    "ส.ค.",
+    "ก.ย.",
+    "ต.ค.",
+    "พ.ย.",
+    "ธ.ค.",
+]
 
 
 def _haversine_distance(coord1, coord2):
@@ -193,8 +211,9 @@ class Map:
 
         fill = custom_style.get("fill", self.ZONE_STYLE["fillColor"])
         stroke = custom_style.get("stroke") or fill or self.ZONE_STYLE["color"]
-        is_ref = (custom_style.get("role") == "reference_boundary") or (
-            zone.get("code") == "hatyai-boundary"
+        is_ref = zone.get("zone_kind") == "reference" or (
+            custom_style.get("role") == "reference_boundary"
+            or zone.get("code") == "hatyai-boundary"
         )
         dash_array = "8, 6" if is_ref else custom_style.get("dashArray", "")
         stroke_weight = (
@@ -212,10 +231,9 @@ class Map:
 
         risk_val = level.get("risk", -1) if level else -1
 
-        # Reference boundary or normal water level (risk <= 0):
-        # Strictly preserve the admin-configured zone color and shading mode.
-        # NEVER recolor normal zones to green!
-        if is_ref or risk_val <= 0:
+        # Reference boundaries are geographic context, not a risk zone.
+        # Keep their configured dashed style and never recolour them.
+        if is_ref:
             if custom_style:
                 if state == "hover":
                     return {
@@ -258,7 +276,16 @@ class Map:
                 style_copy["fillOpacity"] = 0.25 if state == "normal" else 0.35
             return style_copy
 
-        # Active flood alert (risk >= 1: warning, critical)
+        # Zone colours follow the same risk scale as their stations.  A zone
+        # gets the worst level among its member stations; no data is grey.
+        if not level:
+            level = {
+                "risk": -1,
+                "color": "#9ca3af",
+                "border": "#6b7280",
+                "fill_opacity": 0.1,
+            }
+
         alert_color = level.get("border") or level.get("color")
         if is_shaded:
             alert_fill = level.get("color")
@@ -388,7 +415,10 @@ class Map:
             stroke_color = (
                 style.get("stroke") or style.get("fill") or self.ZONE_STYLE["color"]
             )
-            is_ref = style.get("role") == "reference_boundary"
+            is_ref = zone.get("zone_kind") == "reference" or (
+                style.get("role") == "reference_boundary"
+                or zone.get("code") == "hatyai-boundary"
+            )
             weight_val = (
                 3.0 if is_ref else max(float(style.get("stroke-width") or 2.5), 2.5)
             )
@@ -490,20 +520,30 @@ class Map:
             self.reference_boundary_layer.addTo(self.map)
 
     def fit_to_hatyai_bounds(self):
-        """Fit map view to Hat Yai reference boundary or loaded zones."""
+        """Fit map view to every loaded zone and the reference boundary."""
         try:
+            bounds = self.leaflet.latLngBounds([])
+            has_bounds = False
+
+            # Extend the bounds explicitly instead of handing a Brython list to
+            # Leaflet.featureGroup().  The latter can omit a layer while the
+            # zones are still being initialised, which left Zone 4 clipped at
+            # the top edge of the initial viewport.
+            for entry in self.zone_layers_by_id.values():
+                layer_bounds = entry["layer"].getBounds()
+                if layer_bounds and layer_bounds.isValid():
+                    bounds.extend(layer_bounds)
+                    has_bounds = True
+
             if self.reference_boundary_layer:
-                bounds = self.reference_boundary_layer.getBounds()
-                if bounds and bounds.isValid():
-                    self.map.fitBounds(bounds, {"padding": [24, 24]})
-                    return
-            if self.zone_layers_by_id:
-                group = self.leaflet.featureGroup(
-                    [entry["layer"] for entry in self.zone_layers_by_id.values()]
-                )
-                bounds = group.getBounds()
-                if bounds and bounds.isValid():
-                    self.map.fitBounds(bounds, {"padding": [24, 24]})
+                reference_bounds = self.reference_boundary_layer.getBounds()
+                if reference_bounds and reference_bounds.isValid():
+                    bounds.extend(reference_bounds)
+                    has_bounds = True
+
+            if has_bounds and bounds.isValid():
+                self.map.invalidateSize({"pan": False})
+                self.map.fitBounds(bounds, {"padding": [24, 24]})
         except Exception as e:
             print(f"fit_to_hatyai_bounds error: {e}")
 
