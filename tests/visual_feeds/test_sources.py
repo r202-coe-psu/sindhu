@@ -14,6 +14,8 @@ from sindhu.services.cctv_catalog import (
     DWR_SOURCE,
     HATYAI_CAMERAS,
     HATYAI_SOURCE,
+    RID_CAMERAS,
+    RID_SOURCE,
     get_camera,
 )
 from sindhu.services.cctv_sources import (
@@ -58,6 +60,26 @@ class CctvCatalogTests(unittest.TestCase):
         camera["title_th"] = "mutated"
         self.assertNotEqual(get_camera(HATYAI_SOURCE, 22)["title_th"], "mutated")
         self.assertIsNone(get_camera("unknown", "22"))
+
+    def test_rid_catalog_contains_only_the_hatyai_cctv_subset(self):
+        self.assertEqual(len(RID_CAMERAS), 11)
+        self.assertEqual(
+            {camera["upstream_id"] for camera in RID_CAMERAS},
+            {
+                "STN04",
+                "STN07",
+                "STN08",
+                "STN09",
+                "TSL24",
+                "TSL27",
+                "TSL28",
+                "TSL30",
+                "TSL31",
+                "TSL39",
+                "TSL40",
+            },
+        )
+        self.assertEqual(get_camera(RID_SOURCE, "stn04")["code"], "STN04")
 
 
 class HatyaiSourceTests(unittest.IsolatedAsyncioTestCase):

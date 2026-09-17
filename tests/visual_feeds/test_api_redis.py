@@ -46,7 +46,7 @@ class ApiRedisTests(unittest.IsolatedAsyncioTestCase):
                     ) as api:
                         first = await api.get("/v1/visual-feeds")
                         self.assertEqual(first.status_code, 200, first.text)
-                        self.assertEqual(first.json()["count"], 30)
+                        self.assertEqual(first.json()["count"], 41)
                         count = len(calls)
                         again = await api.get("/v1/visual-feeds?media_type=cctv")
                         self.assertEqual(again.status_code, 200)
@@ -59,7 +59,7 @@ class ApiRedisTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual((await api.get(url)).json(), history.json())
                         self.assertEqual(len(calls), count)
                         keys = [k async for k in db.scan_iter(match=prefix + ":*")]
-                        self.assertEqual(len(keys), 3)
+                        self.assertEqual(len(keys), 4)
                         for key in keys:
                             self.assertGreater(await db.ttl(key), 0)
                             raw = await db.get(key)
