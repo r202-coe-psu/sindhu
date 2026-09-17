@@ -44,3 +44,5 @@ sindhu/web/static/resources/rivers.geojson
 # Ignore Claude files
 .claude/*
 backups/
+
+.DS_Store*
