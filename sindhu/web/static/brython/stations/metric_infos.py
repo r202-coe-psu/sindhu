@@ -356,7 +356,12 @@ METRIC_LEVEL_TITLES = dict(
 # The metric a station is judged by, best first. The ETL writes `diff_wl_bank`
 # and `waterlevel` for every source, so those carry the map; `storage_percent`
 # only shows up for reservoir stations.
-PRIMARY_METRIC_PREFERENCE = ["diff_wl_bank", "storage_percent", "waterlevel"]
+PRIMARY_METRIC_PREFERENCE = [
+    "diff_wl_bank",
+    "water_level",
+    "waterlevel",
+    "storage_percent",
+]
 
 METRIC_LEVEL_LABELS = dict(
     storage_percent=[
@@ -496,6 +501,15 @@ def get_metric_fill_percent(type_, value):
 RISK_LEVEL_TITLE = "ระดับความปลอดภัย"
 
 RISK_LEVELS = [
+    {
+        "risk": 3,
+        "label": "อพยพ",
+        "range": "ถึงระดับอพยพ",
+        "color": "#9333ea",
+        "border": "#7e22ce",
+        "text": "#FFFFFF",
+        "fill_opacity": 0.5,
+    },
     {
         "risk": 2,
         "label": "วิกฤต",
