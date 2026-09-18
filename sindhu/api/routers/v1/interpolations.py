@@ -10,8 +10,9 @@ CACHE_EXPIRE_SECONDS = 1800
 
 
 @router.get("/rain")
-async def rain(source: str | None = None) -> dict:
-    key = f"sindhu:interpolations:rain:{source or 'all'}"
+async def rain(source: str | None = None, method: str | None = None) -> dict:
+    method = method or services.interpolations.DEFAULT_METHOD
+    key = f"sindhu:interpolations:rain:{source or 'all'}:{method}"
 
     result = await caching.redis_client.json().get(key)
     if result:
@@ -19,7 +20,7 @@ async def rain(source: str | None = None) -> dict:
         return result
 
     logger.info(f"[CACHE] {key} MISS. Calculating....")
-    result = await services.interpolations.get_rain_interpolation(source)
+    result = await services.interpolations.get_rain_interpolation(source, method)
 
     # Skip caching an empty surface so new rain data shows up on the next call
     if result["interpolation"]:

@@ -10,6 +10,8 @@ import json
 
 class WaterMonitor(BaseMonitor):
     RAIN_INTERPOLATION_KEY = "rain"
+    # Rain-only stations feed the rain surface; they have no water level to rate
+    RAIN_STATION_SOURCES = ["thaiwater_rain"]
 
     def __init__(
         self,
@@ -224,9 +226,15 @@ class WaterMonitor(BaseMonitor):
                 print(f"[Monitor:{self.monitor_name}] Invalid data received: {data}")
                 return
 
-            for station in data.get("stations") or []:
-                if not station or not isinstance(station, dict):
-                    continue
+            data["stations"] = [
+                station
+                for station in data.get("stations") or []
+                if station
+                and isinstance(station, dict)
+                and station.get("source") not in self.RAIN_STATION_SOURCES
+            ]
+
+            for station in data["stations"]:
                 risk, waterlevel, diff_wl_bank = self.calculate_risk(station)
                 station["risk"] = risk
                 station["waterlevel"] = waterlevel
@@ -269,6 +277,7 @@ class WaterMonitor(BaseMonitor):
             aio.run(self.load_rain_interpolation())
         else:
             self.map.remove_interpolation_layer(self.RAIN_INTERPOLATION_KEY)
+            self.map.set_interpolation_legend(None)
 
     async def load_rain_interpolation(self):
         url = f"{self.api_url}/v1/interpolations/rain"
@@ -293,6 +302,9 @@ class WaterMonitor(BaseMonitor):
             )
         self.map.set_interpolation_layer(
             self.RAIN_INTERPOLATION_KEY, data.get("interpolation")
+        )
+        self.map.set_interpolation_legend(
+            data.get("legend") if data.get("interpolation") else None
         )
 
     def render_data_error(self, message):
