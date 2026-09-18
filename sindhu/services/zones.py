@@ -45,7 +45,9 @@ async def find_stations_by_zone(zone, user_lng: float = 0, user_lat: float = 0) 
     if not zone_with_links:
         return []
 
-    stations = [s for s in zone_with_links.stations if s.status == "active"]
+    stations = [
+        s for s in zone_with_links.stations if s.status == "active" and s.is_visible
+    ]
 
     result = []
     for s in stations:

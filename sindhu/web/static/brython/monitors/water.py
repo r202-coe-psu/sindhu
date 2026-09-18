@@ -1,7 +1,6 @@
 from browser import document, aio, window
 import javascript as js
 import datetime
-from urllib.parse import urlencode
 
 from .base import BaseMonitor
 from stations import metric_infos
@@ -10,6 +9,10 @@ import json
 
 
 class WaterMonitor(BaseMonitor):
+    RAIN_INTERPOLATION_KEY = "rain"
+    # Rain-only stations feed the rain surface; they have no water level to rate
+    RAIN_STATION_SOURCES = ["thaiwater_rain"]
+
     def __init__(
         self,
         lang_code,
@@ -190,23 +193,32 @@ class WaterMonitor(BaseMonitor):
         if "hide_no_data" in document:
             document["hide_no_data"].bind("change", self.on_hide_no_data_change)
 
+        if "toggle_rain_interpolation" in document:
+            document["toggle_rain_interpolation"].bind(
+                "change", self.on_toggle_rain_interpolation
+            )
+
         while self.running:
             print(
                 f"[Monitor:{self.monitor_name}] Cycle running (interval: {self.acquisition_interval}s)"
             )
 
             await self.get_stations_metrics()
+            if self.is_rain_interpolation_on():
+                await self.load_rain_interpolation()
 
             # wait for next aquisition
             await aio.sleep(self.acquisition_interval)
 
     async def get_stations_metrics(self):
-        query_data = urlencode({"source": self.source})
-        url = f"{self.api_url}/v1/stations/metrics/latest?{query_data}"
+        url = f"{self.api_url}/v1/stations/metrics/latest"
 
         self.set_map_loading(True)
         try:
-            response = await aio.get(url, cache=True)
+            # Pass the query through `data`: with cache=False Brython appends
+            # "?ts...=0" to the URL itself, so a "?source=" already in the URL
+            # would turn into "source=all?ts...=0" and match no stations
+            response = await aio.get(url, data={"source": self.source}, cache=False)
             if response.status != 200:
                 raise RuntimeError(f"station metrics returned HTTP {response.status}")
             data = json.loads(response.data)
@@ -214,9 +226,15 @@ class WaterMonitor(BaseMonitor):
                 print(f"[Monitor:{self.monitor_name}] Invalid data received: {data}")
                 return
 
-            for station in data.get("stations") or []:
-                if not station or not isinstance(station, dict):
-                    continue
+            data["stations"] = [
+                station
+                for station in data.get("stations") or []
+                if station
+                and isinstance(station, dict)
+                and station.get("source") not in self.RAIN_STATION_SOURCES
+            ]
+
+            for station in data["stations"]:
                 risk, waterlevel, diff_wl_bank = self.calculate_risk(station)
                 station["risk"] = risk
                 station["waterlevel"] = waterlevel
@@ -248,13 +266,54 @@ class WaterMonitor(BaseMonitor):
         finally:
             self.set_map_loading(False)
 
+    def is_rain_interpolation_on(self):
+        return (
+            "toggle_rain_interpolation" in document
+            and document["toggle_rain_interpolation"].checked
+        )
+
+    def on_toggle_rain_interpolation(self, ev):
+        if ev.target.checked:
+            aio.run(self.load_rain_interpolation())
+        else:
+            self.map.remove_interpolation_layer(self.RAIN_INTERPOLATION_KEY)
+            self.map.set_interpolation_legend(None)
+
+    async def load_rain_interpolation(self):
+        url = f"{self.api_url}/v1/interpolations/rain"
+        try:
+            response = await aio.get(url, cache=False)
+            if response.status != 200:
+                raise RuntimeError(
+                    f"rain interpolation returned HTTP {response.status}"
+                )
+            data = json.loads(response.data) or {}
+        except Exception as e:
+            print(f"[Monitor:{self.monitor_name}] Rain interpolation error: {e}")
+            return
+
+        # The checkbox may have been cleared while the request was in flight
+        if not self.is_rain_interpolation_on():
+            return
+
+        if not data.get("interpolation"):
+            print(
+                f"[Monitor:{self.monitor_name}] Not enough rain stations to interpolate ({data.get('points')})"
+            )
+        self.map.set_interpolation_layer(
+            self.RAIN_INTERPOLATION_KEY, data.get("interpolation")
+        )
+        self.map.set_interpolation_legend(
+            data.get("legend") if data.get("interpolation") else None
+        )
+
     def render_data_error(self, message):
         if "reservoir_data_list" not in document:
             return
         document["reservoir_data_list"].html = f"""
         <div class="flex flex-col items-center justify-center h-full text-center gap-2 px-4">
             <i class="ph ph-warning-circle text-4xl text-amber-500"></i>
-            <div class="text-sm font-medium text-gray-600">{message}</div>
+            <div class="text-sm font-medium text-ink-600">{message}</div>
         </div>
         """
 
@@ -270,22 +329,22 @@ class WaterMonitor(BaseMonitor):
             btn_shaded = document["zone_style_shaded"]
             if mode == "outline":
                 btn_outline.classList.add(
-                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
                 )
-                btn_outline.classList.remove("text-slate-600")
+                btn_outline.classList.remove("text-ink-600")
                 btn_shaded.classList.remove(
-                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
                 )
-                btn_shaded.classList.add("text-slate-600")
+                btn_shaded.classList.add("text-ink-600")
             else:
                 btn_shaded.classList.add(
-                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
                 )
-                btn_shaded.classList.remove("text-slate-600")
+                btn_shaded.classList.remove("text-ink-600")
                 btn_outline.classList.remove(
-                    "bg-white", "shadow-sm", "text-blue-700", "font-bold"
+                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
                 )
-                btn_outline.classList.add("text-slate-600")
+                btn_outline.classList.add("text-ink-600")
 
     def on_zone_shading_mode_click(self, mode):
         self.map.set_zone_shading_mode(mode)
@@ -500,14 +559,14 @@ class WaterMonitor(BaseMonitor):
         zone_name = zone.get("name_th") or zone.get("name") or ""
         name_html = ""
         if zone_name:
-            name_html = f'<div class="text-xs text-gray-400">{zone_name}</div>'
+            name_html = f'<div class="text-xs text-ink-400">{zone_name}</div>'
 
         document["reservoir_data_list"].html = f"""
         <div class="flex flex-col items-center justify-center h-full text-center gap-2 px-4">
-            <i class="ph ph-map-trifold text-4xl text-gray-300"></i>
-            <div class="text-sm font-medium text-gray-600">ไม่มีสถานีในโซนนี้</div>
+            <i class="ph ph-map-trifold text-4xl text-ink-300"></i>
+            <div class="text-sm font-medium text-ink-600">ไม่มีสถานีในโซนนี้</div>
             {name_html}
-            <div class="text-xs text-gray-400 mt-1">กด "กลับสู่มุมมองเริ่มต้น" เพื่อดูสถานีทั้งหมด</div>
+            <div class="text-xs text-ink-400 mt-1">กด "กลับสู่มุมมองเริ่มต้น" เพื่อดูสถานีทั้งหมด</div>
         </div>
         """
 
@@ -608,27 +667,27 @@ class WaterMonitor(BaseMonitor):
                 m_label = metric_infos.HTML_METRIC_NAMES.get(m_name, m_name)
 
                 if m_name == "waterlevel_msl":
-                    display_text = f'{m_label}: <span class="font-medium text-gray-700">{val} ม.รทก.</span>'
+                    display_text = f'{m_label}: <span class="font-medium text-ink-700">{val} ม.รทก.</span>'
                 elif m_name == "diff_wl_bank":
                     try:
                         v = float(val)
                         if v < 0:
-                            display_text = f'{m_label}: <span class="font-medium text-gray-700">ต่ำกว่าตลิ่ง {abs(v):.2f} ม.</span>'
+                            display_text = f'{m_label}: <span class="font-medium text-ink-700">ต่ำกว่าตลิ่ง {abs(v):.2f} ม.</span>'
                         elif v > 0:
                             display_text = f'{m_label}: <span class="font-medium text-red-600">ล้นตลิ่ง {v:.2f} ม.</span>'
                         else:
                             display_text = f'{m_label}: <span class="font-medium text-yellow-600">เสมอระดับตลิ่งพอดี</span>'
                     except:
-                        display_text = f'{m_label}: <span class="font-medium text-gray-700">{val} ม.</span>'
+                        display_text = f'{m_label}: <span class="font-medium text-ink-700">{val} ม.</span>'
                 else:
                     unit = metric_infos.HTML_METRIC_UNITS.get(m_name, "")
                     try:
                         value_text = f"{float(val):.2f} {unit}".strip()
                     except (TypeError, ValueError):
                         value_text = f"{val} {unit}".strip()
-                    display_text = f'{m_label}: <span class="font-medium text-gray-700">{value_text}</span>'
+                    display_text = f'{m_label}: <span class="font-medium text-ink-700">{value_text}</span>'
 
-                other_html += f'<div class="text-xs text-gray-500 bg-gray-50 px-2 py-1 rounded">{display_text}</div>'
+                other_html += f'<div class="text-xs text-ink-500 bg-ink-50 px-2 py-1 rounded">{display_text}</div>'
 
             matched_cctv = self.find_matching_cctv(station)
             cctv_btn_html = ""
@@ -642,8 +701,8 @@ class WaterMonitor(BaseMonitor):
                     or "CCTV"
                 )
                 cctv_btn_html = f"""
-                <div class="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
-                    <span class="text-[11px] text-blue-600 font-medium flex items-center gap-1 truncate" title="{cctv_title}">
+                <div class="mt-2.5 pt-2 border-t border-ink-100 flex items-center justify-between gap-2">
+                    <span class="text-[11px] text-brand-600 font-medium flex items-center gap-1 truncate" title="{cctv_title}">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" class="shrink-0"><path d="M4 4h10a2 2 0 0 1 2 2v2.5l4-2.5v12l-4-2.5V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
                         <span class="truncate">มีกล้อง: {cctv_title}</span>
                     </span>
@@ -656,14 +715,14 @@ class WaterMonitor(BaseMonitor):
 
             html_content += f"""
             <div data-station-code="{station.get("code", "")}" data-station-source="{station.get("source", "")}"
-                class="bg-white border border-gray-100 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-blue-300 transition-all duration-200 cursor-pointer">
+                class="bg-white border border-ink-100 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-brand-300 transition-all duration-200 cursor-pointer">
                 <div class="flex justify-between items-start mb-2">
                     <div>
-                        <h3 class="font-bold text-gray-800 text-base">{name}</h3>
-                        <div class="text-xs text-gray-500 mt-0.5">{location}</div>
+                        <h3 class="font-bold text-ink-800 text-base">{name}</h3>
+                        <div class="text-xs text-ink-500 mt-0.5">{location}</div>
                     </div>
-                    <span class="badge gap-1 px-2 py-3 shadow-sm border border-gray-200" style="background-color: {hex_color}; color: {text_color};">
-                        <span class="w-2 h-2 rounded-full border border-gray-300" style="background-color: {'white'};"></span>{label}
+                    <span class="badge gap-1 px-2 py-3 shadow-sm border border-ink-200" style="background-color: {hex_color}; color: {text_color};">
+                        <span class="w-2 h-2 rounded-full border border-ink-300" style="background-color: {'white'};"></span>{label}
                     </span>
                 </div>
                 <div class="mt-3 flex flex-wrap gap-2">
@@ -674,7 +733,7 @@ class WaterMonitor(BaseMonitor):
             """
 
         if not html_content:
-            html_content = '<div class="flex justify-center items-center h-full text-gray-500">ไม่พบข้อมูลสถานีวัดน้ำ</div>'
+            html_content = '<div class="flex justify-center items-center h-full text-ink-500">ไม่พบข้อมูลสถานีวัดน้ำ</div>'
 
         document["reservoir_data_list"].html = html_content
         self.bind_station_cards()
@@ -718,5 +777,5 @@ class WaterMonitor(BaseMonitor):
 
     def highlight_station_card(self, selected_card):
         for card in document["reservoir_data_list"].select("[data-station-code]"):
-            card.classList.remove("ring-2", "ring-blue-500")
-        selected_card.classList.add("ring-2", "ring-blue-500")
+            card.classList.remove("ring-2", "ring-brand-500")
+        selected_card.classList.add("ring-2", "ring-brand-500")

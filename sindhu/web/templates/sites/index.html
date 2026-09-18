@@ -7,22 +7,22 @@
 {% block content %}
 <div class="space-y-8 pb-12">
     {# Hero Section #}
-    <div class="hero rounded-3xl bg-gradient-to-br from-blue-50 via-white to-blue-100 border border-blue-100 overflow-hidden shadow-sm relative">
+    <div class="hero rounded-3xl bg-gradient-to-br from-brand-50 via-white to-brand-100 border border-brand-100 overflow-hidden shadow-sm relative">
         <div class="absolute inset-0 overflow-hidden opacity-40 pointer-events-none">
             {# Decorative blue ripples — single hue family #}
-            <div class="absolute -top-24 -right-24 w-96 h-96 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-50 animate-blob"></div>
-            <div class="absolute top-48 -left-24 w-72 h-72 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-60 animate-blob animation-delay-2000"></div>
+            <div class="absolute -top-24 -right-24 w-96 h-96 bg-brand-300 rounded-full mix-blend-multiply filter blur-3xl opacity-50 animate-blob"></div>
+            <div class="absolute top-48 -left-24 w-72 h-72 bg-brand-200 rounded-full mix-blend-multiply filter blur-3xl opacity-60 animate-blob animation-delay-2000"></div>
         </div>
 
         <div class="hero-content text-center py-16 lg:py-24 relative z-10 w-full max-w-4xl">
             <div class="flex flex-col items-center">
-                <div class="inline-flex items-center justify-center w-20 h-20 bg-white text-primary rounded-2xl mb-8 shadow-md ring-1 ring-blue-100">
+                <div class="inline-flex items-center justify-center w-20 h-20 bg-white text-primary rounded-2xl mb-8 shadow-md ring-1 ring-brand-100">
                     <i class="ph-fill ph-waves text-5xl"></i>
                 </div>
-                <h1 class="text-4xl lg:text-5xl font-bold text-gray-900 tracking-tight leading-tight mb-6">
+                <h1 class="text-4xl lg:text-5xl font-bold text-ink-900 tracking-tight leading-tight mb-6">
                     ยินดีต้อนรับสู่ <span class="text-primary">{{ config['APP_TITLE'] }}</span>
                 </h1>
-                <p class="py-4 text-lg lg:text-xl text-gray-600 mb-8 leading-relaxed max-w-2xl">
+                <p class="py-4 text-lg lg:text-xl text-ink-600 mb-8 leading-relaxed max-w-2xl">
                     ระบบติดตามและวิเคราะห์ข้อมูลสถานการณ์น้ำในอ่างเก็บน้ำแบบครบวงจร
                     ช่วยให้คุณเข้าถึงข้อมูลที่แม่นยำเพื่อการบริหารจัดการน้ำอย่างมีประสิทธิภาพ
                 </p>
@@ -31,7 +31,7 @@
                         <i class="ph ph-chart-line text-xl mr-1"></i>
                         ดูสถานการณ์น้ำปัจจุบัน
                     </a>
-                    <a href="{{ url_for('sites.monitor') }}" class="btn btn-ghost btn-lg rounded-full px-8 text-primary hover:bg-blue-50">
+                    <a href="{{ url_for('sites.monitor') }}" class="btn btn-ghost btn-lg rounded-full px-8 text-primary hover:bg-brand-50">
                         <i class="ph ph-map-trifold text-xl mr-1"></i>
                         ดูแผนที่อ่างเก็บน้ำ
                     </a>
@@ -43,24 +43,24 @@
     {# Stat strip — quick at-a-glance numbers (blue + amber accent on warning) #}
     {#
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <div class="text-sm text-gray-500 mb-1">อ่างฯ ติดตามทั้งหมด</div>
-            <div class="text-3xl font-bold text-gray-900">132</div>
-            <div class="text-xs text-gray-400 mt-1">ขนาดใหญ่และขนาดกลาง</div>
+        <div class="bg-white border border-ink-100 rounded-2xl p-5 shadow-sm">
+            <div class="text-sm text-ink-500 mb-1">อ่างฯ ติดตามทั้งหมด</div>
+            <div class="text-3xl font-bold text-ink-900">132</div>
+            <div class="text-xs text-ink-400 mt-1">ขนาดใหญ่และขนาดกลาง</div>
         </div>
-        <div class="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <div class="text-sm text-gray-500 mb-1">ปริมาณน้ำเฉลี่ย</div>
-            <div class="text-3xl font-bold text-primary">68<span class="text-xl text-gray-400">%</span></div>
-            <div class="text-xs text-gray-400 mt-1">ของความจุรวม</div>
+        <div class="bg-white border border-ink-100 rounded-2xl p-5 shadow-sm">
+            <div class="text-sm text-ink-500 mb-1">ปริมาณน้ำเฉลี่ย</div>
+            <div class="text-3xl font-bold text-primary">68<span class="text-xl text-ink-400">%</span></div>
+            <div class="text-xs text-ink-400 mt-1">ของความจุรวม</div>
         </div>
-        <div class="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
-            <div class="text-sm text-gray-500 mb-1">อ่างฯ สภาวะปกติ</div>
-            <div class="text-3xl font-bold text-gray-900">118</div>
+        <div class="bg-white border border-ink-100 rounded-2xl p-5 shadow-sm">
+            <div class="text-sm text-ink-500 mb-1">อ่างฯ สภาวะปกติ</div>
+            <div class="text-3xl font-bold text-ink-900">118</div>
             <div class="text-xs text-success mt-1 flex items-center gap-1"><i class="ph ph-check-circle"></i>89%</div>
         </div>
         <div class="bg-white border border-amber-200 rounded-2xl p-5 shadow-sm relative overflow-hidden">
             <div class="absolute top-0 right-0 w-1 h-full bg-amber-500"></div>
-            <div class="text-sm text-gray-500 mb-1">อ่างฯ ต้องเฝ้าระวัง</div>
+            <div class="text-sm text-ink-500 mb-1">อ่างฯ ต้องเฝ้าระวัง</div>
             <div class="text-3xl font-bold text-amber-600">14</div>
             <div class="text-xs text-amber-600 mt-1 flex items-center gap-1"><i class="ph ph-warning-circle"></i>น้ำน้อย/มากผิดปกติ</div>
         </div>
@@ -70,35 +70,35 @@
     {# Features Section #}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         {# Feature 1 #}
-        <div class="card bg-white border border-gray-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all duration-300">
+        <div class="card bg-white border border-ink-100 shadow-sm hover:shadow-md hover:border-brand-200 transition-all duration-300">
             <div class="card-body">
-                <div class="w-14 h-14 rounded-2xl bg-blue-50 text-primary flex items-center justify-center mb-4">
+                <div class="w-14 h-14 rounded-2xl bg-brand-50 text-primary flex items-center justify-center mb-4">
                     <i class="ph-fill ph-map-trifold text-3xl"></i>
                 </div>
-                <h2 class="card-title text-gray-800 text-xl mb-2">แผนที่แบบ Interactive</h2>
-                <p class="text-gray-500 leading-relaxed">แสดงตำแหน่งอ่างเก็บน้ำและสถานะปริมาณน้ำในรูปแบบแผนที่ที่ใช้งานง่ายและเข้าใจทันที</p>
+                <h2 class="card-title text-ink-800 text-xl mb-2">แผนที่แบบ Interactive</h2>
+                <p class="text-ink-500 leading-relaxed">แสดงตำแหน่งอ่างเก็บน้ำและสถานะปริมาณน้ำในรูปแบบแผนที่ที่ใช้งานง่ายและเข้าใจทันที</p>
             </div>
         </div>
 
         {# Feature 2 #}
-        <div class="card bg-white border border-gray-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all duration-300">
+        <div class="card bg-white border border-ink-100 shadow-sm hover:shadow-md hover:border-brand-200 transition-all duration-300">
             <div class="card-body">
-                <div class="w-14 h-14 rounded-2xl bg-blue-50 text-primary flex items-center justify-center mb-4">
+                <div class="w-14 h-14 rounded-2xl bg-brand-50 text-primary flex items-center justify-center mb-4">
                     <i class="ph-fill ph-chart-bar text-3xl"></i>
                 </div>
-                <h2 class="card-title text-gray-800 text-xl mb-2">ข้อมูลอัปเดตล่าสุด</h2>
-                <p class="text-gray-500 leading-relaxed">ติดตามข้อมูลปริมาณน้ำ ความจุ และสถานการณ์น้ำที่อัปเดตอย่างต่อเนื่องจากเซนเซอร์</p>
+                <h2 class="card-title text-ink-800 text-xl mb-2">ข้อมูลอัปเดตล่าสุด</h2>
+                <p class="text-ink-500 leading-relaxed">ติดตามข้อมูลปริมาณน้ำ ความจุ และสถานการณ์น้ำที่อัปเดตอย่างต่อเนื่องจากเซนเซอร์</p>
             </div>
         </div>
 
         {# Feature 3 — accent (amber) to anchor the 10% #}
-        <div class="card bg-white border border-gray-100 shadow-sm hover:shadow-md hover:border-amber-200 transition-all duration-300">
+        <div class="card bg-white border border-ink-100 shadow-sm hover:shadow-md hover:border-amber-200 transition-all duration-300">
             <div class="card-body">
                 <div class="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4">
                     <i class="ph-fill ph-trend-up text-3xl"></i>
                 </div>
-                <h2 class="card-title text-gray-800 text-xl mb-2">การวิเคราะห์และคาดการณ์</h2>
-                <p class="text-gray-500 leading-relaxed">ดูแนวโน้มปริมาณน้ำล่วงหน้าด้วยโมเดลการพยากรณ์ เพื่อเตรียมพร้อมรับมือทุกสถานการณ์</p>
+                <h2 class="card-title text-ink-800 text-xl mb-2">การวิเคราะห์และคาดการณ์</h2>
+                <p class="text-ink-500 leading-relaxed">ดูแนวโน้มปริมาณน้ำล่วงหน้าด้วยโมเดลการพยากรณ์ เพื่อเตรียมพร้อมรับมือทุกสถานการณ์</p>
             </div>
         </div>
     </div>

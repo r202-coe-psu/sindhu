@@ -61,13 +61,20 @@ async def get_metrics(source, metric_type, started_datetime, ended_datetime):
     return responses
 
 
-async def get_latest_metrics(source=None, timestamp=None):
+# Stations saved before `is_visible` existed have no such field, so match
+# "not hidden" rather than "is_visible == True"
+VISIBLE_STATION_QUERY = {"is_visible": {"$ne": False}}
+
+
+async def get_latest_metrics(source=None, timestamp=None, include_hidden=False):
     if not timestamp:
         timestamp = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
             hours=24
         )
 
     match_query = {"status": "active"}
+    if not include_hidden:
+        match_query.update(VISIBLE_STATION_QUERY)
     if source:
         match_query["source"] = source
 
@@ -136,6 +143,7 @@ async def get_latest_metrics_by_metric_type(
     object_ids = [ref["_id"]["station"].id for ref in station_refs]
 
     match_query = {"_id": {"$in": object_ids}, "status": "active"}
+    match_query.update(VISIBLE_STATION_QUERY)
     if source:
         match_query["source"] = source
     if station_codes:

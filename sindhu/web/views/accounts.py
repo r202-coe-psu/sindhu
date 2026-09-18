@@ -1,4 +1,6 @@
 import datetime
+import json
+from urllib.parse import urlparse
 
 from flask import (
     Blueprint,
@@ -36,13 +38,33 @@ logger = logging.getLogger(__name__)
 module = Blueprint("accounts", __name__)
 
 
+def safe_next_url(value):
+    """Keep a post-login redirect on this site, whatever `next` was given."""
+    if not value:
+        return None
+    parsed = urlparse(value)
+    if parsed.netloc and parsed.netloc != request.host:
+        return None
+    path = parsed.path or "/"
+    if not path.startswith("/") or path.startswith("//"):
+        return None
+    return f"{path}?{parsed.query}" if parsed.query else path
+
+
+def token_expired(expires_at):
+    expires_at = datetime.datetime.fromisoformat(expires_at)
+    if expires_at.tzinfo:
+        return expires_at <= datetime.datetime.now(datetime.timezone.utc)
+    return expires_at <= datetime.datetime.now()
+
+
 @module.route("/login", methods=("GET", "POST"))
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("dashboard.index"))
+        return redirect(url_for("sites.index"))
 
     if "next" in request.args:
-        session["next"] = request.args.get("next", None)
+        session["next"] = safe_next_url(request.args.get("next"))
 
     oauth_clients = current_app.extensions["authlib.integrations.flask_client"]._clients
 
@@ -53,27 +75,56 @@ def login():
     )
 
 
+def end_expired_session():
+    """The API no longer accepts this session's tokens; make the user log in again."""
+    logout_user()
+    session.clear()
+    return jsonify({"detail": "Session expired, please log in again"}), 401
+
+
 @module.route("/get_token", methods=["GET"])
 @login_required
 def get_token():
-    token = {
-        "access_token": session["tokens"]["access_token"],
-        "expires_at": session["tokens"]["expires_at"],
-        "token_type": session["tokens"]["token_type"],
-    }
-    expires_at = datetime.datetime.fromisoformat(session["tokens"]["expires_at"])
-    if expires_at < datetime.datetime.now():
-        print("token expired")
+    tokens = session.get("tokens") or {}
+    if not tokens.get("access_token") or not tokens.get("expires_at"):
+        return end_expired_session()
+
+    if token_expired(tokens["expires_at"]):
+        logger.info("API access token expired, refreshing")
         client = AuthenticatedClient(
             base_url=str(current_app.config.get("SINDHU_API_BASE_URL")),
-            token=str(session["tokens"]["refresh_token"]),
+            token=str(tokens.get("refresh_token")),
         )
-        response = refresh_token_v1_auth_refresh_token_get.sync_detailed(client=client)
-        if response.parsed:
-            session["tokens"] = response.parsed.to_dict()
-            token = session["tokens"]
+        try:
+            response = refresh_token_v1_auth_refresh_token_get.sync_detailed(
+                client=client
+            )
+        except Exception as e:
+            logger.exception(f"Refresh token request failed: {e}")
+            return end_expired_session()
 
-    return jsonify(token)
+        # The generated client leaves `parsed` empty for this endpoint, so read
+        # the body directly
+        if response.status_code != 200:
+            logger.info(f"Refresh token rejected: HTTP {response.status_code}")
+            return end_expired_session()
+
+        refreshed = json.loads(response.content)
+        # Keep the refresh token: the refresh response only renews the access token
+        tokens.update(
+            access_token=refreshed["access_token"],
+            expires_at=refreshed["expires_at"],
+            token_type=refreshed.get("token_type", tokens.get("token_type")),
+        )
+        session["tokens"] = tokens
+
+    return jsonify(
+        {
+            "access_token": tokens["access_token"],
+            "expires_at": tokens["expires_at"],
+            "token_type": tokens.get("token_type"),
+        }
+    )
 
 
 @module.route("/login/<name>")
@@ -131,13 +182,17 @@ def authorized_sindhu():
     login_user(user)
     session["me"] = response.to_dict()
 
-    return redirect(url_for("sites.index"))
+    return redirect(safe_next_url(session.pop("next", None)) or url_for("sites.index"))
 
 
+# No login_required: an expired session is sent here to be cleared, and forcing a
+# login first would log the user straight back out afterwards
 @module.route("/logout")
-@login_required
 def logout():
     logout_user()
     session.clear()
 
+    next_url = safe_next_url(request.args.get("next"))
+    if next_url:
+        return redirect(url_for("accounts.login", next=next_url))
     return redirect(url_for("sites.index"))

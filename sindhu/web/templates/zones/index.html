@@ -6,7 +6,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
 <style>
-.zone-row.active { background-color: #eff6ff; border-color: #3b82f6; }
+.zone-row.active { background-color: var(--color-brand-50); border-color: var(--color-brand-500); }
 </style>
 {% endblock additional_head %}
 
@@ -17,33 +17,33 @@
 
     {# Map #}
     <div class="lg:col-span-2">
-        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden relative" style="height: 680px;">
+        <div class="bg-white rounded-2xl shadow-lg border border-ink-100 overflow-hidden relative" style="height: 680px;">
             {# Floating Map Mode Controls #}
-            <div class="absolute top-3 right-3 z-[1000] flex items-center gap-2 bg-white/95 backdrop-blur-sm border border-gray-200 shadow-md rounded-xl p-1.5 text-xs">
-                <span class="font-bold text-gray-600 px-1 flex items-center gap-1">
+            <div class="absolute top-3 right-3 z-[1000] flex items-center gap-2 bg-white/95 backdrop-blur-sm border border-ink-200 shadow-md rounded-xl p-1.5 text-xs">
+                <span class="font-bold text-ink-600 px-1 flex items-center gap-1">
                     <i class="ph ph-sliders"></i> พรีวิว:
                 </span>
-                <div class="inline-flex p-0.5 bg-slate-100 rounded-lg border border-slate-200" role="group">
+                <div class="inline-flex p-0.5 bg-ink-100 rounded-lg border border-ink-200" role="group">
                     <button id="admin-view-actual" type="button" onclick="setAdminViewShading('actual')"
-                        class="px-2 py-1 rounded-md font-bold transition-all bg-white shadow-sm text-blue-700">
+                        class="px-2 py-1 rounded-md font-bold transition-all bg-white shadow-sm text-brand-700">
                         ตามค่าจริง
                     </button>
                     <button id="admin-view-outline" type="button" onclick="setAdminViewShading('outline')"
-                        class="px-2 py-1 rounded-md font-medium transition-all text-slate-600 hover:text-slate-900">
+                        class="px-2 py-1 rounded-md font-medium transition-all text-ink-600 hover:text-ink-900">
                         เฉพาะกรอบ
                     </button>
                     <button id="admin-view-shaded" type="button" onclick="setAdminViewShading('shaded')"
-                        class="px-2 py-1 rounded-md font-medium transition-all text-slate-600 hover:text-slate-900">
+                        class="px-2 py-1 rounded-md font-medium transition-all text-ink-600 hover:text-ink-900">
                         แรเงาสี
                     </button>
                 </div>
                 <button id="btn-toggle-all-layers" type="button" onclick="toggleAllAdminLayers()" title="เปิด/ปิดแสดงโซนทั้งหมดบนแผนที่นี้"
-                    class="btn btn-ghost btn-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 px-2 flex items-center gap-1">
+                    class="btn btn-ghost btn-xs text-ink-600 border border-ink-200 rounded-lg hover:bg-ink-100 px-2 flex items-center gap-1">
                     <i id="admin-toggle-all-icon" class="ph ph-eye text-xs"></i>
                     <span id="admin-toggle-all-text">ซ่อนทั้งหมด</span>
                 </button>
                 <button type="button" onclick="fitAllZones()" title="จัดกึ่งกลางแผนที่"
-                    class="btn btn-ghost btn-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-100 px-2">
+                    class="btn btn-ghost btn-xs text-ink-600 border border-ink-200 rounded-lg hover:bg-ink-100 px-2">
                     <i class="ph ph-arrows-out-simple"></i>
                 </button>
             </div>
@@ -55,11 +55,11 @@
     <div class="lg:col-span-1 flex flex-col gap-4">
 
         {# Zone List Card #}
-        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden flex flex-col">
-            <div class="p-3.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between shrink-0">
+        <div class="bg-white rounded-2xl shadow-lg border border-ink-100 overflow-hidden flex flex-col">
+            <div class="p-3.5 border-b border-ink-100 bg-ink-50 flex items-center justify-between shrink-0">
                 <div class="flex items-center gap-2">
-                    <span class="font-bold text-gray-800 text-sm flex items-center gap-1.5">
-                        <i class="ph ph-map-trifold text-blue-600"></i> โซนทั้งหมด
+                    <span class="font-bold text-ink-800 text-sm flex items-center gap-1.5">
+                        <i class="ph ph-map-trifold text-brand-600"></i> โซนทั้งหมด
                     </span>
                     <span id="zone-count" class="badge badge-sm badge-primary">0</span>
                 </div>
@@ -67,52 +67,52 @@
                     <i class="ph ph-plus text-xs"></i> สร้างใหม่
                 </button>
             </div>
-            <div class="px-3 py-1.5 bg-blue-50/60 border-b border-blue-100/60 text-[11px] text-blue-700 flex items-center gap-1.5">
+            <div class="px-3 py-1.5 bg-brand-50/60 border-b border-brand-100/60 text-[11px] text-brand-700 flex items-center gap-1.5">
                 <i class="ph ph-info shrink-0 text-xs"></i>
                 <span>คลิกปุ่มสถานะหรือแรเงาด้านล่าง เพื่อสลับการตั้งค่าได้ทันที</span>
             </div>
-            <div id="zone-list" class="divide-y divide-gray-100 max-h-[360px] overflow-y-auto custom-scrollbar">
-                <div class="p-4 text-center text-sm text-gray-400">กำลังโหลด...</div>
+            <div id="zone-list" class="divide-y divide-ink-100 max-h-[360px] overflow-y-auto custom-scrollbar">
+                <div class="p-4 text-center text-sm text-ink-400">กำลังโหลด...</div>
             </div>
         </div>
 
         {# Form Card #}
-        <div id="zone-form-card" class="bg-white rounded-2xl shadow-lg border border-gray-100 p-5">
-            <h3 class="text-base font-bold text-gray-800 mb-3" id="form-title">สร้างลุ่มน้ำใหม่</h3>
+        <div id="zone-form-card" class="bg-white rounded-2xl shadow-lg border border-ink-100 p-5">
+            <h3 class="text-base font-bold text-ink-800 mb-3" id="form-title">สร้างลุ่มน้ำใหม่</h3>
             <form id="zone-form" class="space-y-3">
                 <input type="hidden" id="zone-id" />
                 <input type="hidden" id="zone-kind" value="flood" />
 
                 {# Status Switch #}
-                <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+                <div class="p-3 bg-ink-50 border border-ink-200 rounded-xl flex items-center justify-between">
                     <div>
-                        <label class="text-xs font-bold text-gray-700 block">เปิด/ปิดการแสดงผลโซน</label>
+                        <label class="text-xs font-bold text-ink-700 block">เปิด/ปิดการแสดงผลโซน</label>
                         <span id="zone-status-desc" class="text-[11px] text-emerald-600 font-medium flex items-center gap-1"><i class="ph ph-check-circle text-xs"></i> แสดงผลบนหน้ามอนิเตอร์สาธารณะ</span>
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="zone-status-toggle" class="sr-only peer" checked onchange="onFormStatusChange()" />
-                        <div class="w-10 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+                        <div class="w-10 h-5 bg-ink-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-ink-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
                         <span id="zone-status-text" class="ml-2 text-xs font-bold text-emerald-600">เปิด</span>
                     </label>
                 </div>
                 <div>
-                    <label class="label text-xs font-semibold text-gray-600 py-0.5">ชื่อ (EN)</label>
+                    <label class="label text-xs font-semibold text-ink-600 py-0.5">ชื่อ (EN)</label>
                     <input id="zone-name" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. Zone 1" required />
                 </div>
                 <div>
-                    <label class="label text-xs font-semibold text-gray-600 py-0.5">ชื่อ (TH)</label>
+                    <label class="label text-xs font-semibold text-ink-600 py-0.5">ชื่อ (TH)</label>
                     <input id="zone-name-th" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. โซน 1 (ทิศใต้)" />
                 </div>
                 <div>
-                    <label class="label text-xs font-semibold text-gray-600 py-0.5">รหัส</label>
+                    <label class="label text-xs font-semibold text-ink-600 py-0.5">รหัส</label>
                     <input id="zone-code" type="text" class="input input-bordered input-sm w-full" placeholder="e.g. songkhla-zone-1" required />
                 </div>
 
                 {# Style and Shading Controls #}
-                <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-                    <div class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                <div class="p-3 bg-ink-50 border border-ink-200 rounded-xl space-y-2.5">
+                    <div class="text-xs font-bold text-ink-700 uppercase tracking-wider flex items-center justify-between">
                         <span class="flex items-center gap-1.5">
-                            <i class="ph ph-palette text-blue-600 text-sm"></i>
+                            <i class="ph ph-palette text-brand-600 text-sm"></i>
                             การแสดงผลบนแผนที่
                         </span>
                         <span id="form-style-badge" class="badge badge-xs badge-ghost">เฉพาะกรอบ</span>
@@ -120,24 +120,24 @@
 
                     {# Shading Mode Option #}
                     <div>
-                        <label class="label text-xs font-semibold text-gray-600 py-0.5">รูปแบบการแสดงผล</label>
+                        <label class="label text-xs font-semibold text-ink-600 py-0.5">รูปแบบการแสดงผล</label>
                         <div class="grid grid-cols-2 gap-2 mt-1">
-                            <label class="flex items-center gap-2 p-2 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-blue-400 transition-colors">
+                            <label class="flex items-center gap-2 p-2 bg-white border border-ink-200 rounded-lg cursor-pointer hover:border-brand-400 transition-colors">
                                 <input type="radio" name="form-shading-mode" value="outline" class="radio radio-xs radio-primary" checked onchange="onFormStyleChange()" />
-                                <span class="text-xs font-medium text-gray-700">เฉพาะกรอบ (Outline)</span>
+                                <span class="text-xs font-medium text-ink-700">เฉพาะกรอบ (Outline)</span>
                             </label>
-                            <label class="flex items-center gap-2 p-2 bg-white border border-gray-200 rounded-lg cursor-pointer hover:border-blue-400 transition-colors">
+                            <label class="flex items-center gap-2 p-2 bg-white border border-ink-200 rounded-lg cursor-pointer hover:border-brand-400 transition-colors">
                                 <input type="radio" name="form-shading-mode" value="shaded" class="radio radio-xs radio-primary" onchange="onFormStyleChange()" />
-                                <span class="text-xs font-medium text-gray-700">แรเงาสี (Shaded)</span>
+                                <span class="text-xs font-medium text-ink-700">แรเงาสี (Shaded)</span>
                             </label>
                         </div>
                     </div>
 
                     {# Color Selection #}
                     <div>
-                        <label class="label text-xs font-semibold text-gray-600 py-0.5">สีประจำโซน</label>
+                        <label class="label text-xs font-semibold text-ink-600 py-0.5">สีประจำโซน</label>
                         <div class="flex items-center gap-2 mt-1">
-                            <input id="zone-color" type="color" value="#2563eb" class="w-9 h-8 p-0 border border-gray-300 rounded cursor-pointer" oninput="onColorPickerChange(this.value)" />
+                            <input id="zone-color" type="color" value="#2563eb" class="w-9 h-8 p-0 border border-ink-300 rounded cursor-pointer" oninput="onColorPickerChange(this.value)" />
                             <input id="zone-color-hex" type="text" value="#2563EB" class="input input-bordered input-sm font-mono text-xs w-28 uppercase" oninput="onColorHexChange(this.value)" />
 
                             <div class="flex items-center gap-1.5 ml-auto">
@@ -153,23 +153,23 @@
                     {# Fill Opacity Slider #}
                     <div id="opacity-control-group">
                         <div class="flex justify-between items-center py-0.5">
-                            <label class="text-xs font-semibold text-gray-600">ความโปร่งแสงแรเงา</label>
-                            <span id="zone-opacity-label" class="text-xs font-mono text-gray-500">28%</span>
+                            <label class="text-xs font-semibold text-ink-600">ความโปร่งแสงแรเงา</label>
+                            <span id="zone-opacity-label" class="text-xs font-mono text-ink-500">28%</span>
                         </div>
                         <input id="zone-opacity" type="range" min="10" max="80" value="28" class="range range-xs range-primary" oninput="onOpacitySliderChange(this.value)" />
                     </div>
                 </div>
 
                 <div>
-                    <label class="label text-xs font-semibold text-gray-600 py-0.5">สถานี</label>
+                    <label class="label text-xs font-semibold text-ink-600 py-0.5">สถานี</label>
                     <div class="relative">
                         <input id="station-search" type="text" autocomplete="off" class="input input-bordered input-sm w-full" placeholder="ค้นหาชื่อหรือรหัสสถานี..." />
-                        <div id="station-dropdown" class="hidden absolute z-[1100] mt-1 w-full max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg custom-scrollbar"></div>
+                        <div id="station-dropdown" class="hidden absolute z-[1100] mt-1 w-full max-h-48 overflow-y-auto bg-white border border-ink-200 rounded-lg shadow-lg custom-scrollbar"></div>
                     </div>
                     <div id="station-chips" class="flex flex-wrap gap-1 mt-2"></div>
                 </div>
                 <div>
-                    <label class="label text-xs font-semibold text-gray-600 py-0.5">ขอบเขต (GeoJSON) — วาดบนแผนที่ หรือวาง/แก้พิกัด</label>
+                    <label class="label text-xs font-semibold text-ink-600 py-0.5">ขอบเขต (GeoJSON) — วาดบนแผนที่ หรือวาง/แก้พิกัด</label>
                     <textarea id="zone-boundary" rows="4" class="textarea textarea-bordered textarea-sm w-full font-mono text-xs leading-tight" placeholder='{"type":"Polygon","coordinates":[[[100.5,7.0],[100.6,7.0],[100.6,7.1],[100.5,7.0]]]}'></textarea>
                     <div id="boundary-json-error" class="text-xs text-red-600 hidden mt-1"></div>
                 </div>
@@ -229,10 +229,10 @@ function renderStationDropdown(query) {
         .filter(s => !q || [s.name, s.name_th, s.code].some(v => (v || "").toLowerCase().includes(q)))
         .slice(0, 30);
     if (!matches.length) {
-        el.innerHTML = '<div class="px-3 py-2 text-sm text-gray-400">ไม่พบสถานี</div>';
+        el.innerHTML = '<div class="px-3 py-2 text-sm text-ink-400">ไม่พบสถานี</div>';
     } else {
         el.innerHTML = matches.map(s => `
-            <div class="px-3 py-2 text-sm hover:bg-blue-50 cursor-pointer" onmousedown="event.preventDefault();addStation('${s.id}')">
+            <div class="px-3 py-2 text-sm hover:bg-brand-50 cursor-pointer" onmousedown="event.preventDefault();addStation('${s.id}')">
                 ${stationLabel(s)}
             </div>
         `).join("");
@@ -382,14 +382,14 @@ function setAdminViewShading(mode) {
     const btnShaded = document.getElementById("admin-view-shaded");
     [btnActual, btnOutline, btnShaded].forEach(b => {
         if (b) {
-            b.classList.remove("bg-white", "shadow-sm", "text-blue-700", "font-bold");
-            b.classList.add("text-slate-600", "font-medium");
+            b.classList.remove("bg-white", "shadow-sm", "text-brand-700", "font-bold");
+            b.classList.add("text-ink-600", "font-medium");
         }
     });
     const activeBtn = mode === "actual" ? btnActual : (mode === "outline" ? btnOutline : btnShaded);
     if (activeBtn) {
-        activeBtn.classList.add("bg-white", "shadow-sm", "text-blue-700", "font-bold");
-        activeBtn.classList.remove("text-slate-600", "font-medium");
+        activeBtn.classList.add("bg-white", "shadow-sm", "text-brand-700", "font-bold");
+        activeBtn.classList.remove("text-ink-600", "font-medium");
     }
     renderZonesOnMap(zonesCache);
     updateDrawnStyle();
@@ -439,9 +439,9 @@ function onFormStatusChange() {
         descEl.className = "text-[11px] text-emerald-600 font-medium flex items-center gap-1";
     } else {
         textEl.textContent = "ปิด";
-        textEl.className = "ml-2 text-xs font-bold text-gray-400";
+        textEl.className = "ml-2 text-xs font-bold text-ink-400";
         descEl.innerHTML = '<i class="ph ph-prohibit text-xs"></i> ซ่อนจากหน้ามอนิเตอร์สาธารณะ';
-        descEl.className = "text-[11px] text-gray-500 font-medium flex items-center gap-1";
+        descEl.className = "text-[11px] text-ink-500 font-medium flex items-center gap-1";
     }
 }
 
@@ -524,7 +524,7 @@ function renderZoneList(zones) {
     if (countEl) countEl.textContent = zones.length;
     const listEl = document.getElementById("zone-list");
     if (!zones.length) {
-        listEl.innerHTML = '<div class="p-4 text-center text-sm text-gray-400">ยังไม่มีลุ่มน้ำ</div>';
+        listEl.innerHTML = '<div class="p-4 text-center text-sm text-ink-400">ยังไม่มีลุ่มน้ำ</div>';
         return;
     }
     listEl.innerHTML = zones.map(z => {
@@ -540,7 +540,7 @@ function renderZoneList(zones) {
             ? `<button type="button" class="btn btn-xs btn-success text-white font-medium gap-1 rounded-full shadow-xs text-[11px]" onclick="event.stopPropagation();quickToggleZoneStatus('${z.id}')" title="คลิกเพื่อปิดใช้งาน (ซ่อนจากแผนที่สาธารณะ)">
                 <i class="ph ph-check-circle text-xs"></i> เปิดใช้งาน
                </button>`
-            : `<button type="button" class="btn btn-xs bg-slate-200 text-slate-600 border border-slate-300 font-medium gap-1 rounded-full hover:bg-slate-300 text-[11px]" onclick="event.stopPropagation();quickToggleZoneStatus('${z.id}')" title="คลิกเพื่อเปิดใช้งาน (แสดงบนแผนที่สาธารณะ)">
+            : `<button type="button" class="btn btn-xs bg-ink-200 text-ink-600 border border-ink-300 font-medium gap-1 rounded-full hover:bg-ink-300 text-[11px]" onclick="event.stopPropagation();quickToggleZoneStatus('${z.id}')" title="คลิกเพื่อเปิดใช้งาน (แสดงบนแผนที่สาธารณะ)">
                 <i class="ph ph-prohibit text-xs"></i> ปิดใช้งาน
                </button>`;
 
@@ -549,7 +549,7 @@ function renderZoneList(zones) {
             ? `<button type="button" class="btn btn-xs btn-info text-white font-medium gap-1 rounded-full shadow-xs text-[11px]" onclick="event.stopPropagation();quickToggleShadingMode('${z.id}')" title="คลิกเพื่อสลับเป็นเฉพาะกรอบ">
                 <i class="ph ph-paint-bucket text-xs"></i> แรเงาสี
                </button>`
-            : `<button type="button" class="btn btn-xs bg-white text-slate-700 border border-slate-300 font-medium gap-1 rounded-full hover:bg-slate-100 text-[11px]" onclick="event.stopPropagation();quickToggleShadingMode('${z.id}')" title="คลิกเพื่อสลับเป็นแรเงาสี">
+            : `<button type="button" class="btn btn-xs bg-white text-ink-700 border border-ink-300 font-medium gap-1 rounded-full hover:bg-ink-100 text-[11px]" onclick="event.stopPropagation();quickToggleShadingMode('${z.id}')" title="คลิกเพื่อสลับเป็นแรเงาสี">
                 <i class="ph ph-bounding-box text-xs"></i> เฉพาะกรอบ
                </button>`;
 
@@ -557,7 +557,7 @@ function renderZoneList(zones) {
             ? '<span class="badge badge-xs badge-neutral text-[10px] py-1 px-1.5">กรอบอ้างอิง</span>'
             : '';
 
-        const rowBg = isActive ? "hover:bg-blue-50/70" : "bg-slate-50/60 opacity-80 hover:bg-slate-100/70";
+        const rowBg = isActive ? "hover:bg-brand-50/70" : "bg-ink-50/60 opacity-80 hover:bg-ink-100/70";
         const borderStyle = isActive ? "border-solid" : "border-dashed";
 
         return `
@@ -567,10 +567,10 @@ function renderZoneList(zones) {
                     <span class="w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 shadow-sm" style="background-color: ${color};"></span>
                     <div class="truncate flex-1">
                         <div class="flex items-center gap-1.5">
-                            <span class="font-bold text-gray-800 text-sm truncate">${z.name_th || z.name}</span>
+                            <span class="font-bold text-ink-800 text-sm truncate">${z.name_th || z.name}</span>
                             ${refBadge}
                         </div>
-                        <div class="text-xs text-gray-500 flex items-center gap-1.5 mt-0.5">
+                        <div class="text-xs text-ink-500 flex items-center gap-1.5 mt-0.5">
                             <span class="font-mono">${z.code}</span>
                             <span>•</span>
                             <span>${stationCount} สถานี</span>
@@ -582,10 +582,10 @@ function renderZoneList(zones) {
                     </div>
                 </div>
                 <div class="flex gap-1 shrink-0 pt-0.5">
-                    <button class="btn btn-ghost btn-xs text-slate-500 hover:text-blue-600 rounded zone-eye-btn" onclick="event.stopPropagation();toggleZoneLayer('${z.id}', this)" title="เปิด/ปิดการแสดงบนแผนที่นี้">
+                    <button class="btn btn-ghost btn-xs text-ink-500 hover:text-brand-600 rounded zone-eye-btn" onclick="event.stopPropagation();toggleZoneLayer('${z.id}', this)" title="เปิด/ปิดการแสดงบนแผนที่นี้">
                         <i class="ph ph-eye text-sm"></i>
                     </button>
-                    <button class="btn btn-ghost btn-xs text-blue-600 hover:bg-blue-100 rounded" onclick="event.stopPropagation();editZone('${z.id}')" title="แก้ไข">
+                    <button class="btn btn-ghost btn-xs text-brand-600 hover:bg-brand-100 rounded" onclick="event.stopPropagation();editZone('${z.id}')" title="แก้ไข">
                         <i class="ph ph-pencil-simple text-sm"></i>
                     </button>
                     <button class="btn btn-ghost btn-xs text-red-500 hover:bg-red-100 rounded" onclick="event.stopPropagation();confirmDelete('${z.id}')" title="ลบ">
@@ -606,13 +606,13 @@ function toggleZoneLayer(id, btn) {
     if (isShown) {
         map.removeLayer(layer);
         if (btn) {
-            btn.innerHTML = '<i class="ph ph-eye-slash text-sm text-slate-400"></i>';
+            btn.innerHTML = '<i class="ph ph-eye-slash text-sm text-ink-400"></i>';
             btn.title = "แสดงบนแผนที่";
         }
     } else {
         layer.addTo(map);
         if (btn) {
-            btn.innerHTML = '<i class="ph ph-eye text-sm text-blue-600"></i>';
+            btn.innerHTML = '<i class="ph ph-eye text-sm text-brand-600"></i>';
             btn.title = "ซ่อนจากแผนที่";
         }
     }
@@ -635,8 +635,8 @@ function toggleAllAdminLayers() {
     }
     document.querySelectorAll(".zone-eye-btn").forEach(btn => {
         btn.innerHTML = adminAllVisible
-            ? '<i class="ph ph-eye text-sm text-blue-600"></i>'
-            : '<i class="ph ph-eye-slash text-sm text-slate-400"></i>';
+            ? '<i class="ph ph-eye text-sm text-brand-600"></i>'
+            : '<i class="ph ph-eye-slash text-sm text-ink-400"></i>';
         btn.title = adminAllVisible ? "ซ่อนจากแผนที่" : "แสดงบนแผนที่";
     });
 }

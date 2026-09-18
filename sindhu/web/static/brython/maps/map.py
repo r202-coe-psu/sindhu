@@ -601,16 +601,16 @@ class Map:
             self._pin_mode_active = not self._pin_mode_active
             svg_path = btn.select_one("path")
             if self._pin_mode_active:
-                btn.style.backgroundColor = "#dbeafe"
+                btn.style.backgroundColor = "var(--color-brand-100)"
                 if svg_path:
-                    svg_path.attrs["fill"] = "#2563eb"
+                    svg_path.style.fill = "var(--color-brand-600)"
                 self.map.getContainer().style.cursor = "crosshair"
                 if hint:
                     hint.classList.remove("hidden")
             else:
                 btn.style.backgroundColor = ""
                 if svg_path:
-                    svg_path.attrs["fill"] = "#6b7280"
+                    svg_path.style.fill = ""
                 self.map.getContainer().style.cursor = ""
                 if hint:
                     hint.classList.add("hidden")
@@ -630,7 +630,7 @@ class Map:
         reset_btn.html = (
             '<i class="ph ph-arrow-counter-clockwise"></i> กลับสู่มุมมองเริ่มต้น'
         )
-        reset_btn.style.cssText = "background:white;color:#2563eb;border:1px solid #e5e7eb;border-radius:9999px;padding:6px 16px;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.15);display:flex;align-items:center;gap:6px;"
+        reset_btn.style.cssText = "background:white;color:var(--color-brand-600);border:1px solid var(--color-ink-200);border-radius:9999px;padding:6px 16px;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.15);display:flex;align-items:center;gap:6px;"
         reset_div <= reset_btn
         map_container <= reset_div
         self._reset_btn_container = reset_div
@@ -853,7 +853,7 @@ class Map:
                 st_name = str(matched_st.get("name_th") or matched_st.get("name", ""))
                 water_btn_html = f"""
   <button type="button" onclick="if(window.focus_water_station)window.focus_water_station('{st_code}','{st_src}')"
-    style="margin-top:5px; width:100%; background:#0284c7; color:white; font-size:11px; font-weight:600; padding:6px 10px; border-radius:8px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:4px; box-shadow:0 1px 2px rgba(2,132,199,0.2);">
+    style="margin-top:5px; width:100%; background:var(--color-brand-500); color:white; font-size:11px; font-weight:600; padding:6px 10px; border-radius:8px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:4px; box-shadow:0 1px 2px rgba(2,132,199,0.2);">
     <span>🌊 ดูข้อมูลระดับน้ำ ({st_name})</span>
   </button>"""
 
@@ -866,7 +866,7 @@ class Map:
   </div>
   {preview_img}
   <button type="button" onclick="if(window.open_cctv_detail)window.open_cctv_detail('{source}','{upstream_id}')"
-    style="margin-top:8px; width:100%; background:#2563eb; color:white; font-size:11px; font-weight:600; padding:7px 10px; border-radius:8px; border:none; cursor:pointer; text-align:center; box-shadow:0 1px 2px rgba(37,99,235,0.2); transition:background 0.15s;">
+    style="margin-top:8px; width:100%; background:var(--color-brand-600); color:white; font-size:11px; font-weight:600; padding:7px 10px; border-radius:8px; border:none; cursor:pointer; text-align:center; box-shadow:0 1px 2px rgba(37,99,235,0.2); transition:background 0.15s;">
     🔍 ดูภาพสด / ประวัติ 7 วัน
   </button>
   {water_btn_html}
@@ -1043,7 +1043,7 @@ class Map:
             my_location_icon = self.leaflet.divIcon(
                 {
                     "className": "",
-                    "html": '<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><i class="ph-fill ph-map-pin text-blue-600 text-3xl"></i></div>',
+                    "html": '<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><i class="ph-fill ph-map-pin text-brand-600 text-3xl"></i></div>',
                     "iconSize": [30, 30],
                     "iconAnchor": [15, 30],
                     "popupAnchor": [0, -30],

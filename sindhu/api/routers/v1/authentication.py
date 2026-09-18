@@ -50,7 +50,10 @@ async def login_for_access_token(
             data={"sub": str(user.id)}, expires_delta=access_token_expires
         ),
         refresh_token=security.create_refresh_token(
-            data={"sub": str(user.id)}, expires_delta=access_token_expires
+            data={"sub": str(user.id)},
+            expires_delta=datetime.timedelta(
+                minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES
+            ),
         ),
         token_type="Bearer",
         scope="",
@@ -96,7 +99,10 @@ async def authentication(
             data={"sub": str(user.id)}, expires_delta=access_token_expires
         ),
         refresh_token=security.create_refresh_token(
-            data={"sub": str(user.id)}, expires_delta=access_token_expires
+            data={"sub": str(user.id)},
+            expires_delta=datetime.timedelta(
+                minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES
+            ),
         ),
         token_type="Bearer",
         scope="",
@@ -114,4 +120,12 @@ async def refresh_token(
 
     jwt_handler = get_jwt_handler()
     new_token = jwt_handler.refresh_token(refresh_token)
-    return {"access_token": new_token}
+    # The web keeps expires_at next to the token to know when to refresh again,
+    # so hand it back the same way login does
+    return {
+        "access_token": new_token,
+        "token_type": "Bearer",
+        "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "expires_at": datetime.datetime.now()
+        + datetime.timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    }

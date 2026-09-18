@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from typing import Any, Dict, List, Tuple
 import urllib.parse
@@ -9,7 +10,6 @@ from pydantic import field_validator
 from sindhu.api.core.logging import InterceptHandler
 from sindhu.api.core.settings.base import BaseAppSettings
 
-
 ALLOWED_PUBLIC_API_HOSTS = frozenset(
     {
         "hatyaicityclimate.org",
@@ -18,9 +18,7 @@ ALLOWED_PUBLIC_API_HOSTS = frozenset(
         "telemetry.dwr.go.th",
     }
 )
-ALLOWED_LOCAL_API_HOSTS = frozenset(
-    {"localhost", "127.0.0.1", "host.docker.internal"}
-)
+ALLOWED_LOCAL_API_HOSTS = frozenset({"localhost", "127.0.0.1", "host.docker.internal"})
 
 
 def validate_allowed_api_base_url(value: str) -> str:
@@ -100,7 +98,7 @@ class AppSettings(BaseAppSettings):
     OPENAPI_PREFIX: str = ""
     OPENAPI_URL: str = "/openapi.json"
     REDOC_URL: str = "/redoc"
-    TITLE: str = "sindhu"
+    TITLE: str = os.getenv("APP_TITLE", os.getenv("PROJECT_NAME", "แลน้ำ"))
     VERSION: str = "0.0.2"
 
     MONGODB_URI: str = "mongodb://localhost/sindhudb"

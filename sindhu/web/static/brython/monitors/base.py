@@ -289,7 +289,7 @@ class BaseMonitor:
                 mark = self.map.user_mark
                 if mark and not isinstance(mark, list):
                     mark.setPopupContent(
-                        f'<div class="text-sm font-semibold text-blue-700"><i class="ph ph-map-pin"></i> {zone_name}</div>'
+                        f'<div class="text-sm font-semibold text-brand-700"><i class="ph ph-map-pin"></i> {zone_name}</div>'
                     ).openPopup()
 
                 if nearby_stations and len(nearby_stations) > 0:

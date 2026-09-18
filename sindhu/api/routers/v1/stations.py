@@ -5,6 +5,7 @@ from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi import status as http_status
 from fastapi.responses import JSONResponse
+from fastapi_cache import FastAPICache
 from fastapi_cache.decorator import cache
 from flask import json
 
@@ -20,6 +21,7 @@ from sindhu import schemas, models, services
 router = APIRouter(prefix="/stations", tags=["stations"])
 
 SOURCES = ["thaiwater", "rid"]
+STATION_METRICS_CACHE_NAMESPACE = "station-metrics"
 
 
 @router.get("")
@@ -186,8 +188,35 @@ async def delete(
 
 
 # api ที่ใช้สำหรับการดึงค่า ของ metric type ออกมาเพื่อนำข้อมูลไปแสดงเป็น marker
+@router.put("/visibility")
+async def update_visibility(
+    visibility: schemas.stations.UpdateStationVisibility,
+    current_user: models.User = Depends(deps.get_current_active_superuser),
+) -> schemas.stations.StationList:
+    stations = await models.Station.find(
+        In(models.Station.id, visibility.station_ids)
+    ).to_list()
+    if not stations:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Not found station",
+        )
+
+    now = datetime.datetime.now()
+    for station in stations:
+        station.is_visible = visibility.is_visible
+        station.updated_date = now
+        await station.save()
+
+    # The public map reads cached responses; drop them so the change shows now
+    # instead of after the cache expires
+    await FastAPICache.clear(namespace=STATION_METRICS_CACHE_NAMESPACE)
+
+    return schemas.stations.StationList(stations=stations)
+
+
 @router.get("/metrics/{metric_type}/latest")
-@cache(expire=1800)
+@cache(expire=1800, namespace=STATION_METRICS_CACHE_NAMESPACE)
 async def get_latest_metrics_by_metric_type(
     metric_type: str,
     source: str | None = None,
@@ -199,14 +228,17 @@ async def get_latest_metrics_by_metric_type(
 
 
 @router.get("/metrics/latest")
-@cache(expire=1800)
+@cache(expire=1800, namespace=STATION_METRICS_CACHE_NAMESPACE)
 async def get_latest_metrics(
     source: str | None = None,
+    include_hidden: bool = False,
 ) -> schemas.stations.StationWithMetricsList:
     try:
         if source == "all":
             source = None
-        result = await services.metrics.get_latest_metrics(source)
+        result = await services.metrics.get_latest_metrics(
+            source, include_hidden=include_hidden
+        )
     except Exception as e:
         logger.exception(e)
         raise HTTPException(
