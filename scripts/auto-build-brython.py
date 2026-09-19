@@ -36,13 +36,16 @@ def build(filename, path):
     if module_file.exists():
         module_file.unlink()
 
+    pkg_dir = (pathlib.Path(path) / packagename).resolve()
+    for leftover in pkg_dir.glob("*.brython.js"):
+        leftover.unlink()
 
     subprocess.run(
         [sys.executable, "-m", "brython", "make_package", packagename],
-        cwd=(pathlib.Path(path) / packagename).resolve(),
+        cwd=pkg_dir,
     )
 
-    new_module_file = pathlib.Path(path) / packagename / f"{packagename}.brython.js"
+    new_module_file = pkg_dir / f"{packagename}.brython.js"
 
     if new_module_file.exists():
         new_module_file.rename(module_file)
@@ -51,6 +54,8 @@ def build(filename, path):
 
 def build_first_time(dir_path):
     path = pathlib.Path(dir_path)
+    for leftover in path.glob("*/*.brython.js"):
+        leftover.unlink()
     for file in path.glob("**/*.py"):
         print(file)
         build(str(file), dir_path)

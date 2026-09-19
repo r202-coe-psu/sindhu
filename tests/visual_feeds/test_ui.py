@@ -100,18 +100,98 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         self.assertIsNone(ui._valid_history_date("2026-08-27", at_midnight))
         self.assertIsNone(ui._valid_history_date("2026-09-04", at_midnight))
 
-    def test_filter_keeps_cctv_only_and_caps_at_thirty(self):
+    def test_filter_keeps_cctv_only_and_caps_at_fifty(self):
         feeds = [{"media_type": "radar", "upstream_id": "radar"}]
         feeds.extend(
-            {"media_type": "cctv", "upstream_id": str(index)} for index in range(35)
+            {"media_type": "cctv", "upstream_id": str(index)} for index in range(55)
         )
 
         result = ui._filter_cctv_feeds(feeds)
 
-        self.assertEqual(len(result), 30)
+        self.assertEqual(len(result), 50)
         self.assertTrue(all(feed["media_type"] == "cctv" for feed in result))
         self.assertEqual(result[0]["upstream_id"], "0")
-        self.assertEqual(result[-1]["upstream_id"], "29")
+        self.assertEqual(result[-1]["upstream_id"], "49")
+
+    def test_displayable_camera_requires_online_status_and_an_image(self):
+        self.assertTrue(
+            ui._is_displayable_camera(
+                {"availability": "online", "image_url": "https://images.test/live.jpg"}
+            )
+        )
+        self.assertFalse(
+            ui._is_displayable_camera({"availability": "online", "image_url": None})
+        )
+        for status in ("stale", "degraded", "offline", "unknown"):
+            self.assertFalse(
+                ui._is_displayable_camera(
+                    {"availability": status, "image_url": "https://images.test/old.jpg"}
+                )
+            )
+
+    def test_history_frames_are_sorted_from_oldest_to_newest(self):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        frames = monitor._normalize_history_frames(
+            [
+                {
+                    "captured_at": "2026-09-14T09:00:00Z",
+                    "image_url": "https://images.test/new.jpg",
+                },
+                {
+                    "captured_at": "2026-09-14T08:00:00Z",
+                    "image_url": "https://images.test/old.jpg",
+                },
+            ]
+        )
+
+        self.assertEqual(
+            [frame["image_url"] for frame in frames],
+            ["https://images.test/old.jpg", "https://images.test/new.jpg"],
+        )
+
+    def test_open_detail_enters_today_history_when_supported(self):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        opened = []
+        monitor._open_history = lambda feed, event=None: opened.append((feed, event))
+        feed = {
+            "source": ui.HATYAI_SOURCE,
+            "history_supported": True,
+            "upstream_id": "camera-1",
+        }
+        event = object()
+
+        monitor._open_detail(feed, event)
+
+        self.assertEqual(opened, [(feed, event)])
+
+    def test_map_marker_opens_the_same_detail_view_as_a_camera_card(self):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        opened = []
+        feed = {"source": ui.HATYAI_SOURCE, "upstream_id": "camera-1"}
+        monitor._open_detail = lambda selected: opened.append(selected)
+
+        monitor._on_marker_click(feed)
+
+        self.assertEqual(opened, [feed])
+
+    def test_history_swipe_moves_one_frame_in_the_expected_direction(self):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        monitor._history_frames = [{"id": 1}, {"id": 2}]
+        monitor._history_index = 1
+        monitor._render_history_frame = lambda: None
+
+        point = lambda x: types.SimpleNamespace(clientX=x)
+        monitor._on_history_touch_start(types.SimpleNamespace(touches=[point(100)]))
+        monitor._on_history_touch_end(
+            types.SimpleNamespace(changedTouches=[point(180)])
+        )
+        self.assertEqual(monitor._history_index, 0)
+
+        monitor._on_history_touch_start(types.SimpleNamespace(touches=[point(180)]))
+        monitor._on_history_touch_end(
+            types.SimpleNamespace(changedTouches=[point(100)])
+        )
+        self.assertEqual(monitor._history_index, 1)
 
     def test_format_time_normalizes_history_timestamp_string_to_bangkok(self):
         self.assertEqual(
@@ -210,6 +290,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
             "source": "hatyai",
             "upstream_id": "1",
             "media_type": "cctv",
+            "availability": "online",
             "image_url": "https://images.example.test/pic.jpg",
             "captured_at": "2026-09-05T07:00:00Z",
             "coordinates": {"type": "Point", "coordinates": [100.4, 7.0]},
@@ -218,10 +299,20 @@ class VisualFeedUiHelperTests(unittest.TestCase):
             "source": "hatyai",
             "upstream_id": "2",
             "media_type": "cctv",
+            "availability": "online",
             "image_url": "https://images.example.test/pic2.jpg",
             "coordinates": None,
         }
+        unavailable_with_coords = {
+            "source": "hatyai",
+            "upstream_id": "3",
+            "media_type": "cctv",
+            "availability": "offline",
+            "image_url": "https://images.example.test/offline.jpg",
+            "coordinates": {"type": "Point", "coordinates": [100.5, 7.1]},
+        }
         monitor.latest_feeds = [feed_with_coords, feed_without_coords]
+        monitor.latest_feeds.append(unavailable_with_coords)
 
         rendered_feeds = []
 

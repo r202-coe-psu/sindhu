@@ -23,15 +23,17 @@ from sindhu.services.cctv_cache import CacheError, CctvCache
 from sindhu.services.cctv_catalog import (
     DWR_SOURCE,
     HATYAI_SOURCE,
+    RID_SOURCE,
     get_camera,
     HATYAI_REGISTRY_VERSION,
     DWR_REGISTRY_VERSION,
+    RID_REGISTRY_VERSION,
 )
 from sindhu.services.cctv_sources import CctvSources, SourceError
 
 UTC = dt.timezone.utc
 BANGKOK = ZoneInfo("Asia/Bangkok")
-SOURCES = (HATYAI_SOURCE, DWR_SOURCE)
+SOURCES = (HATYAI_SOURCE, DWR_SOURCE, RID_SOURCE)
 PREFIX = "sindhu:cctv:v1"
 HISTORY_DAYS = 7
 
@@ -83,6 +85,8 @@ class VisualFeedService:
         dwr_base_url: str | None = None,
         hatyai_api_base_url: str | None = None,
         dwr_api_base_url: str | None = None,
+        rid_base_url: str | None = None,
+        rid_api_base_url: str | None = None,
     ):
         self.sources = (
             sources
@@ -93,6 +97,8 @@ class VisualFeedService:
                 dwr_base_url=dwr_base_url,
                 hatyai_api_base_url=hatyai_api_base_url,
                 dwr_api_base_url=dwr_api_base_url,
+                rid_base_url=rid_base_url,
+                rid_api_base_url=rid_api_base_url,
             )
         )
         self.cache = cache if cache is not None else CctvCache(redis_client)
@@ -104,6 +110,7 @@ class VisualFeedService:
         *,
         hatyai_base_url: str | None = None,
         dwr_base_url: str | None = None,
+        rid_base_url: str | None = None,
     ) -> None:
         """Apply provider base URL overrides without replacing the HTTP client."""
         if not isinstance(self.sources, CctvSources):
@@ -114,6 +121,7 @@ class VisualFeedService:
             deadline_seconds=self.sources.deadline_seconds,
             hatyai_base_url=hatyai_base_url,
             dwr_base_url=dwr_base_url,
+            rid_base_url=rid_base_url,
         )
         # Avoid serving catalog data fetched from the previous provider URL.
         self._source_config_revision += 1
@@ -135,8 +143,13 @@ class VisualFeedService:
             except ValidationError:
                 raise SourceError("invalid_source_contract") from None
 
+        registry_version = {
+            HATYAI_SOURCE: HATYAI_REGISTRY_VERSION,
+            DWR_SOURCE: DWR_REGISTRY_VERSION,
+            RID_SOURCE: RID_REGISTRY_VERSION,
+        }[source]
         cached = await self.cache.get(
-            f"{PREFIX}:latest:{source}:{HATYAI_REGISTRY_VERSION if source == HATYAI_SOURCE else DWR_REGISTRY_VERSION}:r{self._source_config_revision}",
+            f"{PREFIX}:latest:{source}:{registry_version}:r{self._source_config_revision}",
             load,
             fresh_seconds=120,
             stale_seconds=1800,
@@ -287,6 +300,20 @@ class VisualFeedService:
         finally:
             self._snapshot_slots -= 1
 
+    async def rid_snapshot(self, upstream_id: str) -> tuple[bytes, str]:
+        if get_camera(RID_SOURCE, upstream_id) is None:
+            raise ViewerError("visual_feed_not_found", 404)
+        if self._snapshot_slots >= 2:
+            raise ViewerError("snapshot_busy")
+        self._snapshot_slots += 1
+        try:
+            async with asyncio.timeout(10):
+                return await self.sources.rid_snapshot(upstream_id)
+        except (SourceError, TimeoutError):
+            raise ViewerError("snapshot_unavailable") from None
+        finally:
+            self._snapshot_slots -= 1
+
 
 _service: VisualFeedService | None = None
 
@@ -299,6 +326,8 @@ def configure_visual_feeds(
     dwr_base_url: str | None = None,
     hatyai_api_base_url: str | None = None,
     dwr_api_base_url: str | None = None,
+    rid_base_url: str | None = None,
+    rid_api_base_url: str | None = None,
 ) -> None:
     global _service
     _service = VisualFeedService(
@@ -308,6 +337,8 @@ def configure_visual_feeds(
         dwr_base_url=dwr_base_url,
         hatyai_api_base_url=hatyai_api_base_url,
         dwr_api_base_url=dwr_api_base_url,
+        rid_base_url=rid_base_url,
+        rid_api_base_url=rid_api_base_url,
     )
 
 
@@ -320,11 +351,13 @@ def reconfigure_visual_feeds(
     *,
     hatyai_api_base_url: str | None = None,
     dwr_api_base_url: str | None = None,
+    rid_api_base_url: str | None = None,
 ) -> None:
     service = get_service()
     service.reconfigure_sources(
         hatyai_base_url=hatyai_api_base_url,
         dwr_base_url=dwr_api_base_url,
+        rid_base_url=rid_api_base_url,
     )
 
 
@@ -348,3 +381,7 @@ async def get_history(source, upstream_id, date):
 
 async def get_snapshot(upstream_id):
     return await get_service().snapshot(upstream_id)
+
+
+async def get_rid_snapshot(upstream_id):
+    return await get_service().rid_snapshot(upstream_id)
