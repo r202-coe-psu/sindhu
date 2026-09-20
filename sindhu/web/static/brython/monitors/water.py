@@ -12,6 +12,10 @@ class WaterMonitor(BaseMonitor):
     RAIN_INTERPOLATION_KEY = "rain"
     # Rain-only stations feed the rain surface; they have no water level to rate
     RAIN_STATION_SOURCES = ["thaiwater_rain"]
+    # RID mixes water level and rain gauges under one source, so its rain-only
+    # stations are told apart by the station_type written by the RID ETL
+    WATER_LEVEL_STATION_TYPE = "วัดระดับน้ำ"
+    RAIN_STATION_TYPE = "วัดปริมาณน้ำฝน"
 
     def __init__(
         self,
@@ -39,6 +43,20 @@ class WaterMonitor(BaseMonitor):
         self.params = dict()
         self.latest_data = None
         self.visual_feed_monitor = None
+
+    def is_rain_only_station(self, station):
+        if station.get("source") in self.RAIN_STATION_SOURCES:
+            return True
+
+        metadata = station.get("metadata") or {}
+        station_type = metadata.get("station_type") if isinstance(metadata, dict) else None
+        if not isinstance(station_type, str):
+            return False
+
+        return (
+            self.RAIN_STATION_TYPE in station_type
+            and self.WATER_LEVEL_STATION_TYPE not in station_type
+        )
 
     def calculate_risk(self, station):
         if not station or not isinstance(station, dict):
@@ -231,7 +249,7 @@ class WaterMonitor(BaseMonitor):
                 for station in data.get("stations") or []
                 if station
                 and isinstance(station, dict)
-                and station.get("source") not in self.RAIN_STATION_SOURCES
+                and not self.is_rain_only_station(station)
             ]
 
             for station in data["stations"]:
