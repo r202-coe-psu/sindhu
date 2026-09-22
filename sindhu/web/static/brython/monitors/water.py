@@ -9,6 +9,14 @@ import json
 
 
 class WaterMonitor(BaseMonitor):
+    RAIN_INTERPOLATION_KEY = "rain"
+    # Rain-only stations feed the rain surface; they have no water level to rate
+    RAIN_STATION_SOURCES = ["thaiwater_rain"]
+    # RID mixes water level and rain gauges under one source, so its rain-only
+    # stations are told apart by the station_type written by the RID ETL
+    WATER_LEVEL_STATION_TYPE = "วัดระดับน้ำ"
+    RAIN_STATION_TYPE = "วัดปริมาณน้ำฝน"
+
     def __init__(
         self,
         lang_code,
@@ -35,6 +43,20 @@ class WaterMonitor(BaseMonitor):
         self.params = dict()
         self.latest_data = None
         self.visual_feed_monitor = None
+
+    def is_rain_only_station(self, station):
+        if station.get("source") in self.RAIN_STATION_SOURCES:
+            return True
+
+        metadata = station.get("metadata") or {}
+        station_type = metadata.get("station_type") if isinstance(metadata, dict) else None
+        if not isinstance(station_type, str):
+            return False
+
+        return (
+            self.RAIN_STATION_TYPE in station_type
+            and self.WATER_LEVEL_STATION_TYPE not in station_type
+        )
 
     def calculate_risk(self, station):
         if not station or not isinstance(station, dict):
@@ -189,12 +211,19 @@ class WaterMonitor(BaseMonitor):
         if "hide_no_data" in document:
             document["hide_no_data"].bind("change", self.on_hide_no_data_change)
 
+        if "toggle_rain_interpolation" in document:
+            document["toggle_rain_interpolation"].bind(
+                "change", self.on_toggle_rain_interpolation
+            )
+
         while self.running:
             print(
                 f"[Monitor:{self.monitor_name}] Cycle running (interval: {self.acquisition_interval}s)"
             )
 
             await self.get_stations_metrics()
+            if self.is_rain_interpolation_on():
+                await self.load_rain_interpolation()
 
             # wait for next aquisition
             await aio.sleep(self.acquisition_interval)
@@ -215,9 +244,15 @@ class WaterMonitor(BaseMonitor):
                 print(f"[Monitor:{self.monitor_name}] Invalid data received: {data}")
                 return
 
-            for station in data.get("stations") or []:
-                if not station or not isinstance(station, dict):
-                    continue
+            data["stations"] = [
+                station
+                for station in data.get("stations") or []
+                if station
+                and isinstance(station, dict)
+                and not self.is_rain_only_station(station)
+            ]
+
+            for station in data["stations"]:
                 risk, waterlevel, diff_wl_bank = self.calculate_risk(station)
                 station["risk"] = risk
                 station["waterlevel"] = waterlevel
@@ -248,6 +283,47 @@ class WaterMonitor(BaseMonitor):
             self.render_data_error("โหลดข้อมูลสถานีไม่สำเร็จ กรุณาลองใหม่อีกครั้ง")
         finally:
             self.set_map_loading(False)
+
+    def is_rain_interpolation_on(self):
+        return (
+            "toggle_rain_interpolation" in document
+            and document["toggle_rain_interpolation"].checked
+        )
+
+    def on_toggle_rain_interpolation(self, ev):
+        if ev.target.checked:
+            aio.run(self.load_rain_interpolation())
+        else:
+            self.map.remove_interpolation_layer(self.RAIN_INTERPOLATION_KEY)
+            self.map.set_interpolation_legend(None)
+
+    async def load_rain_interpolation(self):
+        url = f"{self.api_url}/v1/interpolations/rain"
+        try:
+            response = await aio.get(url, cache=False)
+            if response.status != 200:
+                raise RuntimeError(
+                    f"rain interpolation returned HTTP {response.status}"
+                )
+            data = json.loads(response.data) or {}
+        except Exception as e:
+            print(f"[Monitor:{self.monitor_name}] Rain interpolation error: {e}")
+            return
+
+        # The checkbox may have been cleared while the request was in flight
+        if not self.is_rain_interpolation_on():
+            return
+
+        if not data.get("interpolation"):
+            print(
+                f"[Monitor:{self.monitor_name}] Not enough rain stations to interpolate ({data.get('points')})"
+            )
+        self.map.set_interpolation_layer(
+            self.RAIN_INTERPOLATION_KEY, data.get("interpolation")
+        )
+        self.map.set_interpolation_legend(
+            data.get("legend") if data.get("interpolation") else None
+        )
 
     def render_data_error(self, message):
         if "reservoir_data_list" not in document:

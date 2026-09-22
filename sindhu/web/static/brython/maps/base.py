@@ -39,6 +39,7 @@ class BaseMap(Map):
         self.panel_plus_sensors = []
         self.marker_style = "donut"
         self._metric_legend_container = None
+        self._interpolation_legend_container = None
         self._legend_override = False
 
     SECTION_VIEW_W = 176
@@ -686,6 +687,114 @@ class BaseMap(Map):
         self.metric_markers_layers[document_id] = self.leaflet.layerGroup(
             self.metric_markers_layer[document_id]
         ).addTo(self.map)
+
+    """
+    ===========================================================================
+    Interpolations
+    ===========================================================================
+    """
+
+    INTERPOLATION_PANE = "interpolationPane"
+    INTERPOLATION_FILL_OPACITY = 0.45
+
+    def set_interpolation_layer(self, key, geojson):
+        """Draw an interpolated surface (contour GeoJSON) under the overlays."""
+        self.remove_interpolation_layer(key)
+        if not geojson:
+            return
+
+        # Between the tiles (200) and the overlay pane (400), and transparent to
+        # the mouse, so zones and station markers stay clickable on top of it
+        if not self.map.getPane(self.INTERPOLATION_PANE):
+            pane = self.map.createPane(self.INTERPOLATION_PANE)
+            pane.style.zIndex = 350
+            pane.style.pointerEvents = "none"
+
+        # Features built from json.loads arrive as Python dicts, not JS objects
+        def get_val(obj, key_name, default_val=None):
+            if obj is None:
+                return default_val
+            if isinstance(obj, dict):
+                return obj.get(key_name, default_val)
+            return getattr(obj, key_name, default_val)
+
+        # The backend decides fill and stroke through the geojsoncontour properties
+        def style(feature):
+            properties = get_val(feature, "properties")
+            fill = get_val(properties, "fill", "#C6C6C6")
+            stroke_width = get_val(properties, "stroke-width", 0)
+            return {
+                "fillColor": fill,
+                "fillOpacity": get_val(
+                    properties, "fill-opacity", self.INTERPOLATION_FILL_OPACITY
+                ),
+                "stroke": bool(stroke_width),
+                "color": get_val(properties, "stroke", fill),
+                "weight": stroke_width,
+                "opacity": get_val(properties, "stroke-opacity", 1),
+            }
+
+        self.interpolate_layers[key] = self.leaflet.geoJson(
+            geojson,
+            {
+                "pane": self.INTERPOLATION_PANE,
+                "interactive": False,
+                "style": style,
+            },
+        ).addTo(self.map)
+
+    def set_interpolation_legend(self, legend):
+        """Draw the color scale of the interpolated surface as a gradient bar."""
+        from browser import document as doc
+
+        container = self._interpolation_legend_container
+        if container is None:
+            container = doc.createElement("div")
+            container.style.cssText = (
+                "position:absolute;bottom:28px;right:12px;z-index:1000;width:250px;"
+            )
+            self.map.getContainer() <= container
+            self._interpolation_legend_container = container
+            self.leaflet.DomEvent.disableClickPropagation(container)
+            self.leaflet.DomEvent.disableScrollPropagation(container)
+
+        if not legend:
+            container.html = ""
+            return
+
+        # Sizes are inline styles: Tailwind only ships classes it finds in the
+        # templates, and it never scans these Brython sources
+        bands = legend.get("bands") or []
+        chips = "".join(
+            f'<span style="flex:1 1 0;background-color:{band["color"]};"></span>'
+            for band in bands
+        )
+
+        # Labels sit at their own band edge; the end ones are pulled inside the
+        # bar so they do not overflow the legend box
+        ticks = ""
+        for tick in legend.get("ticks") or []:
+            percent = round(tick["offset"] * 100)
+            shift = "0" if percent == 0 else ("-100%" if percent >= 99 else "-50%")
+            ticks += (
+                f'<span style="position:absolute;white-space:nowrap;font-size:9px;'
+                f'color:#71717a;left:{percent}%;transform:translateX({shift});">'
+                f'{tick["value"]:g}</span>'
+            )
+
+        container.html = f"""
+        <div class="bg-white/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
+            <div style="font-size:11px;font-weight:600;color:#3f3f46;line-height:1.2;">{legend.get("title", "")}</div>
+            <div style="display:flex;height:10px;margin-top:6px;border:1px solid #d4d4d8;border-radius:3px;overflow:hidden;">{chips}</div>
+            <div style="position:relative;height:13px;margin-top:2px;">{ticks}</div>
+            <div style="font-size:9px;color:#a1a1aa;text-align:right;">{legend.get("unit", "")}</div>
+        </div>
+        """
+
+    def remove_interpolation_layer(self, key):
+        layer = self.interpolate_layers.pop(key, None)
+        if layer:
+            self.map.removeLayer(layer)
 
     """
     ===========================================================================

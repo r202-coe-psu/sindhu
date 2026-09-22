@@ -21,6 +21,19 @@
           <p class="text-ink-500 mt-2 font-medium">ระบบจัดการ {{ config['APP_TITLE'] }}</p>
         </div>
 
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="space-y-2 mb-4">
+              {% for category, message in messages %}
+                <div role="alert" class="alert {{ 'alert-error' if category == 'error' else 'alert-info' }} text-sm">
+                  <i class="ph-fill {{ 'ph-warning-circle' if category == 'error' else 'ph-info' }} text-lg"></i>
+                  <span>{{ message }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
         <form action="{{ url_for('accounts.authorized_sindhu') }}" method="POST" class="space-y-4">
           {{ form.hidden_tag() }}
           
