@@ -415,10 +415,10 @@ class VisualFeedMonitor:
             card_el = document[card_id]
             try:
                 card_el.scrollIntoView({"behavior": "smooth", "block": "center"})
-                card_el.classList.add("ring-2", "ring-blue-500")
+                card_el.classList.add("ring-2", "ring-brand-500")
                 if hasattr(window, "setTimeout"):
                     window.setTimeout(
-                        lambda: card_el.classList.remove("ring-2", "ring-blue-500"),
+                        lambda: card_el.classList.remove("ring-2", "ring-brand-500"),
                         2000,
                     )
             except Exception:
@@ -583,7 +583,7 @@ class VisualFeedMonitor:
 
         header_title = document.getElementById("panel_header_title")
         if header_title:
-            header_title.html = """<i class="ph ph-video-camera text-xl text-blue-200"></i><span>กล้อง CCTV เฝ้าระวังน้ำท่วม</span>"""
+            header_title.html = """<i class="ph ph-video-camera text-xl text-brand-200"></i><span>กล้อง CCTV เฝ้าระวังน้ำท่วม</span>"""
         header_subtitle = document.getElementById("panel_header_subtitle")
         if header_subtitle:
             header_subtitle.textContent = "ภาพถ่ายสดและประวัติ 7 วันจากจุดเฝ้าระวัง"
@@ -617,7 +617,7 @@ class VisualFeedMonitor:
 
         header_title = document.getElementById("panel_header_title")
         if header_title:
-            header_title.html = """<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg><span>สถานการณ์ระดับน้ำและเตือนภัย</span>"""
+            header_title.html = """<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg><span>สถานการณ์ระดับน้ำและเตือนภัย</span>"""
         header_subtitle = document.getElementById("panel_header_subtitle")
         if header_subtitle:
             header_subtitle.textContent = "ข้อมูลสถานีวัดน้ำและจุดเฝ้าระวัง"
@@ -781,10 +781,14 @@ class VisualFeedMonitor:
             if query:
                 searchable = (
                     str(feed.get("title_th") or "")
-                    + " " + str(feed.get("name_th") or "")
-                    + " " + str(feed.get("name") or "")
-                    + " " + str(feed.get("code") or "")
-                    + " " + str(feed.get("coverage_group") or "")
+                    + " "
+                    + str(feed.get("name_th") or "")
+                    + " "
+                    + str(feed.get("name") or "")
+                    + " "
+                    + str(feed.get("code") or "")
+                    + " "
+                    + str(feed.get("coverage_group") or "")
                 ).lower()
                 if query not in searchable:
                     continue
@@ -824,7 +828,7 @@ class VisualFeedMonitor:
             # Grid View (2 columns, compact)
             card = _el(
                 "article",
-                "visual-feed-card group relative overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between",
+                "visual-feed-card group relative overflow-hidden rounded-xl border border-ink-200/90 bg-white shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between",
             )
             card.attrs["data-availability"] = availability
             card.attrs["id"] = f"cctv_card_{source}_{upstream_id}"
@@ -832,18 +836,24 @@ class VisualFeedMonitor:
                 card.attrs["data-latest-stale"] = "true"
 
             # Image section
-            img_container = _el("div", "relative aspect-video bg-slate-900 overflow-hidden cursor-pointer")
+            img_container = _el(
+                "div", "relative aspect-video bg-ink-900 overflow-hidden cursor-pointer"
+            )
             if image_url:
                 img_view = self._image_view(image_url, title, latest=True)
-                img_view.classList.add("group-hover:scale-105", "transition-transform", "duration-300")
+                img_view.classList.add(
+                    "group-hover:scale-105", "transition-transform", "duration-300"
+                )
                 img_container <= img_view
             else:
                 img_container <= _el(
                     "div",
-                    "flex h-full w-full items-center justify-center bg-slate-800 text-[10px] text-slate-400",
+                    "flex h-full w-full items-center justify-center bg-ink-800 text-[10px] text-ink-400",
                     "ไม่มีภาพ",
                 )
-            img_container.bind("click", lambda event, selected=feed: self._open_detail(selected, event))
+            img_container.bind(
+                "click", lambda event, selected=feed: self._open_detail(selected, event)
+            )
 
             # Status pill top-left
             status_pill = _el(
@@ -868,51 +878,109 @@ class VisualFeedMonitor:
             _append(card, img_container)
 
             # Body
-            body = _append(card, _el("div", "p-2.5 flex flex-col justify-between flex-1 space-y-1.5"))
+            body = _append(
+                card,
+                _el("div", "p-2.5 flex flex-col justify-between flex-1 space-y-1.5"),
+            )
 
             # Title
             title_btn = _el(
                 "button",
-                "text-left text-xs font-bold leading-snug text-slate-800 hover:text-blue-600 transition-colors line-clamp-2",
+                "text-left text-xs font-bold leading-snug text-ink-800 hover:text-brand-600 transition-colors line-clamp-2",
             )
             title_btn.attrs["type"] = "button"
             title_btn.attrs["aria-label"] = f"เปิดรายละเอียด {title}"
             title_btn.textContent = title
-            title_btn.bind("click", lambda event, selected=feed: self._open_detail(selected, event))
+            title_btn.bind(
+                "click", lambda event, selected=feed: self._open_detail(selected, event)
+            )
             _append(body, title_btn)
 
             # Group / Location
-            meta_div = _append(body, _el("div", "text-[10px] text-slate-500 truncate"))
+            meta_div = _append(body, _el("div", "text-[10px] text-ink-500 truncate"))
             meta_div.textContent = f"{coverage} · {source_lbl}"
 
             # Actions
-            actions = _append(body, _el("div", "flex flex-wrap items-center gap-1 pt-1.5 border-t border-slate-100"))
+            actions = _append(
+                body,
+                _el(
+                    "div",
+                    "flex flex-wrap items-center gap-1 pt-1.5 border-t border-ink-100",
+                ),
+            )
 
-            detail_btn = _append(actions, _el("button", "btn btn-xs btn-primary flex-1 text-[10px] font-semibold h-6 min-h-0 px-2 rounded-md", "ดูรายละเอียด"))
+            detail_btn = _append(
+                actions,
+                _el(
+                    "button",
+                    "btn btn-xs btn-primary flex-1 text-[10px] font-semibold h-6 min-h-0 px-2 rounded-md",
+                    "ดูรายละเอียด",
+                ),
+            )
             detail_btn.attrs["type"] = "button"
-            detail_btn.bind("click", lambda event, selected=feed: self._open_detail(selected, event))
+            detail_btn.bind(
+                "click", lambda event, selected=feed: self._open_detail(selected, event)
+            )
 
             if _supports_history(feed):
-                hist_btn = _append(actions, _el("button", "btn btn-xs btn-outline flex-1 text-[10px] font-semibold h-6 min-h-0 px-1.5 rounded-md text-blue-600 border-slate-200 hover:bg-blue-50", "ดูประวัติ 7 วัน"))
+                hist_btn = _append(
+                    actions,
+                    _el(
+                        "button",
+                        "btn btn-xs btn-outline flex-1 text-[10px] font-semibold h-6 min-h-0 px-1.5 rounded-md text-brand-600 border-ink-200 hover:bg-brand-50",
+                        "ดูประวัติ 7 วัน",
+                    ),
+                )
                 hist_btn.attrs["type"] = "button"
-                hist_btn.bind("click", lambda event, selected=feed: self._open_history(selected, event))
+                hist_btn.bind(
+                    "click",
+                    lambda event, selected=feed: self._open_history(selected, event),
+                )
 
             if _has_coordinates(feed):
-                map_btn = _append(actions, _el("button", "btn btn-xs btn-ghost text-[10px] text-blue-600 h-6 min-h-0 px-1.5 rounded-md hover:bg-blue-50", "ดูบนแผนที่"))
+                map_btn = _append(
+                    actions,
+                    _el(
+                        "button",
+                        "btn btn-xs btn-ghost text-[10px] text-brand-600 h-6 min-h-0 px-1.5 rounded-md hover:bg-brand-50",
+                        "ดูบนแผนที่",
+                    ),
+                )
                 map_btn.attrs["type"] = "button"
-                map_btn.bind("click", lambda event, selected=feed: self._fly_to_camera(selected))
+                map_btn.bind(
+                    "click", lambda event, selected=feed: self._fly_to_camera(selected)
+                )
 
             matched_st = self.find_matching_station(feed)
             if matched_st:
                 st_code = str(matched_st.get("code", ""))
                 st_src = str(matched_st.get("source", ""))
-                water_btn = _append(actions, _el("button", "btn btn-xs btn-info btn-outline text-[10px] h-6 min-h-0 px-1.5 rounded-md font-medium", "🌊 ดูระดับน้ำ"))
+                water_btn = _append(
+                    actions,
+                    _el(
+                        "button",
+                        "btn btn-xs btn-info btn-outline text-[10px] h-6 min-h-0 px-1.5 rounded-md font-medium",
+                        "🌊 ดูระดับน้ำ",
+                    ),
+                )
                 water_btn.attrs["type"] = "button"
-                water_btn.bind("click", lambda event, code=st_code, src=st_src: self._on_view_station(code, src, event))
+                water_btn.bind(
+                    "click",
+                    lambda event, code=st_code, src=st_src: self._on_view_station(
+                        code, src, event
+                    ),
+                )
 
             detail_url = _safe_http_url(feed.get("detail_url"))
             if detail_url:
-                link = _append(actions, _el("a", "btn btn-xs btn-ghost text-[10px] h-6 min-h-0 px-1 rounded-md text-slate-500", "ต้นทาง"))
+                link = _append(
+                    actions,
+                    _el(
+                        "a",
+                        "btn btn-xs btn-ghost text-[10px] h-6 min-h-0 px-1 rounded-md text-ink-500",
+                        "ต้นทาง",
+                    ),
+                )
                 link.attrs["href"] = detail_url
                 link.attrs["target"] = "_blank"
                 link.attrs["rel"] = "noopener noreferrer"
@@ -922,7 +990,7 @@ class VisualFeedMonitor:
         # List View (1 column, full-width 16:9 images)
         card = _el(
             "article",
-            "visual-feed-card group relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs hover:shadow-md transition-all duration-200 flex flex-col",
+            "visual-feed-card group relative overflow-hidden rounded-2xl border border-ink-200 bg-white shadow-xs hover:shadow-md transition-all duration-200 flex flex-col",
         )
         card.attrs["data-availability"] = availability
         card.attrs["id"] = f"cctv_card_{source}_{upstream_id}"
@@ -930,18 +998,24 @@ class VisualFeedMonitor:
             card.attrs["data-latest-stale"] = "true"
 
         # Image Container
-        img_container = _el("div", "relative aspect-video bg-slate-900 overflow-hidden cursor-pointer")
+        img_container = _el(
+            "div", "relative aspect-video bg-ink-900 overflow-hidden cursor-pointer"
+        )
         if image_url:
             img_view = self._image_view(image_url, title, latest=True)
-            img_view.classList.add("group-hover:scale-105", "transition-transform", "duration-300")
+            img_view.classList.add(
+                "group-hover:scale-105", "transition-transform", "duration-300"
+            )
             img_container <= img_view
         else:
             img_container <= _el(
                 "div",
-                "flex h-full w-full items-center justify-center bg-slate-800 text-xs text-slate-400",
+                "flex h-full w-full items-center justify-center bg-ink-800 text-xs text-ink-400",
                 "ไม่มีภาพตัวอย่าง",
             )
-        img_container.bind("click", lambda event, selected=feed: self._open_detail(selected, event))
+        img_container.bind(
+            "click", lambda event, selected=feed: self._open_detail(selected, event)
+        )
 
         # Status badge top-left
         status_badge = _el(
@@ -970,7 +1044,9 @@ class VisualFeedMonitor:
             "span",
             "absolute bottom-2.5 right-2.5 z-10 flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-black/65 text-white backdrop-blur-xs shadow-xs",
         )
-        time_badge.html = f"""<i class="ph ph-clock text-xs"></i><span>{time_str}</span>"""
+        time_badge.html = (
+            f"""<i class="ph ph-clock text-xs"></i><span>{time_str}</span>"""
+        )
         img_container <= time_badge
 
         _append(card, img_container)
@@ -981,62 +1057,122 @@ class VisualFeedMonitor:
         # Title button
         title_btn = _el(
             "button",
-            "min-w-0 text-left text-sm font-bold leading-snug text-slate-900 hover:text-blue-600 transition-colors",
+            "min-w-0 text-left text-sm font-bold leading-snug text-ink-900 hover:text-brand-600 transition-colors",
         )
         title_btn.attrs["type"] = "button"
         title_btn.attrs["aria-label"] = f"เปิดรายละเอียด {title}"
         title_btn.textContent = title
-        title_btn.bind("click", lambda event, selected=feed: self._open_detail(selected, event))
+        title_btn.bind(
+            "click", lambda event, selected=feed: self._open_detail(selected, event)
+        )
         _append(body, title_btn)
 
         # Tags row (Source & Area)
         tags_row = _append(body, _el("div", "flex flex-wrap items-center gap-1.5"))
         source_tag = _append(
             tags_row,
-            _el("span", "inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-medium"),
+            _el(
+                "span",
+                "inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-ink-100 text-ink-600 text-[11px] font-medium",
+            ),
         )
         source_tag.textContent = source_lbl
 
         if coverage and coverage != "—":
             group_tag = _append(
                 tags_row,
-                _el("span", "inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[11px] font-medium"),
+                _el(
+                    "span",
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-brand-50 text-brand-700 text-[11px] font-medium",
+                ),
             )
             group_tag.textContent = coverage
 
         attr = _attribution_text(feed)
         if attr:
-            attr_el = _append(body, _el("div", "text-[10px] text-slate-400"))
+            attr_el = _append(body, _el("div", "text-[10px] text-ink-400"))
             attr_el.textContent = f"ที่มา: {_text(attr)}"
 
         # Actions row
-        actions = _append(body, _el("div", "flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100"))
+        actions = _append(
+            body,
+            _el(
+                "div", "flex flex-wrap items-center gap-2 pt-2 border-t border-ink-100"
+            ),
+        )
 
-        detail_btn = _append(actions, _el("button", "btn btn-sm btn-primary flex-1 min-w-[100px] text-xs font-semibold rounded-lg shadow-xs h-8 min-h-0", "ดูรายละเอียด"))
+        detail_btn = _append(
+            actions,
+            _el(
+                "button",
+                "btn btn-sm btn-primary flex-1 min-w-[100px] text-xs font-semibold rounded-lg shadow-xs h-8 min-h-0",
+                "ดูรายละเอียด",
+            ),
+        )
         detail_btn.attrs["type"] = "button"
-        detail_btn.bind("click", lambda event, selected=feed: self._open_detail(selected, event))
+        detail_btn.bind(
+            "click", lambda event, selected=feed: self._open_detail(selected, event)
+        )
 
         if _supports_history(feed):
-            hist_btn = _append(actions, _el("button", "btn btn-sm btn-outline flex-1 min-w-[100px] text-xs font-semibold rounded-lg text-blue-600 border-slate-200 hover:bg-blue-50 h-8 min-h-0", "ดูประวัติ 7 วัน"))
+            hist_btn = _append(
+                actions,
+                _el(
+                    "button",
+                    "btn btn-sm btn-outline flex-1 min-w-[100px] text-xs font-semibold rounded-lg text-brand-600 border-ink-200 hover:bg-brand-50 h-8 min-h-0",
+                    "ดูประวัติ 7 วัน",
+                ),
+            )
             hist_btn.attrs["type"] = "button"
-            hist_btn.bind("click", lambda event, selected=feed: self._open_history(selected, event))
+            hist_btn.bind(
+                "click",
+                lambda event, selected=feed: self._open_history(selected, event),
+            )
 
         if _has_coordinates(feed):
-            map_btn = _append(actions, _el("button", "btn btn-sm btn-ghost text-xs text-blue-600 hover:bg-blue-50 px-2.5 rounded-lg h-8 min-h-0", "ดูบนแผนที่"))
+            map_btn = _append(
+                actions,
+                _el(
+                    "button",
+                    "btn btn-sm btn-ghost text-xs text-brand-600 hover:bg-brand-50 px-2.5 rounded-lg h-8 min-h-0",
+                    "ดูบนแผนที่",
+                ),
+            )
             map_btn.attrs["type"] = "button"
-            map_btn.bind("click", lambda event, selected=feed: self._fly_to_camera(selected))
+            map_btn.bind(
+                "click", lambda event, selected=feed: self._fly_to_camera(selected)
+            )
 
         matched_st = self.find_matching_station(feed)
         if matched_st:
             st_code = str(matched_st.get("code", ""))
             st_src = str(matched_st.get("source", ""))
-            water_btn = _append(actions, _el("button", "btn btn-sm btn-info btn-outline text-xs h-8 min-h-0 px-2.5 font-medium rounded-lg", "🌊 ดูระดับน้ำ"))
+            water_btn = _append(
+                actions,
+                _el(
+                    "button",
+                    "btn btn-sm btn-info btn-outline text-xs h-8 min-h-0 px-2.5 font-medium rounded-lg",
+                    "🌊 ดูระดับน้ำ",
+                ),
+            )
             water_btn.attrs["type"] = "button"
-            water_btn.bind("click", lambda event, code=st_code, src=st_src: self._on_view_station(code, src, event))
+            water_btn.bind(
+                "click",
+                lambda event, code=st_code, src=st_src: self._on_view_station(
+                    code, src, event
+                ),
+            )
 
         detail_url = _safe_http_url(feed.get("detail_url"))
         if detail_url:
-            link = _append(actions, _el("a", "btn btn-sm btn-ghost text-xs text-slate-500 hover:bg-slate-100 px-2 rounded-lg h-8 min-h-0", "เปิดต้นทาง"))
+            link = _append(
+                actions,
+                _el(
+                    "a",
+                    "btn btn-sm btn-ghost text-xs text-ink-500 hover:bg-ink-100 px-2 rounded-lg h-8 min-h-0",
+                    "เปิดต้นทาง",
+                ),
+            )
             link.attrs["href"] = detail_url
             link.attrs["target"] = "_blank"
             link.attrs["rel"] = "noopener noreferrer"
@@ -1050,7 +1186,7 @@ class VisualFeedMonitor:
     def _image_view(self, image_url, title, latest=False):
         wrapper = _el(
             "div",
-            "relative w-full aspect-video min-h-[140px] bg-slate-900 overflow-hidden flex items-center justify-center",
+            "relative w-full aspect-video min-h-[140px] bg-ink-900 overflow-hidden flex items-center justify-center",
         )
         image = _el("img", "block h-full w-full object-cover")
         # The panel is a nested scroll container; browser lazy-loading can
@@ -1063,7 +1199,7 @@ class VisualFeedMonitor:
             wrapper,
             _el(
                 "span",
-                "absolute bottom-2 left-2 rounded bg-slate-900/75 px-2 py-1 text-[10px] text-white",
+                "absolute bottom-2 left-2 rounded bg-ink-900/75 px-2 py-1 text-[10px] text-white",
                 "กำลังโหลดภาพ...",
             ),
         )
@@ -1084,8 +1220,8 @@ class VisualFeedMonitor:
         # This is a local browser rendering state, never a hardware status.
         image.attrs["data-image-state"] = "error"
         image.style.display = "none"
-        state.className = "flex flex-col items-center justify-center gap-1 text-slate-400 text-xs p-3 text-center"
-        state.html = """<i class="ph ph-video-camera-slash text-2xl text-slate-500"></i><span>ภาพไม่สามารถแสดงได้ในขณะนี้</span>"""
+        state.className = "flex flex-col items-center justify-center gap-1 text-ink-400 text-xs p-3 text-center"
+        state.html = """<i class="ph ph-video-camera-slash text-2xl text-ink-500"></i><span>ภาพไม่สามารถแสดงได้ในขณะนี้</span>"""
 
     def _selected_value(self, element_id):
         element = document.getElementById(element_id)
@@ -1097,7 +1233,7 @@ class VisualFeedMonitor:
             container.html = ""
             container <= _el(
                 "div",
-                "col-span-full flex min-h-32 items-center justify-center text-xs text-slate-500",
+                "col-span-full flex min-h-32 items-center justify-center text-xs text-ink-500",
                 message,
             )
 
@@ -1339,21 +1475,30 @@ class VisualFeedMonitor:
                 container,
                 _el(
                     "figure",
-                    "group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs hover:shadow-md transition-all duration-200 flex flex-col",
+                    "group overflow-hidden rounded-xl border border-ink-200 bg-white shadow-xs hover:shadow-md transition-all duration-200 flex flex-col",
                 ),
             )
             full_url = frame.get("image_url") or frame.get("thumbnail_url")
             thumbnail_url = frame.get("thumbnail_url") or full_url
             if thumbnail_url:
-                link = _append(figure, _el("a", "block relative aspect-video bg-slate-900 overflow-hidden"))
+                link = _append(
+                    figure,
+                    _el("a", "block relative aspect-video bg-ink-900 overflow-hidden"),
+                )
                 link.attrs["href"] = full_url
                 link.attrs["target"] = "_blank"
                 link.attrs["rel"] = "noopener noreferrer"
                 img_view = self._image_view(thumbnail_url, "ภาพประวัติ CCTV")
-                img_view.classList.add("group-hover:scale-105", "transition-transform", "duration-200")
+                img_view.classList.add(
+                    "group-hover:scale-105", "transition-transform", "duration-200"
+                )
                 link <= img_view
             caption = _append(
-                figure, _el("figcaption", "p-2.5 text-xs font-semibold text-slate-700 bg-slate-50 border-t border-slate-100 flex items-center justify-between")
+                figure,
+                _el(
+                    "figcaption",
+                    "p-2.5 text-xs font-semibold text-ink-700 bg-ink-50 border-t border-ink-100 flex items-center justify-between",
+                ),
             )
             caption.textContent = _format_time(frame.get("captured_at"))
 
@@ -1414,7 +1559,7 @@ class VisualFeedMonitor:
             else:
                 latest_container <= _el(
                     "div",
-                    "flex aspect-video items-center justify-center rounded-lg bg-slate-900 text-xs text-slate-400",
+                    "flex aspect-video items-center justify-center rounded-lg bg-ink-900 text-xs text-ink-400",
                     "ไม่มีภาพล่าสุด",
                 )
         latest_meta = document.getElementById("visual_feed_detail_latest_meta")
@@ -1425,7 +1570,9 @@ class VisualFeedMonitor:
                 if _is_latest_stale(feed)
                 else AVAILABILITY_LABELS[availability]
             )
-            latest_meta.textContent = f"สถานะ: {status} · ภาพถ่ายเมื่อ: {_format_time(captured)}"
+            latest_meta.textContent = (
+                f"สถานะ: {status} · ภาพถ่ายเมื่อ: {_format_time(captured)}"
+            )
         station_link = document.getElementById("visual_feed_detail_station_link")
         if station_link:
             matched_st = self.find_matching_station(feed)
@@ -1446,12 +1593,12 @@ class VisualFeedMonitor:
                         pass
 
                 station_link.html = f"""
-                <div class="my-2 p-3 rounded-xl bg-blue-50/80 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div class="my-2 p-3 rounded-xl bg-brand-50/80 border border-brand-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div class="flex items-center gap-2.5">
                         <span class="text-xl">🌊</span>
                         <div>
-                            <div class="font-bold text-xs text-blue-950">สถานีวัดน้ำที่ตั้งเดียวกัน: {st_name}</div>
-                            <div class="text-[11px] text-blue-700">รหัสสถานี #{st_code}{wl_str}</div>
+                            <div class="font-bold text-xs text-brand-950">สถานีวัดน้ำที่ตั้งเดียวกัน: {st_name}</div>
+                            <div class="text-[11px] text-brand-700">รหัสสถานี #{st_code}{wl_str}</div>
                         </div>
                     </div>
                     <button type="button" onclick="if(window.focus_water_station_from_modal)window.focus_water_station_from_modal('{st_code}','{st_src}')"

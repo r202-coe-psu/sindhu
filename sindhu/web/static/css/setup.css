@@ -22,40 +22,80 @@
 }
 
 
+/*
+ * แลน้ำ palette — one source of truth for the site's colours.
+ *
+ * brand: น้ำลึก (deep water) cerulean, used for primary actions, links and highlights.
+ * ink:   cool blue-grey neutrals for text, borders and surfaces.
+ * Templates use brand-* / ink-* (never raw blue-*, gray-*, slate-*) so the
+ * palette can be retuned here. Risk/status colours (emerald, amber, red …)
+ * carry meaning and stay on Tailwind's defaults.
+ *
+ * `static` keeps every variable in app.css so inline styles in Brython
+ * popups can use var(--color-brand-600) even when no class references it.
+ */
+@theme static {
+  --color-brand-50: oklch(97.6% 0.013 222);
+  --color-brand-100: oklch(94.6% 0.029 224);
+  --color-brand-200: oklch(89.4% 0.054 226);
+  --color-brand-300: oklch(81.5% 0.088 228);
+  --color-brand-400: oklch(71% 0.116 231);
+  --color-brand-500: oklch(61% 0.126 234);
+  --color-brand-600: oklch(52% 0.116 237);
+  --color-brand-700: oklch(45% 0.1 239);
+  --color-brand-800: oklch(38% 0.083 241);
+  --color-brand-900: oklch(31.5% 0.066 243);
+  --color-brand-950: oklch(22.5% 0.048 245);
+
+  --color-ink-50: oklch(98.4% 0.004 235);
+  --color-ink-100: oklch(96.6% 0.007 235);
+  --color-ink-200: oklch(92.8% 0.011 237);
+  --color-ink-300: oklch(87.2% 0.016 239);
+  --color-ink-400: oklch(71.5% 0.022 241);
+  --color-ink-500: oklch(55.5% 0.026 243);
+  --color-ink-600: oklch(44.5% 0.026 245);
+  --color-ink-700: oklch(37% 0.025 247);
+  --color-ink-800: oklch(28% 0.022 249);
+  --color-ink-900: oklch(21% 0.02 251);
+  --color-ink-950: oklch(14.5% 0.016 253);
+}
+
 @plugin "daisyui/theme" {
   name: "sindhu";
   default: true;
   prefersdark: false;
   color-scheme: light;
 
-  /* Brand: blue 70% — vivid, calm, professional */
-  --color-primary: oklch(54.6% 0.245 262.881);          /* blue-600 */
-  --color-primary-content: oklch(97% 0.014 254.604);    /* near-white */
+  /* Brand: deep water cerulean */
+  --color-primary: oklch(52% 0.116 237);                /* brand-600 */
+  --color-primary-content: oklch(98.4% 0.004 235);      /* ink-50 */
 
-  /* Accent: amber 10% — complementary, for warnings & emphasis */
-  --color-secondary: oklch(76.9% 0.188 70.08);          /* amber-500 */
-  --color-secondary-content: oklch(20% 0.01 70);
-  --color-accent: oklch(76.9% 0.188 70.08);
-  --color-accent-content: oklch(20% 0.01 70);
+  /* Secondary: dusk-over-the-lake navy, for quieter emphasis */
+  --color-secondary: oklch(38% 0.083 241);              /* brand-800 */
+  --color-secondary-content: oklch(97.6% 0.013 222);    /* brand-50 */
 
-  /* Neutral text */
-  --color-neutral: oklch(27.8% 0.033 256.848);          /* gray-800 */
-  --color-neutral-content: oklch(98% 0.002 247.839);
+  /* Accent: shoreline sand — warm complement to the blues */
+  --color-accent: oklch(80% 0.115 78);
+  --color-accent-content: oklch(28% 0.05 60);
 
-  /* Surfaces: white 20% */
-  --color-base-100: oklch(100% 0 0);                    /* pure white */
-  --color-base-200: oklch(98.2% 0.008 247);             /* near-white w/ blue tint */
-  --color-base-300: oklch(94.5% 0.018 254);             /* soft blue-gray */
-  --color-base-content: oklch(21% 0.034 264.665);       /* gray-900 */
+  /* Neutral */
+  --color-neutral: oklch(28% 0.022 249);                /* ink-800 */
+  --color-neutral-content: oklch(98.4% 0.004 235);      /* ink-50 */
+
+  /* Surfaces */
+  --color-base-100: oklch(100% 0 0);                    /* white */
+  --color-base-200: oklch(97.6% 0.008 228);             /* misty water */
+  --color-base-300: oklch(93.5% 0.016 230);
+  --color-base-content: oklch(21% 0.02 251);            /* ink-900 */
 
   /* Status */
-  --color-info: oklch(62.3% 0.214 259.815);             /* blue-500 */
-  --color-info-content: oklch(98% 0 0);
-  --color-success: oklch(64% 0.16 158);
+  --color-info: oklch(61% 0.126 234);                   /* brand-500 */
+  --color-info-content: oklch(98.4% 0.004 235);
+  --color-success: oklch(62% 0.14 158);
   --color-success-content: oklch(98% 0 0);
   --color-warning: oklch(76.9% 0.188 70.08);            /* amber */
   --color-warning-content: oklch(20% 0.01 70);
-  --color-error: oklch(63.7% 0.237 25.331);
+  --color-error: oklch(60% 0.22 25.331);
   --color-error-content: oklch(98% 0 0);
 
   --radius-selector: 0.5rem;

@@ -6,10 +6,10 @@ from flask_wtf import FlaskForm
 
 class LoginForm(FlaskForm):
     username = fields.StringField(
-        "Username", validators=[validators.InputRequired(), validators.Length(min=3)]
+        "ชื่อผู้ใช้", validators=[validators.InputRequired(), validators.Length(min=3)]
     )
     password = fields.PasswordField(
-        "Password", validators=[validators.InputRequired(), validators.Length(min=3)]
+        "รหัสผ่าน", validators=[validators.InputRequired(), validators.Length(min=3)]
     )
 
 
