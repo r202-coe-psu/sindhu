@@ -211,14 +211,20 @@ class Map:
 
         fill = custom_style.get("fill", self.ZONE_STYLE["fillColor"])
         stroke = custom_style.get("stroke") or fill or self.ZONE_STYLE["color"]
-        is_ref = zone.get("zone_kind") == "reference" or (
-            custom_style.get("role") == "reference_boundary"
-            or zone.get("code") == "hatyai-boundary"
+        is_ref = (
+            zone.get("zone_kind") == "reference"
+            or custom_style.get("role") == "reference_boundary"
+            or zone.get("code") in ("hatyai-boundary", "hatyai")
+            or (
+                zone.get("code")
+                and "hatyai" in str(zone.get("code")).lower()
+                and "zone" not in str(zone.get("code")).lower()
+            )
+            or zone.get("name") in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
+            or zone.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
         )
-        dash_array = "8, 6" if is_ref else custom_style.get("dashArray", "")
-        stroke_weight = (
-            3.0 if is_ref else max(float(custom_style.get("stroke-width", 2.5)), 2.5)
-        )
+        dash_array = custom_style.get("dashArray", "")
+        stroke_weight = max(float(custom_style.get("stroke-width", 2.5)), 2.5)
 
         zone_shading = custom_style.get("shading_mode") or getattr(
             self, "zone_shading_mode", "outline"
@@ -232,49 +238,26 @@ class Map:
         risk_val = level.get("risk", -1) if level else -1
 
         # Reference boundaries are geographic context, not a risk zone.
-        # Keep their configured dashed style and never recolour them.
+        # Keep them as a plain black outline without fill and never recolour them.
         if is_ref:
-            if custom_style:
-                if state == "hover":
-                    return {
-                        "fillColor": fill if is_shaded else stroke,
-                        "fillOpacity": (
-                            min(fill_opacity_normal + 0.15, 0.65) if is_shaded else 0.08
-                        ),
-                        "color": stroke,
-                        "weight": stroke_weight + 1.0,
-                        "opacity": 1.0,
-                        "dashArray": dash_array,
-                    }
-                elif state == "selected":
-                    return {
-                        "fillColor": fill if is_shaded else stroke,
-                        "fillOpacity": (
-                            min(fill_opacity_normal + 0.22, 0.70) if is_shaded else 0.12
-                        ),
-                        "color": stroke,
-                        "weight": stroke_weight + 1.5,
-                        "opacity": 1.0,
-                        "dashArray": dash_array,
-                    }
-                return {
-                    "fillColor": fill_color_normal,
-                    "fillOpacity": fill_opacity_normal,
-                    "color": stroke,
-                    "weight": stroke_weight,
-                    "opacity": 0.95,
-                    "dashArray": dash_array,
-                }
-            base = {
-                "normal": self.ZONE_STYLE,
-                "hover": self.ZONE_HOVER_STYLE,
-                "selected": self.ZONE_SELECTED_STYLE,
-            }[state]
-            style_copy = dict(base)
-            if is_shaded:
-                style_copy["fillColor"] = style_copy.get("fillColor", "#6366f1")
-                style_copy["fillOpacity"] = 0.25 if state == "normal" else 0.35
-            return style_copy
+            ref_color = (
+                custom_style.get("stroke")
+                or (
+                    custom_style.get("fill")
+                    if custom_style.get("fill") != "transparent"
+                    else None
+                )
+                or "#0f172a"
+            )
+            return {
+                "fillColor": "transparent",
+                "fillOpacity": 0.0,
+                "color": ref_color,
+                "weight": 2.0,
+                "opacity": 0.95,
+                "dashArray": "",
+                "interactive": False,
+            }
 
         # Zone colours follow the same risk scale as their stations.  A zone
         # gets the worst level among its member stations; no data is grey.
@@ -412,9 +395,18 @@ class Map:
                 "geometry": boundary,
             }
 
-            is_ref = zone.get("zone_kind") == "reference" or (
-                style.get("role") == "reference_boundary"
-                or zone.get("code") == "hatyai-boundary"
+            is_ref = (
+                zone.get("zone_kind") == "reference"
+                or style.get("role") == "reference_boundary"
+                or zone.get("code") in ("hatyai-boundary", "hatyai")
+                or (
+                    zone.get("code")
+                    and "hatyai" in str(zone.get("code")).lower()
+                    and "zone" not in str(zone.get("code")).lower()
+                )
+                or zone.get("name")
+                in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
+                or zone.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
             )
             if is_ref:
                 continue
@@ -495,12 +487,12 @@ class Map:
         ref_renderer = self.leaflet.svg({"pane": "reference_boundary"})
 
         ref_style = {
-            "fillColor": "#0f172a",
+            "fillColor": "transparent",
             "fillOpacity": 0.0,
             "color": "#0f172a",
-            "weight": 3,
-            "opacity": 0.85,
-            "dashArray": "8, 6",
+            "weight": 2.0,
+            "opacity": 0.95,
+            "dashArray": "",
             "interactive": False,
         }
         self.reference_boundary_layer = self.leaflet.geoJson(
