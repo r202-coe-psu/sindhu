@@ -570,7 +570,15 @@ class WaterMonitor(BaseMonitor):
             if (
                 zone.get("zone_kind") == "reference"
                 or meta.get("role") == "reference_boundary"
-                or zone.get("code") == "hatyai-boundary"
+                or zone.get("code") in ("hatyai-boundary", "hatyai")
+                or (
+                    zone.get("code")
+                    and "hatyai" in str(zone.get("code")).lower()
+                    and "zone" not in str(zone.get("code")).lower()
+                )
+                or zone.get("name")
+                in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
+                or zone.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
             ):
                 continue
             zone_id = str(zone.get("id", "") or "")
