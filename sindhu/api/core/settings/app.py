@@ -6,9 +6,16 @@ import urllib.parse
 
 from loguru import logger
 from pydantic import field_validator
+from pydantic_settings import SettingsConfigDict
 
 from sindhu.api.core.logging import InterceptHandler
 from sindhu.api.core.settings.base import BaseAppSettings
+from sindhu.config.provider_urls import (
+    DEFAULT_DWR_CCTV_BASE_URL,
+    DEFAULT_HATYAI_CCTV_BASE_URL,
+    DEFAULT_RID_CCTV_BASE_URL,
+    validate_allowed_api_base_url,
+)
 
 
 def sanitize_mongo_uri(uri: str) -> str:
@@ -79,11 +86,28 @@ class AppSettings(BaseAppSettings):
 
     ALLOWED_HOSTS: List[str] = ["*"]
 
+    # Keep provider endpoints configurable for proxy, mirror, and test setups.
+    HATYAI_CCTV_API_BASE_URL: str = DEFAULT_HATYAI_CCTV_BASE_URL
+    DWR_CCTV_API_BASE_URL: str = DEFAULT_DWR_CCTV_BASE_URL
+    RID_CCTV_API_BASE_URL: str = DEFAULT_RID_CCTV_BASE_URL
+
+    @field_validator(
+        "HATYAI_CCTV_API_BASE_URL",
+        "DWR_CCTV_API_BASE_URL",
+        "RID_CCTV_API_BASE_URL",
+    )
+    @classmethod
+    def validate_cctv_api_base_url(cls, value: str) -> str:
+        return validate_allowed_api_base_url(value, allow_custom_hosts=True)
+
     LOGGING_LEVEL: int = logging.INFO
     LOGGERS: Tuple[str, str] = ("uvicorn.asgi", "uvicorn.access")
 
-    class Config:
-        validate_assignment = True
+    model_config = SettingsConfigDict(
+        env_file=os.getenv("ENV_FILE", ".env"),
+        extra="allow",
+        validate_assignment=True,
+    )
 
     @property
     def fastapi_kwargs(self) -> Dict[str, Any]:

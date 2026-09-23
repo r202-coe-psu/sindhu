@@ -20,6 +20,12 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from sindhu.config.provider_urls import (
+    DEFAULT_DWR_CCTV_BASE_URL,
+    DEFAULT_HATYAI_CCTV_BASE_URL,
+    DEFAULT_RID_CCTV_BASE_URL,
+    validate_allowed_api_base_url,
+)
 from sindhu.services.cctv_catalog import (
     DWR_CAMERAS,
     DWR_REGISTRY_VERSION,
@@ -46,9 +52,9 @@ HATYAI_HOSTS = frozenset(
         "photo.hatyaicityclimate.org",
     }
 )
-HATYAI_CCTV_BASE_URL = "https://hatyaicityclimate.org"
-DWR_CCTV_BASE_URL = DWR_SOURCE_URL
-RID_CCTV_BASE_URL = RID_SOURCE_URL
+HATYAI_CCTV_BASE_URL = DEFAULT_HATYAI_CCTV_BASE_URL
+DWR_CCTV_BASE_URL = DEFAULT_DWR_CCTV_BASE_URL
+RID_CCTV_BASE_URL = DEFAULT_RID_CCTV_BASE_URL
 
 # Backwards compatibility aliases
 HATYAI_CCTV_API_BASE_URL = HATYAI_CCTV_BASE_URL
@@ -65,43 +71,7 @@ DWR_IMAGE_PATH = "/file/image/cctv"
 RID_IMAGE_PATH = "/CCTV/{station_code}/image.cgi"
 
 
-def normalize_provider_base_url(value: str) -> str:
-    """Validate and normalize an upstream provider base URL.
-
-    Provider bases are configuration, not user input, but rejecting
-    credentials and URL-delimiting components here prevents accidental
-    credential/query leakage when endpoint paths are joined at request time.
-    HTTP remains accepted for local proxies and the legacy RID CGI origin;
-    public Hatyai/DWR defaults are HTTPS.
-    """
-
-    if not isinstance(value, str):
-        raise ValueError("provider base URL must be a string")
-    raw = value.strip()
-    if not raw or len(raw) > 2048:
-        raise ValueError("provider base URL must be a non-empty URL")
-    if any(ord(char) < 33 for char in raw) or "\\" in raw:
-        raise ValueError("provider base URL contains invalid characters")
-    try:
-        parsed = urlsplit(raw)
-        hostname = parsed.hostname
-        parsed.port
-    except ValueError as error:
-        raise ValueError("provider base URL is malformed") from error
-    if (
-        parsed.scheme.lower() not in {"http", "https"}
-        or not hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise ValueError(
-            "provider base URL must be an absolute http(s) URL without credentials, query, or fragment"
-        )
-    return urlunsplit(
-        (parsed.scheme.lower(), parsed.netloc.lower(), parsed.path.rstrip("/"), "", "")
-    )
+normalize_provider_base_url = validate_allowed_api_base_url
 
 
 def _join_provider_url(base_url: str, path: str) -> str:
