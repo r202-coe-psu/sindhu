@@ -2,6 +2,8 @@ import datetime
 import json
 from urllib.parse import urlparse
 
+import httpx
+
 from flask import (
     Blueprint,
     render_template,
@@ -13,6 +15,7 @@ from flask import (
     send_file,
     abort,
     jsonify,
+    flash,
 )
 from flask_login import login_user, logout_user, login_required, current_user
 from ..models.users import User as WebUser
@@ -36,6 +39,10 @@ logger = logging.getLogger(__name__)
 
 
 module = Blueprint("accounts", __name__)
+
+BAD_CREDENTIALS_MESSAGE = "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"
+API_UNREACHABLE_MESSAGE = "ไม่สามารถเชื่อมต่อระบบได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง"
+LOGIN_FAILED_MESSAGE = "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"
 
 
 def safe_next_url(value):
@@ -153,6 +160,7 @@ def authorized_sindhu():
     form = forms.users.LoginForm()
     if not form.validate_on_submit():
         logger.error(f"Login failed: {form.errors}")
+        flash(BAD_CREDENTIALS_MESSAGE, "error")
         return redirect(url_for("accounts.login"))
 
     username = form.username.data
@@ -163,19 +171,35 @@ def authorized_sindhu():
             {"username": username, "password": password}
         )
         response = authentication_v1_auth_login_post.sync(client=client, body=body)
+    except httpx.TransportError as e:
+        # The API is unreachable (not running, wrong SINDHU_API_BASE_URL, network
+        # blocked); that is not the user's credentials, so say so separately.
+        logger.exception(f"Login failed, API unreachable: {e}")
+        flash(API_UNREACHABLE_MESSAGE, "error")
+        return redirect(url_for("accounts.login"))
     except Exception as e:
         logger.exception(f"Login failed: {e}")
+        flash(LOGIN_FAILED_MESSAGE, "error")
         return redirect(url_for("accounts.login"))
 
     if not response:
+        flash(BAD_CREDENTIALS_MESSAGE, "error")
         return redirect(url_for("accounts.login"))
 
     session["tokens"] = response.to_dict()
 
     client = sindhu_api_clients.client.get_current_client()
-    response = get_me_v1_users_me_get.sync(client=client)
+    try:
+        response = get_me_v1_users_me_get.sync(client=client)
+    except httpx.TransportError as e:
+        logger.exception(f"Login failed, API unreachable: {e}")
+        session.pop("tokens", None)
+        flash(API_UNREACHABLE_MESSAGE, "error")
+        return redirect(url_for("accounts.login"))
 
     if not response:
+        session.pop("tokens", None)
+        flash(LOGIN_FAILED_MESSAGE, "error")
         return redirect(url_for("accounts.login"))
 
     user = WebUser(response.to_dict())
