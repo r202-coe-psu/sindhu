@@ -1,5 +1,6 @@
 import datetime
 import importlib.util
+import sys
 import types
 import unittest
 from pathlib import Path
@@ -45,6 +46,36 @@ def _load_ui_module():
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
+
+
+def _load_map_module(browser=None):
+    map_path = (
+        Path(__file__).parents[2]
+        / "sindhu"
+        / "web"
+        / "static"
+        / "brython"
+        / "maps"
+        / "map.py"
+    )
+    brython_path = str(map_path.parents[1])
+    if browser is None:
+        browser = types.ModuleType("browser")
+        browser.alert = lambda *_args: None
+        browser.window = _DummyWindow()
+        browser.ajax = types.SimpleNamespace()
+        browser.document = _DummyDocument()
+        browser.aio = types.SimpleNamespace()
+
+    sys.path.insert(0, brython_path)
+    try:
+        with patch.dict("sys.modules", {"browser": browser}):
+            spec = importlib.util.spec_from_file_location("maps_map", map_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+    finally:
+        sys.path.remove(brython_path)
 
 
 ui = _load_ui_module()
@@ -113,16 +144,24 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         self.assertEqual(result[0]["upstream_id"], "0")
         self.assertEqual(result[-1]["upstream_id"], "49")
 
-    def test_displayable_camera_requires_online_status_and_an_image(self):
+    def test_displayable_camera_accepts_online_or_unknown_status_with_an_image(self):
         self.assertTrue(
             ui._is_displayable_camera(
                 {"availability": "online", "image_url": "https://images.test/live.jpg"}
             )
         )
+        self.assertTrue(
+            ui._is_displayable_camera(
+                {"availability": "unknown", "image_url": "https://images.test/live.jpg"}
+            )
+        )
         self.assertFalse(
             ui._is_displayable_camera({"availability": "online", "image_url": None})
         )
-        for status in ("stale", "degraded", "offline", "unknown"):
+        self.assertFalse(
+            ui._is_displayable_camera({"availability": "unknown", "image_url": None})
+        )
+        for status in ("stale", "degraded", "offline"):
             self.assertFalse(
                 ui._is_displayable_camera(
                     {"availability": status, "image_url": "https://images.test/old.jpg"}
@@ -327,6 +366,163 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         self.assertEqual(len(rendered_feeds), 1)
         self.assertEqual(rendered_feeds[0]["upstream_id"], "1")
         self.assertTrue(monitor._markers_initialized)
+
+    def test_map_show_visual_feeds_clears_markers_when_empty(self):
+        browser = types.ModuleType("browser")
+        browser.alert = lambda *_args: None
+        browser.window = _DummyWindow()
+        browser.ajax = types.SimpleNamespace()
+        browser.document = _DummyDocument()
+        browser.aio = types.SimpleNamespace()
+
+        map_module = _load_map_module(browser)
+        map_obj = map_module.Map.__new__(map_module.Map)
+        map_obj.map = types.SimpleNamespace(remove=lambda: None)
+        map_obj.leaflet = True
+        map_obj.visual_feeds = [{"id": 1}]
+        map_obj.visual_feed_markers_by_id = {"hatyai_1": "marker"}
+        rendered_layers = []
+        map_obj.set_visual_feed_layer = lambda markers: rendered_layers.append(markers)
+
+        map_obj.show_visual_feeds([])
+
+        self.assertEqual(map_obj.visual_feeds, [])
+        self.assertEqual(map_obj.visual_feed_markers_by_id, {})
+        self.assertEqual(rendered_layers, [[]])
+
+    def test_map_displays_unknown_camera_without_capture_timestamp(self):
+        map_module = _load_map_module()
+
+        class DummyMarker:
+            def bindTooltip(self, *_args):
+                return self
+
+        class DummyLeaflet:
+            @staticmethod
+            def divIcon(options):
+                return options
+
+            @staticmethod
+            def marker(*_args):
+                return DummyMarker()
+
+        map_obj = map_module.Map.__new__(map_module.Map)
+        map_obj.map = types.SimpleNamespace(remove=lambda: None)
+        map_obj.leaflet = DummyLeaflet()
+        map_obj.visual_feeds = []
+        map_obj.visual_feed_markers_by_id = {}
+        map_obj.find_matching_station = lambda _feed: None
+        map_obj.set_visual_feed_layer = lambda markers: setattr(
+            map_obj, "visual_feed_markers", markers
+        )
+
+        map_obj.show_visual_feeds(
+            [
+                {
+                    "source": "rid",
+                    "upstream_id": "without-time",
+                    "availability": "unknown",
+                    "coordinates": {"coordinates": [100.4, 7.0]},
+                }
+            ]
+        )
+
+        self.assertEqual(len(map_obj.visual_feed_markers), 1)
+        self.assertIn("rid_without-time", map_obj.visual_feed_markers_by_id)
+
+    def test_hide_unknown_cameras_toggle_filters_only_unknown_map_markers(self):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        monitor.latest_feeds = [
+            {
+                "source": "rid",
+                "upstream_id": "unknown",
+                "media_type": "cctv",
+                "availability": "unknown",
+                "image_url": "https://images.example.test/unknown.jpg",
+                "coordinates": {"type": "Point", "coordinates": [100.4, 7.0]},
+            },
+            {
+                "source": "rid",
+                "upstream_id": "online",
+                "media_type": "cctv",
+                "availability": "online",
+                "image_url": "https://images.example.test/online.jpg",
+                "coordinates": {"type": "Point", "coordinates": [100.5, 7.1]},
+            },
+            {
+                "source": "rid",
+                "upstream_id": "offline",
+                "media_type": "cctv",
+                "availability": "offline",
+                "image_url": "https://images.example.test/offline.jpg",
+                "coordinates": {"type": "Point", "coordinates": [100.6, 7.2]},
+            },
+        ]
+
+        class MockMap:
+            def __init__(self):
+                self.rendered_feeds = []
+
+            def show_visual_feeds(self, feeds, on_feed_click=None):
+                self.rendered_feeds = feeds
+
+        mock_map = MockMap()
+        monitor.map_owner = mock_map
+        hide_toggle = types.SimpleNamespace(checked=False)
+
+        def get_element(element_id):
+            if element_id == "hide_unknown_cctv_markers":
+                return hide_toggle
+            return None
+
+        with patch.object(ui.document, "getElementById", side_effect=get_element):
+            monitor.update_map_markers()
+            self.assertEqual(
+                [feed["upstream_id"] for feed in mock_map.rendered_feeds],
+                ["unknown", "online"],
+            )
+
+            hide_toggle.checked = True
+            monitor.update_map_markers()
+
+        self.assertEqual(
+            [feed["upstream_id"] for feed in mock_map.rendered_feeds], ["online"]
+        )
+
+    def test_unknown_camera_filter_is_disabled_when_cctv_layer_is_off(self):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        camera_toggle = types.SimpleNamespace(checked=False)
+        unknown_toggle = types.SimpleNamespace(checked=True, disabled=False)
+        state_classes = set()
+        state = types.SimpleNamespace(
+            textContent="",
+            classList=types.SimpleNamespace(
+                add=state_classes.add,
+                remove=state_classes.discard,
+            ),
+        )
+
+        def get_element(element_id):
+            if element_id == "toggle_cctv_markers":
+                return camera_toggle
+            if element_id == "hide_unknown_cctv_markers":
+                return unknown_toggle
+            if element_id == "cctv_visibility_state":
+                return state
+            return None
+
+        with patch.object(ui.document, "getElementById", side_effect=get_element):
+            monitor._sync_unknown_camera_filter()
+            self.assertTrue(unknown_toggle.disabled)
+            self.assertEqual(state.textContent, "ซ่อนบนแผนที่")
+            self.assertIn("cctv-map-state--hidden", state_classes)
+
+            camera_toggle.checked = True
+            monitor._sync_unknown_camera_filter()
+
+        self.assertFalse(unknown_toggle.disabled)
+        self.assertEqual(state.textContent, "แสดงบนแผนที่")
+        self.assertIn("cctv-map-state--visible", state_classes)
 
 
 if __name__ == "__main__":
