@@ -24,7 +24,6 @@ class WaterMonitor(BaseMonitor):
         source,
         center=None,
         zoom=None,
-        fallback_zone_urls=None,
         reference_boundary_url=None,
         rivers_url=None,
     ):
@@ -34,7 +33,6 @@ class WaterMonitor(BaseMonitor):
             source=source,
             center=center,
             zoom=zoom,
-            fallback_zone_urls=fallback_zone_urls,
             reference_boundary_url=reference_boundary_url,
             rivers_url=rivers_url,
         )
@@ -49,7 +47,9 @@ class WaterMonitor(BaseMonitor):
             return True
 
         metadata = station.get("metadata") or {}
-        station_type = metadata.get("station_type") if isinstance(metadata, dict) else None
+        station_type = (
+            metadata.get("station_type") if isinstance(metadata, dict) else None
+        )
         if not isinstance(station_type, str):
             return False
 
@@ -399,23 +399,23 @@ class WaterMonitor(BaseMonitor):
     def on_toggle_zones_layer(self, ev):
         checked = bool(ev.target.checked)
         self.map.set_zones_visible(checked)
-        for i in range(1, 5):
-            el_id = f"toggle_zone_{i}"
-            if el_id in document:
-                document[el_id].checked = checked
+        for zone in self.zones or []:
+            zid = str(zone.get("id") or "")
+            zcode = str(zone.get("code") or "")
+            for el_id in (f"toggle_zone_{zid}", f"toggle_zone_{zcode}"):
+                if el_id in document:
+                    document[el_id].checked = checked
 
-    def on_toggle_single_zone(self, zone_num, ev):
+    def on_toggle_single_zone(self, zone_key, ev):
         checked = bool(ev.target.checked)
-        self.map.set_zone_visible(str(zone_num), checked)
-        self.map.set_zone_visible(f"songkhla-zone-{zone_num}", checked)
-        self.map.set_zone_visible(f"prototype-zone-{zone_num}", checked)
-        all_checked = all(
-            document[f"toggle_zone_{i}"].checked
-            for i in range(1, 5)
-            if f"toggle_zone_{i}" in document
-        )
-        if "toggle_zones_layer" in document:
-            document["toggle_zones_layer"].checked = all_checked
+        self.map.set_zone_visible(str(zone_key), checked)
+        toggles = [
+            document[f"toggle_zone_{z.get('id')}"].checked
+            for z in (self.zones or [])
+            if z.get("id") and f"toggle_zone_{z.get('id')}" in document
+        ]
+        if "toggle_zones_layer" in document and toggles:
+            document["toggle_zones_layer"].checked = all(toggles)
 
     def on_toggle_boundary_layer(self, ev):
         self.map.set_reference_boundary_visible(bool(ev.target.checked))

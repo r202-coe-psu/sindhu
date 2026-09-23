@@ -412,16 +412,17 @@ class Map:
                 "geometry": boundary,
             }
 
-            stroke_color = (
-                style.get("stroke") or style.get("fill") or self.ZONE_STYLE["color"]
-            )
             is_ref = zone.get("zone_kind") == "reference" or (
                 style.get("role") == "reference_boundary"
                 or zone.get("code") == "hatyai-boundary"
             )
-            weight_val = (
-                3.0 if is_ref else max(float(style.get("stroke-width") or 2.5), 2.5)
+            if is_ref:
+                continue
+
+            stroke_color = (
+                style.get("stroke") or style.get("fill") or self.ZONE_STYLE["color"]
             )
+            weight_val = max(float(style.get("stroke-width") or 2.5), 2.5)
             dash_array = "8, 6" if is_ref else ""
 
             zone_shading = style.get("shading_mode") or getattr(
@@ -449,20 +450,19 @@ class Map:
                 {
                     "pane": "zones",
                     "renderer": zone_renderer,
-                    "interactive": not is_ref,
+                    "interactive": True,
                     "style": feature_style,
                 },
             )
-            if name and not is_ref:
+            if name:
                 layer.bindTooltip(
                     name,
                     {"sticky": True, "direction": "top", "className": "zone-label"},
                 )
 
-            if not is_ref:
-                layer.on("mouseover", self._make_zone_hover(zone_id, True))
-                layer.on("mouseout", self._make_zone_hover(zone_id, False))
-                layer.on("click", self._make_zone_click(zone_id, zone))
+            layer.on("mouseover", self._make_zone_hover(zone_id, True))
+            layer.on("mouseout", self._make_zone_hover(zone_id, False))
+            layer.on("click", self._make_zone_click(zone_id, zone))
             if self.zones_visible:
                 layer.addTo(self.map)
 
