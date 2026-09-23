@@ -3,7 +3,6 @@ import types
 import unittest
 from pathlib import Path
 
-
 BRYTHON_ROOT = (
     Path(__file__).resolve().parents[2] / "sindhu" / "web" / "static" / "brython"
 )
