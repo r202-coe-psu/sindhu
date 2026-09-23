@@ -146,7 +146,15 @@ class BaseMonitor:
             is_ref = (
                 z.get("zone_kind") == "reference"
                 or meta.get("role") == "reference_boundary"
-                or z.get("code") == "hatyai-boundary"
+                or z.get("code") in ("hatyai-boundary", "hatyai")
+                or (
+                    z.get("code")
+                    and "hatyai" in str(z.get("code")).lower()
+                    and "zone" not in str(z.get("code")).lower()
+                )
+                or z.get("name")
+                in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
+                or z.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
             )
             if is_ref:
                 continue
