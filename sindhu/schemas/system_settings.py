@@ -1,20 +1,38 @@
 import datetime
 
-from pydantic import BaseModel, EmailStr, Field
-from typing import List
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from typing import List, Optional
 from beanie import PydanticObjectId
 
 # from ..models import GeoObject
 from . import bases
 from . import tokens
+from sindhu.config.provider_urls import validate_allowed_api_base_url
 
 
 class BaseSystemSetting(BaseModel):
-    center: bases.GeoObject | None = None
-    interpolation_coordinate_1: bases.GeoObject | None = None
-    interpolation_coordinate_2: bases.GeoObject | None = None
-    zoom: int | None = None
-    min_zoom: int | None = None
+    model_config = ConfigDict(validate_assignment=True)
+
+    center: Optional[bases.GeoObject] = None
+    interpolation_coordinate_1: Optional[bases.GeoObject] = None
+    interpolation_coordinate_2: Optional[bases.GeoObject] = None
+    zoom: Optional[int] = None
+    min_zoom: Optional[int] = None
+    hatyai_cctv_api_base_url: Optional[str] = None
+    dwr_cctv_api_base_url: Optional[str] = None
+    rid_cctv_api_base_url: Optional[str] = None
+
+    @field_validator(
+        "hatyai_cctv_api_base_url",
+        "dwr_cctv_api_base_url",
+        "rid_cctv_api_base_url",
+        mode="before",
+    )
+    @classmethod
+    def validate_provider_base_urls(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return validate_allowed_api_base_url(value)
 
 
 class SystemSetting(BaseSystemSetting):

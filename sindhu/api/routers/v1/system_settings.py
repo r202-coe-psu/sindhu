@@ -62,7 +62,7 @@ async def update(
             detail="Not found system setting",
         )
 
-    data = system_setting.model_dump()
+    data = system_setting.model_dump(exclude_unset=True)
     await db_system_setting.update(Set(data))
 
     db_system_setting.updated_date = datetime.datetime.now()
