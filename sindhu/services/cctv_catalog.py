@@ -17,12 +17,16 @@ from typing import Any
 
 HATYAI_SOURCE = "hatyai_city_climate"
 DWR_SOURCE = "dwr"
+RID_SOURCE = "rid"
 
 HATYAI_REGISTRY_VERSION = "2026-09-05.v1"
 DWR_REGISTRY_VERSION = "2026-09-03.v1"
+RID_REGISTRY_VERSION = "2026-09-10.v1"
 
 HATYAI_SOURCE_URL = "https://hatyaicityclimate.org/flood/map/camera"
 DWR_SOURCE_URL = "https://telemetry.dwr.go.th/api"
+RID_SOURCE_URL = "http://119.110.213.190"
+RID_PUBLIC_SOURCE_URL = "https://telerid.rid.go.th"
 
 # Only the CCTV subset of the Mage registry is public in this release.  The
 # radar, satellite, and weather-map entries are deliberately not copied here.
@@ -272,6 +276,100 @@ DWR_CAMERAS: tuple[dict[str, Any], ...] = (
     },
 )
 
+# RID does not publish capture timestamps for its CGI snapshots.  The API
+# serves these through our same-origin snapshot route, never directly to a
+# browser, so the legacy HTTP origin cannot become mixed-content in the UI.
+RID_CAMERAS: tuple[dict[str, Any], ...] = (
+    {
+        "upstream_id": "STN04",
+        "slug": "stn04",
+        "title_th": "บ้านหาดใหญ่ใน (X.44)",
+        "code": "STN04",
+        "coverage_group": "hatyai_city",
+        "coordinates": {"type": "Point", "coordinates": [100.456, 7.00055]},
+    },
+    {
+        "upstream_id": "STN07",
+        "slug": "stn07",
+        "title_th": "คลองหวะ บ้านควนจง",
+        "code": "STN07",
+        "coverage_group": "hatyai_upstream",
+        "coordinates": {"type": "Point", "coordinates": [100.515802, 6.970131]},
+    },
+    {
+        "upstream_id": "STN08",
+        "slug": "stn08",
+        "title_th": "คลองหอยโข่ง",
+        "code": "STN08",
+        "coverage_group": "hatyai_upstream",
+        "coordinates": {"type": "Point", "coordinates": [100.357, 6.831]},
+    },
+    {
+        "upstream_id": "STN09",
+        "slug": "stn09",
+        "title_th": "บ้านม่วงก็อง (X.173A)",
+        "code": "STN09",
+        "coverage_group": "hatyai_upstream",
+        "coordinates": {"type": "Point", "coordinates": [100.438228, 6.823349]},
+    },
+    {
+        "upstream_id": "TSL24",
+        "slug": "tsl24",
+        "title_th": "ปตร.อู่ตะเภา",
+        "code": "TSL24",
+        "coverage_group": "hatyai_city",
+        "coordinates": {"type": "Point", "coordinates": [100.462279, 6.9878584]},
+    },
+    {
+        "upstream_id": "TSL27",
+        "slug": "tsl27",
+        "title_th": "ปตร.คลอง 1ซ-ร1",
+        "code": "TSL27",
+        "coverage_group": "hatyai_city",
+        "coordinates": {"type": "Point", "coordinates": [100.442, 7.00863]},
+    },
+    {
+        "upstream_id": "TSL28",
+        "slug": "tsl28",
+        "title_th": "ปตร.ท่าช้าง-บางกล่ำ",
+        "code": "TSL28",
+        "coverage_group": "hatyai_city",
+        "coordinates": {"type": "Point", "coordinates": [100.439, 7.03359]},
+    },
+    {
+        "upstream_id": "TSL30",
+        "slug": "tsl30",
+        "title_th": "คลองหลา",
+        "code": "TSL30",
+        "coverage_group": "hatyai_upstream",
+        "coordinates": {"type": "Point", "coordinates": [100.327591, 6.864742]},
+    },
+    {
+        "upstream_id": "TSL31",
+        "slug": "tsl31",
+        "title_th": "คลองหอยโข่ง (จำไหร)",
+        "code": "TSL31",
+        "coverage_group": "hatyai_upstream",
+        "coordinates": {"type": "Point", "coordinates": [100.334673, 6.833964]},
+    },
+    {
+        "upstream_id": "TSL39",
+        "slug": "tsl39",
+        "title_th": "คลองหวะตอนบน",
+        "code": "TSL39",
+        "coverage_group": "hatyai_upstream",
+        "coordinates": {"type": "Point", "coordinates": [100.558293, 6.969361583]},
+    },
+    {
+        "upstream_id": "TSL40",
+        "slug": "tsl40",
+        "title_th": "คลองหวะตอนล่าง",
+        "code": "TSL40",
+        "coverage_group": "hatyai_city",
+        "coordinates": {"type": "Point", "coordinates": [100.474121, 6.987276]},
+    },
+)
+
 
 # Provider location values checked 2026-09-05 against BOTH cameraId and name.
 # Input order is latitude, longitude; public GeoJSON reverses that order.
@@ -327,6 +425,27 @@ for _camera in HATYAI_CAMERAS:
         }
     )
 
+for _camera in RID_CAMERAS:
+    _camera.update(
+        {
+            "coordinate_status": "verified",
+            "coordinate_provenance": {
+                "source": "RID public station detail page",
+                "method": (
+                    f"GET /rid/stations.php?IdCode=08:{_camera['code']}; "
+                    "latitude/longitude station fields"
+                ),
+                "effective_date": "2026-09-10",
+                "registry_version": RID_REGISTRY_VERSION,
+                # The legacy CGI origin is HTTP-only.  Keep it in the adapter
+                # configuration, while public provenance points at RID's HTTPS
+                # portal so the browser never receives mixed-content URLs.
+                "evidence_url": RID_PUBLIC_SOURCE_URL,
+                "reference_url": RID_PUBLIC_SOURCE_URL,
+            },
+        }
+    )
+
 
 def _normalise_id(value: Any) -> str:
     return str(value).strip().lower()
@@ -335,6 +454,7 @@ def _normalise_id(value: Any) -> str:
 _CAMERAS_BY_SOURCE: dict[str, tuple[dict[str, Any], ...]] = {
     HATYAI_SOURCE: HATYAI_CAMERAS,
     DWR_SOURCE: DWR_CAMERAS,
+    RID_SOURCE: RID_CAMERAS,
 }
 
 
@@ -357,5 +477,10 @@ __all__ = [
     "HATYAI_REGISTRY_VERSION",
     "HATYAI_SOURCE",
     "HATYAI_SOURCE_URL",
+    "RID_CAMERAS",
+    "RID_REGISTRY_VERSION",
+    "RID_SOURCE",
+    "RID_SOURCE_URL",
+    "RID_PUBLIC_SOURCE_URL",
     "get_camera",
 ]

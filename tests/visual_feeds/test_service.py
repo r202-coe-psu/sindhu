@@ -86,7 +86,7 @@ class VisualFeedServiceTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(feeds), 1)
             self.assertEqual(health["dwr"].error, "source_unavailable")
             self.assertNotIn("password", str(health))
-            self.assertEqual(len(self.cache.calls), 2)
+            self.assertEqual(len(self.cache.calls), 3)
             self.assertEqual(
                 self.cache.calls[0][0],
                 f"sindhu:cctv:v1:latest:hatyai_city_climate:{service.HATYAI_REGISTRY_VERSION}:r{self.viewer._source_config_revision}",

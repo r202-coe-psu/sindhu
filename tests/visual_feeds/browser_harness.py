@@ -56,6 +56,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(router, prefix="/v1")
 app.mount("/runtime", StaticFiles(directory=Path(brython.__file__).parent / "data"))
 app.mount("/static/brython", StaticFiles(directory=REPO / "sindhu/web/static/brython"))
+app.mount("/assets", StaticFiles(directory=REPO / "sindhu/web/static"))
 
 
 @app.get("/_test/state")
@@ -72,6 +73,11 @@ def set_state(values: dict):
 @app.get("/", response_class=HTMLResponse)
 def page():
     source = (REPO / "sindhu/web/templates/sites/monitor.html").read_text()
+    additional_head = re.search(
+        r"{% block additional_head %}(.*?){% endblock additional_head %}",
+        source,
+        re.S,
+    )[1]
     content = re.search(
         r"{% block content %}(.*?){% endblock content %}", source, re.S
     )[1]
@@ -80,8 +86,12 @@ def page():
     rendered = Environment().from_string(content).render()
     return (
         """<!doctype html><html><head><meta charset="utf-8">
+    <link rel="stylesheet" href="/assets/css/app.css">
     <style>.hidden{display:none!important} img{max-width:320px}dialog{max-width:800px}
     #loading_map{display:none} .visual-feed-card{border:1px solid #ddd;margin:8px}</style>
+    """
+        + Environment().from_string(additional_head).render()
+        + """
     <script src="/runtime/brython.js"></script>
     <script src="/runtime/brython_stdlib.js"></script>
     <script src="/static/brython/visual_feeds.brython.js"></script>

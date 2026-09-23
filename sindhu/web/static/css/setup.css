@@ -107,3 +107,580 @@
   --depth: 1;
   --noise: 0;
 }
+
+/* CCTV monitoring page styles (scoped) */
+.monitor-page { overflow-x: clip; }
+@scope (.monitor-page) {
+/* CCTV Monitoring Panel & Historical Feed Modal — Light Minimalist Theme */
+    :scope {
+        --cctv-paper: oklch(98% 0.008 82);
+        --cctv-paper-raised: oklch(96% 0.012 82);
+        --cctv-ink: oklch(23% 0.035 255);
+        --cctv-muted: oklch(44% 0.025 255);
+        --cctv-rule: oklch(85% 0.018 82);
+        --cctv-accent: oklch(48% 0.14 256);
+        --cctv-accent-ink: oklch(98% 0.008 82);
+        --cctv-focus: oklch(56% 0.19 250);
+        --cctv-online: oklch(57% 0.16 151);
+        --cctv-unavailable: oklch(56% 0.025 255);
+        --cctv-error: oklch(55% 0.2 28);
+        --cctv-shadow: oklch(18% 0.025 255 / 0.18);
+        --cctv-overlay: oklch(18% 0.025 255 / 0.7);
+        --cctv-radius-sm: 0.75rem;
+        --cctv-radius-md: 1rem;
+        --cctv-radius-lg: 1.5rem;
+        --cctv-control-size: 2.75rem;
+        --cctv-space-xs: 0.5rem;
+        --cctv-space-sm: 0.75rem;
+        --cctv-space-md: 1rem;
+        --cctv-space-lg: 1.5rem;
+        --cctv-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+        --cctv-ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+        --cctv-dur-micro: 120ms;
+        --cctv-dur-short: 220ms;
+        --cctv-dur-long: 300ms;
+    }
+.zone-label {
+        background: rgba(37, 99, 235, 0.85) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 6px !important;
+        padding: 4px 10px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+    }
+
+    .zone-label::before {
+        display: none !important;
+    }
+
+    /* Visual Feed & Camera styles */
+    .visual-feed-card {
+        /* Keep camera rows painted inside the scrollable panel.  The previous
+           content-visibility optimization made Chromium show only thin
+           placeholder lines until the panel was scrolled. */
+        content-visibility: visible !important;
+        contain: none !important;
+        min-height: 200px;
+        height: max-content;
+    }
+
+    #visual_feed_cards {
+        grid-auto-rows: max-content;
+        align-content: start;
+    }
+
+    .visual-feed-media {
+        flex: 0 0 auto;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+    }
+
+    .visual-feed-card img {
+        aspect-ratio: 16 / 9;
+        object-fit: cover;
+        background: var(--cctv-ink);
+    }
+
+    .monitor-data-panel {
+        background: var(--cctv-paper);
+        border-color: var(--cctv-rule);
+        box-shadow: 0 1rem 2.5rem var(--cctv-shadow);
+    }
+
+    .monitor-panel-header {
+        position: relative;
+        overflow: hidden;
+        background: var(--cctv-ink);
+        color: var(--cctv-accent-ink);
+    }
+
+    .monitor-panel-header::after {
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: 0;
+        width: 0.25rem;
+        background: var(--cctv-focus);
+        content: "";
+    }
+
+    .cctv-filter-input:focus-visible,
+    .cctv-filter-select:focus-visible {
+        border-color: var(--cctv-focus);
+        outline: 2px solid var(--cctv-focus);
+        outline-offset: 1px;
+    }
+
+    #cctv_map_options > summary::-webkit-details-marker { display: none; }
+    #cctv_map_options[open] .cctv-options-caret { transform: rotate(180deg); }
+    .cctv-map-state--visible { color: #0369a1; background: #f0f9ff; }
+    .cctv-map-state--hidden { color: #4b5563; background: #f3f4f6; }
+
+    .cctv-list-item {
+        border-color: var(--cctv-rule);
+        transition: border-color var(--cctv-dur-micro) ease,
+                    background-color var(--cctv-dur-micro) ease;
+    }
+
+    .cctv-list-item:focus-within { border-color: var(--cctv-focus); }
+
+    .cctv-status {
+        color: var(--cctv-accent-ink);
+    }
+
+    .cctv-status--online { background: var(--cctv-online); }
+    .cctv-status--unavailable { background: var(--cctv-unavailable); }
+
+    .cctv-time { font-variant-numeric: tabular-nums; }
+
+    .visual-feed-card[data-availability="offline"],
+    .visual-feed-card[data-availability="stale"] {
+        opacity: 0.92;
+    }
+
+    #visual_feed_detail_dialog::backdrop {
+        background: var(--cctv-overlay);
+    }
+
+    #visual_feed_detail_dialog {
+        position: fixed;
+        inset: 0;
+        width: min(calc(100% - 2rem), 34rem);
+        max-width: none;
+        max-height: min(76dvh, 34rem);
+        margin: auto;
+        padding: 0;
+        border: 0;
+        border-radius: 1.5rem;
+        background: transparent;
+        color: #0f172a;
+    }
+
+    #visual_feed_detail_dialog[open] .cctv-modal-shell {
+        animation: cctv-modal-enter var(--cctv-dur-long) var(--cctv-ease-out) both;
+    }
+
+    .cctv-modal-shell {
+        width: 100%;
+        max-height: min(76dvh, 34rem);
+        overflow-y: auto;
+        border: 1px solid #e2e8f0;
+        border-radius: 1.5rem;
+        background: #ffffff;
+        box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(15, 23, 42, 0.05);
+        color: #0f172a;
+    }
+
+    .cctv-history-viewport {
+        position: relative;
+        overflow: hidden;
+        border-radius: 1rem;
+        background: #f1f5f9;
+        touch-action: pan-y;
+    }
+
+    .cctv-history-frame .is-entering {
+        animation: cctv-frame-enter var(--cctv-dur-short) var(--cctv-ease-out) both;
+    }
+
+    .cctv-history-nav {
+        position: absolute;
+        inset-block-start: 50%;
+        z-index: 10;
+        display: grid;
+        width: 2.75rem;
+        height: 2.75rem;
+        place-items: center;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        color: #1e293b;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+        transform: translateY(-50%);
+        cursor: pointer;
+        transition: all 0.15s ease-out;
+    }
+
+    .cctv-history-nav:hover {
+        background: #ffffff;
+        color: #0284c7;
+        transform: translateY(-50%) scale(1.08);
+        border-color: #38bdf8;
+        box-shadow: 0 4px 16px rgba(2, 132, 199, 0.25);
+    }
+
+    .cctv-history-nav--previous { inset-inline-start: var(--cctv-space-sm); }
+    .cctv-history-nav--next { inset-inline-end: var(--cctv-space-sm); }
+    .cctv-history-nav.hidden { display: none; }
+
+    .cctv-history-nav:focus-visible,
+    .cctv-modal-action:focus-visible,
+    #visual_feed_history_date:focus-visible,
+    #visual_feed_detail_close:focus-visible {
+        outline: 2px solid var(--cctv-focus);
+        outline-offset: 2px;
+    }
+
+    .cctv-history-nav:active,
+    .cctv-modal-action:active {
+        transform: translateY(calc(-50% + 1px));
+    }
+
+    .cctv-modal-action:active { transform: translateY(1px); }
+
+    .cctv-history-nav:disabled,
+    .cctv-modal-action:disabled,
+    #visual_feed_history_date:disabled {
+        cursor: not-allowed;
+        opacity: 0.5;
+    }
+
+    .cctv-history-nav[data-state="loading"],
+    .cctv-modal-action[data-state="loading"],
+    #visual_feed_history_date[data-state="loading"] {
+        cursor: progress;
+        opacity: 0.7;
+    }
+
+    .cctv-history-nav[data-state="error"],
+    .cctv-modal-action[data-state="error"],
+    #visual_feed_history_date[data-state="error"] {
+        border-color: var(--cctv-error);
+    }
+
+    .cctv-history-nav[data-state="success"],
+    .cctv-modal-action[data-state="success"],
+    #visual_feed_history_date[data-state="success"] {
+        border-color: var(--cctv-online);
+    }
+
+    .cctv-history-counter {
+        color: var(--cctv-muted);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .cctv-modal-action,
+    #visual_feed_history_date,
+    #visual_feed_detail_close {
+        min-height: var(--cctv-control-size);
+    }
+
+    #visual_feed_detail_close { min-width: var(--cctv-control-size); }
+
+    @media (hover: hover) and (pointer: fine) {
+        .cctv-list-item:hover { background: var(--cctv-paper-raised); }
+
+        .cctv-history-nav:hover {
+            background: var(--cctv-accent);
+            color: var(--cctv-accent-ink);
+        }
+
+        .cctv-modal-action:hover { background: var(--cctv-paper-raised); }
+    }
+
+    @keyframes cctv-modal-enter {
+        from { opacity: 0; transform: scale(0.97); }
+        to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes cctv-frame-enter {
+        from { opacity: 0; transform: translateX(0.5rem); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+
+    #visual_feed_detail_dialog {
+        width: calc(100% - 1rem);
+        max-height: calc(100dvh - 1rem);
+    }
+
+    .cctv-modal-shell { max-height: calc(100dvh - 1rem); }
+    .cctv-history-nav--previous { inset-inline-start: var(--cctv-space-xs); }
+    .cctv-history-nav--next { inset-inline-end: var(--cctv-space-xs); }
+
+    @media (min-width: 40rem) {
+        #visual_feed_detail_dialog {
+            width: min(calc(100% - 2rem), 34rem);
+            max-height: min(76dvh, 34rem);
+        }
+
+        .cctv-modal-shell { max-height: min(76dvh, 34rem); }
+        .cctv-history-nav--previous { inset-inline-start: var(--cctv-space-sm); }
+        .cctv-history-nav--next { inset-inline-end: var(--cctv-space-sm); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        #visual_feed_detail_dialog[open] .cctv-modal-shell,
+        .cctv-history-frame.is-entering {
+            animation-duration: 150ms;
+            animation-name: cctv-fade-only;
+        }
+
+        .cctv-history-nav,
+        .cctv-modal-action,
+        .cctv-list-item { transition-duration: 0ms; }
+
+        .cctv-live-glow,
+        .cctv-status--online > span:first-child { animation: none !important; }
+    }
+
+    @keyframes cctv-fade-only {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    .visual-feed-tab[aria-selected="true"] {
+        color: var(--cctv-accent);
+        background: var(--cctv-paper);
+        box-shadow: 0 1px 3px var(--cctv-shadow);
+        font-weight: 700;
+    }
+
+    .active-view-btn {
+        background-color: #ffffff !important;
+        color: #2563eb !important;
+        border-color: #cbd5e1 !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+        font-weight: 700 !important;
+    }
+
+    .custom-cctv-pin {
+        background: transparent !important;
+        border: none !important;
+    }
+
+    .custom-cctv-pin:focus {
+        outline: none !important;
+    }
+
+    @keyframes cctv-pulse {
+        0% {
+            transform: scale(0.95);
+            box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
+        }
+        70% {
+            transform: scale(1);
+            box-shadow: 0 0 0 8px rgba(22, 163, 74, 0);
+        }
+        100% {
+            transform: scale(0.95);
+            box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+        }
+    }
+
+    .cctv-live-glow {
+        animation: cctv-pulse 2s infinite;
+    }
+
+    /* Modern Light Clean CCTV Map Popup Styling */
+    .cctv-luxury-popup .leaflet-popup-content-wrapper {
+        padding: 0 !important;
+        border-radius: 1.25rem !important;
+        overflow: hidden !important;
+        background: #ffffff !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: 0 20px 35px -10px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(15, 23, 42, 0.05) !important;
+        max-width: calc(100vw - 24px) !important;
+    }
+    .cctv-luxury-popup .leaflet-popup-content {
+        margin: 0 !important;
+        line-height: inherit !important;
+        width: min(330px, calc(100vw - 28px)) !important;
+        max-width: calc(100vw - 28px) !important;
+    }
+    .cctv-popup-days-rail::-webkit-scrollbar {
+        display: none;
+    }
+    .cctv-popup-days-rail,
+    #visual_feed_7days_rail {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x;
+        scroll-snap-type: x proximity;
+    }
+    .cctv-popup-day-btn {
+        scroll-snap-align: start;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .cctv-day-card {
+        scroll-snap-align: center;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .touch-manipulation {
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .cctv-luxury-popup .leaflet-popup-tip-container {
+        display: none !important;
+    }
+    .cctv-luxury-popup .leaflet-popup-close-button {
+        top: 8px !important;
+        right: 8px !important;
+        color: #64748b !important;
+        background: #f1f5f9 !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 9999px !important;
+        width: 28px !important;
+        height: 28px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+        padding: 0 !important;
+        z-index: 40 !important;
+        transition: all 0.15s ease !important;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .cctv-luxury-popup .leaflet-popup-close-button:hover,
+    .cctv-luxury-popup .leaflet-popup-close-button:active {
+        color: #0f172a !important;
+        background: #e2e8f0 !important;
+        transform: scale(1.08) !important;
+    }
+
+    @media (max-width: 640px) {
+        .cctv-luxury-popup .leaflet-popup-content {
+            width: min(315px, calc(100vw - 24px)) !important;
+            max-width: calc(100vw - 24px) !important;
+        }
+        #visual_feed_detail_dialog {
+            width: calc(100% - 1rem) !important;
+            max-height: calc(100dvh - 1.5rem) !important;
+        }
+        .cctv-modal-shell {
+            padding: 0.875rem !important;
+            border-radius: 1.25rem !important;
+            max-height: calc(100dvh - 1.5rem) !important;
+        }
+        .cctv-history-nav {
+            width: 2.25rem !important;
+            height: 2.25rem !important;
+        }
+        .cctv-period-pill {
+            min-width: 44px !important;
+            padding: 0.375rem 0.25rem !important;
+            font-size: 11px !important;
+        }
+        .cctv-day-card {
+            min-width: 4.25rem;
+        }
+    }
+
+    @media (pointer: coarse) {
+        .cctv-luxury-slider::-webkit-slider-thumb {
+            width: 22px !important;
+            height: 22px !important;
+        }
+        .cctv-luxury-slider::-moz-range-thumb {
+            width: 22px !important;
+            height: 22px !important;
+        }
+    }
+
+    /* Modern Light Timeline Slider Track & Thumb */
+    .cctv-luxury-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 6px;
+        border-radius: 9999px;
+        background: linear-gradient(
+            to right,
+            #e2e8f0 0%,
+            #bae6fd 30%,
+            #38bdf8 60%,
+            #0284c7 85%,
+            #10b981 100%
+        );
+        outline: none;
+        cursor: pointer;
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+        transition: opacity 0.2s;
+    }
+
+    .cctv-luxury-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #ffffff;
+        border: 2.5px solid #0284c7;
+        box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35), 0 1px 2px rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .cctv-luxury-slider::-webkit-slider-thumb:hover,
+    .cctv-luxury-slider:active::-webkit-slider-thumb {
+        transform: scale(1.25);
+        box-shadow: 0 0 12px rgba(2, 132, 199, 0.5), 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    .cctv-luxury-slider::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #ffffff;
+        border: 2.5px solid #0284c7;
+        box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35), 0 1px 2px rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .cctv-luxury-slider::-moz-range-thumb:hover,
+    .cctv-luxury-slider:active::-moz-range-thumb {
+        transform: scale(1.25);
+        box-shadow: 0 0 12px rgba(2, 132, 199, 0.5), 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Minimalist Period Hour Chips - Modern Light Clean */
+    .cctv-period-pill {
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        color: #475569;
+        transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        cursor: pointer;
+    }
+    .cctv-period-pill:hover {
+        border-color: #93c5fd;
+        background: #f8fafc;
+        color: #0f172a;
+        transform: translateY(-1px);
+    }
+    .cctv-period-pill.is-active {
+        background: #e0f2fe !important;
+        color: #0284c7 !important;
+        border-color: #38bdf8 !important;
+        box-shadow: 0 2px 6px rgba(2, 132, 199, 0.15) !important;
+        font-weight: 700 !important;
+    }
+
+    /* 7-Day Slide Rail & Cards - Modern Light Clean */
+    .cctv-day-card {
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        color: #475569;
+        transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        cursor: pointer;
+    }
+    .cctv-day-card:hover {
+        border-color: #93c5fd;
+        background: #f8fafc;
+        color: #0f172a;
+        transform: translateY(-1px);
+    }
+    .cctv-day-card.is-active {
+        background: #e0f2fe !important;
+        color: #0284c7 !important;
+        border-color: #38bdf8 !important;
+        box-shadow: 0 2px 6px rgba(2, 132, 199, 0.18) !important;
+        font-weight: 700 !important;
+    }
+}

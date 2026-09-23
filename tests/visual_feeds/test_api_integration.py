@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from sindhu import models
 from sindhu.api.routers.v1.visual_feeds import router
 from sindhu.services import visual_feeds
-from sindhu.services.cctv_catalog import HATYAI_CAMERAS
+from sindhu.services.cctv_catalog import HATYAI_CAMERAS, RID_CAMERAS
 
 DWR_IDS = [
     "0e976e02-8381-4f6e-988a-81ecbed96fb9",
@@ -102,6 +102,10 @@ def upstream_handler(request, *, history_date=None, source_failure=None):
             content=b"\xff\xd8\xff\xe0" + b"fixture" + b"\xff\xd9",
             headers={"content-type": "image/jpeg"},
         )
+    if path.startswith("/CCTV/") and path.endswith("/image.cgi"):
+        code = path.split("/")[2]
+        if code in {camera["code"] for camera in RID_CAMERAS}:
+            return httpx.Response(200, content=b"GIF89a" + b"fixture")
     return httpx.Response(404)
 
 
@@ -110,7 +114,7 @@ class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
         response = await self.api.get("/v1/visual-feeds?has_coordinates=true")
         self.assertEqual(response.status_code, 200, response.text)
         feeds = response.json()["visual_feeds"]
-        self.assertEqual(len(feeds), 29)
+        self.assertEqual(len(feeds), 40)
         for feed in feeds:
             longitude, latitude = feed["coordinates"]["coordinates"]
             self.assertTrue(100 < longitude < 101)
@@ -165,7 +169,7 @@ class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.headers["cache-control"], "no-store")
         payload = response.json()
-        self.assertEqual(payload["count"], 30)
+        self.assertEqual(payload["count"], 41)
         self.assertEqual({f["media_type"] for f in payload["visual_feeds"]}, {"cctv"})
         for banned in (
             "fixture-secret",
@@ -199,13 +203,16 @@ class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
         self.failure = "dwr"
         r = await self.api.get("/v1/visual-feeds")
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json()["count"], 28)
+        self.assertEqual(r.json()["count"], 39)
         self.assertEqual(
             r.json()["source_health"]["dwr"]["error"], "source_unavailable"
         )
         self.failure = "all"
         r = await self.api.get("/v1/visual-feeds")
-        self.assertEqual(r.status_code, 503)
+        # RID's curated registry is local metadata and remains available even
+        # when both live Hatyai/DWR catalogs fail.
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["count"], 11)
 
     async def test_unknown_id_and_unsupported_history_no_fetch(self):
         for path, expected in [
@@ -226,3 +233,11 @@ class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
         again = await self.api.get(url, headers={"if-none-match": r.headers["etag"]})
         self.assertEqual(again.status_code, 304)
         self.assertEqual(again.content, b"")
+
+    async def test_rid_snapshot_etag_and_content_type(self):
+        url = "/v1/visual-feeds/rid/STN04/snapshot"
+        r = await self.api.get(url)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.headers["content-type"], "image/gif")
+        again = await self.api.get(url, headers={"if-none-match": r.headers["etag"]})
+        self.assertEqual(again.status_code, 304)

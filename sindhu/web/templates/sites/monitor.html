@@ -1,96 +1,11 @@
 {% extends '/base/default_page.html' %}
 
-{% block additional_head %}
-<style>
-    .zone-label {
-        background: rgba(37, 99, 235, 0.85) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 6px !important;
-        padding: 4px 10px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
-    }
-
-    .zone-label::before {
-        display: none !important;
-    }
-
-    {# Visual Feed & Camera styles #}
-    .visual-feed-card {
-        /* Keep camera rows painted inside the scrollable panel.  The previous
-           content-visibility optimization made Chromium show only thin
-           placeholder lines until the panel was scrolled. */
-        content-visibility: visible !important;
-        contain: none !important;
-        min-height: 200px;
-    }
-
-    .visual-feed-card img {
-        aspect-ratio: 16 / 9;
-        object-fit: cover;
-        background: #0f172a;
-    }
-
-    .visual-feed-card[data-availability="offline"],
-    .visual-feed-card[data-availability="stale"] {
-        opacity: 0.92;
-    }
-
-    #visual_feed_detail_dialog::backdrop {
-        background: rgba(15, 23, 42, 0.65);
-        backdrop-filter: blur(4px);
-    }
-
-    .visual-feed-tab[aria-selected="true"] {
-        color: var(--color-brand-700);
-        background: #ffffff;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        font-weight: 700;
-    }
-
-    .active-view-btn {
-        background-color: #ffffff !important;
-        color: var(--color-brand-700) !important;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
-        font-weight: 700 !important;
-    }
-
-    .custom-cctv-pin {
-        background: transparent !important;
-        border: none !important;
-    }
-
-    .custom-cctv-pin:focus {
-        outline: none !important;
-    }
-
-    @keyframes cctv-pulse {
-        0% {
-            transform: scale(0.95);
-            box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
-        }
-        70% {
-            transform: scale(1);
-            box-shadow: 0 0 0 8px rgba(22, 163, 74, 0);
-        }
-        100% {
-            transform: scale(0.95);
-            box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
-        }
-    }
-
-    .cctv-live-glow {
-        animation: cctv-pulse 2s infinite;
-    }
-</style>
-{% endblock additional_head %}
 {% include 'base/map_header.html' %}
 {% block content %}
+<main class="monitor-page">
 <div class="flex flex-wrap items-center gap-3 w-full mb-1">
     <a id="my_locate"
-        class="btn btn-ghost border border-ink-300 rounded-xl flex-1 sm:flex-none flex items-center justify-center gap-2 cursor-pointer transition-all hover:border-primary hover:text-primary">
+        class="btn btn-ghost border border-slate-300 rounded-xl flex-1 sm:flex-none flex items-center justify-center gap-2 cursor-pointer transition-colors hover:border-primary hover:text-primary">
         <i class="ph ph-map-pin text-xl font-bold"></i>
         <span class="font-semibold text-sm">ใช้ตำแหน่งปัจจุบันของฉัน</span>
     </a>
@@ -98,25 +13,25 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     {# Map Section (Left) #}
     <div class="lg:col-span-2">
-        <div class="bg-white rounded-2xl shadow-lg border border-ink-100 overflow-hidden relative"
-            style="height: 600px;">
+        <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden relative h-[600px]">
             <div id="loading_map" role="status" aria-live="polite"
-                class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-ink-50/80 backdrop-blur-sm transition-opacity duration-300">
-                <div class="flex flex-col items-center p-4 text-center max-w-xs">
-                    <div id="loading_map_spinner" class="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin">
+                class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-gray-50/80 backdrop-blur-sm transition-opacity duration-300">
+                <div class="flex flex-col items-center">
+                    <div id="loading_map_spinner" class="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin">
                     </div>
-                    <span id="loading_map_message" class="mt-3 text-sm font-medium text-ink-600 animate-pulse">กำลังโหลดแผนที่...</span>
-                    <button id="retry_map_loading" type="button" class="hidden mt-3 px-4 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg shadow-sm transition">
-                        ลองใหม่อีกครั้ง
+                    <span id="loading_map_message" class="mt-3 text-sm font-medium text-gray-600 animate-pulse">กำลังโหลดแผนที่...</span>
+                    <button id="retry_map_loading" type="button"
+                        class="hidden mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+                        ลองใหม่
                     </button>
                 </div>
             </div>
-            <div id="mapid" style="z-index:1; height: 100%; width:100%;"></div>
+            <div id="mapid" class="z-[1] h-full w-full"></div>
 
             <div id="pin_hint_banner"
-                class="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-white/90 backdrop-blur-sm border border-ink-200 shadow-md rounded-full px-4 py-1.5 pointer-events-none hidden">
-                <span class="text-xs text-ink-600 flex items-center gap-1.5">
-                    <i class="ph-fill ph-map-pin text-brand-600"></i>
+                class="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-white/90 backdrop-blur-sm border border-gray-200 shadow-md rounded-full px-4 py-1.5 pointer-events-none hidden">
+                <span class="text-xs text-gray-600 flex items-center gap-1.5">
+                    <i class="ph-fill ph-map-pin text-blue-600"></i>
                     คลิกบนแผนที่เพื่อปักหมุดและค้นหาสถานีใกล้เคียง
                 </span>
             </div>
@@ -124,159 +39,166 @@
     </div>
 
     {# Data Panel Section (Right) #}
-    <div class="lg:col-span-1 flex flex-col bg-white rounded-2xl shadow-lg border border-ink-100 overflow-hidden"
-        style="height: 600px;">
+    <div class="monitor-data-panel lg:col-span-1 flex flex-col rounded-2xl border overflow-hidden h-[600px]">
         {# Header #}
-        <div class="bg-gradient-to-r from-brand-600 via-brand-700 to-brand-800 text-white p-4 flex-shrink-0 shadow-sm">
+        <div class="monitor-panel-header p-4 flex-shrink-0">
             <h2 id="panel_header_title" class="text-lg font-bold flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-brand-200" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                <i class="ph ph-video-camera text-xl text-brand-200"></i>
-                <span>กล้อง CCTV เฝ้าระวังน้ำท่วม</span>
+                <i class="ph ph-waves text-xl text-blue-200" aria-hidden="true"></i>
+                <span>สถานการณ์ระดับน้ำและเตือนภัย</span>
             </h2>
-            <p id="panel_header_subtitle" class="text-xs text-brand-100/90 mt-0.5">ภาพถ่ายสดและประวัติ 7 วันจากจุดเฝ้าระวัง</p>
+            <p id="panel_header_subtitle" class="text-xs text-blue-100/90 mt-0.5">ข้อมูลสถานีวัดน้ำและจุดเฝ้าระวัง</p>
         </div>
 
         {# Navigation Segmented Tabs #}
-        <div class="bg-ink-100 p-1 mx-3 mt-2 mb-1 rounded-xl flex gap-1 border border-ink-200/80" role="tablist" aria-label="ชั้นข้อมูลการเฝ้าระวัง">
-            <button id="water_panel_tab" type="button" role="tab" aria-selected="false"
-                class="visual-feed-tab flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-lg transition-all duration-150 text-ink-600 hover:text-ink-900"
+        <div class="bg-slate-100 p-1 mx-3 mt-2 mb-1 rounded-xl flex gap-1 border border-slate-200/80" role="tablist" aria-label="ชั้นข้อมูลการเฝ้าระวัง">
+            <button id="water_panel_tab" type="button" role="tab" aria-selected="true"
+                class="visual-feed-tab flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-lg transition-colors duration-150 text-slate-600 hover:text-slate-900"
                 aria-controls="reservoir_data_list">
                 <i class="ph ph-waves text-sm"></i>
                 <span>ระดับน้ำ</span>
             </button>
-            <button id="visual_feed_panel_tab" type="button" role="tab" aria-selected="true" aria-label="กล้อง / ภาพพื้นที่"
-                class="visual-feed-tab flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-lg transition-all duration-150 text-ink-600 hover:text-ink-900"
+            <button id="visual_feed_panel_tab" type="button" role="tab" aria-selected="false" aria-label="กล้อง / ภาพพื้นที่"
+                class="visual-feed-tab flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 text-xs font-semibold rounded-lg transition-colors duration-150 text-slate-600 hover:text-slate-900"
                 aria-controls="visual_feed_panel">
                 <i class="ph ph-video-camera text-sm"></i>
                 <span>กล้อง CCTV</span>
-                <span id="cctv_tab_badge" class="ml-1 px-1.5 py-0.2 bg-brand-100 text-brand-700 text-[10px] font-bold rounded-full hidden">0</span>
+                <span id="cctv_tab_badge" class="ml-1 px-1.5 py-0.2 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full hidden">0</span>
             </button>
         </div>
 
-        <div id="water_panel_controls" class="hidden">
+        <div id="water_panel_controls">
         {# Filters #}
-        <div class="p-3 border-b border-ink-100 bg-ink-50 flex flex-col sm:flex-row gap-2">
-            <select id="source_selector" class="select select-bordered select-sm w-full bg-white text-ink-700">
+        <div class="p-3 border-b border-gray-100 bg-gray-50 flex flex-col sm:flex-row gap-2">
+            <select id="source_selector" class="select select-bordered select-sm w-full bg-white text-gray-700">
                 <option value="all" selected>แหล่งข้อมูล: ทั้งหมด</option>
                 <option value="thaiwater">แหล่งข้อมูล: สสน. (thaiwater)</option>
                 <option value="rid">แหล่งข้อมูล: กรมชลประทาน (rid)</option>
                 <option value="dwr">แหล่งข้อมูล: กรมทรัพยากรน้ำ (dwr)</option>
             </select>
-            <select id="marker_style_selector" class="select select-bordered select-sm w-full bg-white text-ink-700">
+            <select id="marker_style_selector" class="select select-bordered select-sm w-full bg-white text-gray-700">
                 <option value="donut" selected>รูปแบบ: Mini Donut</option>
                 <option value="drop">รูปแบบ: Water Drop</option>
                 <option value="tank">รูปแบบ: Dynamic Tank</option>
                 <option value="bubble">รูปแบบ: Bubble Map</option>
             </select>
         </div>
-        {# Checkboxes for map display #}
-        <div class="px-3 pb-3 pt-0 bg-ink-50 border-b border-ink-100 flex flex-wrap gap-4">
-            <label class="flex items-center gap-2 cursor-pointer text-xs text-ink-600">
-                <input type="checkbox" id="hide_no_data" class="checkbox checkbox-xs checkbox-primary" />
-                <span>ซ่อนสถานีที่ไม่มีข้อมูลบนแผนที่</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer text-xs text-ink-600">
-                <input type="checkbox" id="toggle_cctv_markers" checked class="checkbox checkbox-xs checkbox-primary" />
-                <span>แสดงกล้อง CCTV บนแผนที่</span>
-            </label>
-            <label class="flex items-center gap-2 cursor-pointer text-xs text-ink-600">
-                <input type="checkbox" id="toggle_rain_interpolation" class="checkbox checkbox-xs checkbox-primary" />
-                <span>แผนที่ฝนล่าสุด 24 ชม.</span>
-            </label>
+        {# Map layer filters #}
+        <div class="px-3 pb-3 pt-1 bg-gray-50 border-b border-gray-100">
+            <section aria-labelledby="map_filter_heading">
+                <h3 id="map_filter_heading" class="mb-1 text-[11px] font-semibold text-gray-500">ตัวกรองแผนที่</h3>
+                <div class="grid grid-cols-2 gap-x-3 gap-y-1" role="group" aria-label="ตัวกรองแผนที่">
+                    <label class="flex min-w-0 items-center gap-1.5 cursor-pointer text-xs text-gray-600">
+                        <input type="checkbox" id="hide_no_data" class="checkbox checkbox-xs checkbox-primary shrink-0" />
+                        <span>ซ่อนสถานีไม่มีข้อมูล</span>
+                    </label>
+                    <label class="flex min-w-0 items-center gap-1.5 cursor-pointer text-xs text-gray-600">
+                        <input type="checkbox" id="toggle_rain_interpolation" class="checkbox checkbox-xs checkbox-primary shrink-0" />
+                        <span>แสดงฝนสะสม 24 ชม.</span>
+                    </label>
+                </div>
+            </section>
+
+            <details id="cctv_map_options" class="mt-2 border-t border-gray-200 pt-1">
+                <summary class="flex cursor-pointer list-none items-center gap-2 rounded-md py-1 text-xs font-semibold text-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500">
+                    <i class="ph ph-video-camera text-sm text-gray-500" aria-hidden="true"></i>
+                    <span>กล้อง CCTV</span>
+                    <span id="cctv_visibility_state" class="cctv-map-state--visible ml-auto rounded px-1.5 py-0.5 text-[10px] font-medium">แสดงบนแผนที่</span>
+                    <i class="ph ph-caret-down cctv-options-caret text-xs text-gray-500 transition-transform" aria-hidden="true"></i>
+                </summary>
+                <div class="ml-5 mt-1 flex flex-col gap-1 border-l-2 border-sky-100 pl-3" role="group" aria-label="ตัวเลือกกล้อง CCTV">
+                    <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-600">
+                        <input type="checkbox" id="toggle_cctv_markers" checked class="checkbox checkbox-xs checkbox-primary" />
+                        <span>แสดงบนแผนที่</span>
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer text-xs text-gray-500">
+                        <input type="checkbox" id="hide_unknown_cctv_markers" class="checkbox checkbox-xs checkbox-primary" />
+                        <span>ซ่อนกล้องไม่ทราบสถานะ</span>
+                    </label>
+                </div>
+            </details>
         </div>
         </div>
 
         {# Data List #}
-        <div id="reservoir_data_list" class="hidden flex-1 overflow-y-auto p-4 space-y-4 bg-ink-50/30 custom-scrollbar">
+        <div id="reservoir_data_list" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30 custom-scrollbar">
             <div class="flex justify-center items-center h-full">
-                <span class="text-sm text-ink-500">กำลังโหลดข้อมูล...</span>
+                <span class="text-sm text-gray-500">กำลังโหลดข้อมูล...</span>
             </div>
         </div>
 
         {# Visual Feed (CCTV) Panel #}
-        <div id="visual_feed_panel" class="flex flex-1 min-h-0 flex-col bg-ink-50/70">
-            <div class="border-b border-ink-200 bg-white p-3 space-y-2.5">
-                {# Header Row with View Mode Switcher #}
+        <div id="visual_feed_panel" class="hidden flex-1 min-h-0 flex-col bg-slate-50/70">
+            <div class="border-b border-slate-200 bg-white p-3 space-y-2.5">
                 <div class="flex items-center justify-between gap-2">
-                    <div class="flex items-center gap-2">
-                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-brand-50 text-brand-600 font-bold">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl bg-blue-50 text-blue-600 shrink-0 shadow-2xs">
                             <i class="ph ph-video-camera text-base"></i>
                         </span>
-                        <div>
+                        <div class="min-w-0">
                             <div class="flex items-center gap-1.5">
-                                <span class="text-xs font-bold text-ink-800">กล้อง CCTV</span>
-                                <span class="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                                    LIVE
+                                <span class="text-xs font-bold text-slate-900 leading-tight">กล้อง CCTV</span>
+                                <span class="cctv-status cctv-status--online inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold">
+                                    <span class="h-1.5 w-1.5 rounded-full bg-white"></span>
+                                    <span>ออนไลน์</span>
                                 </span>
                             </div>
-                            <p id="visual_feed_summary" class="text-[11px] text-ink-500">กำลังโหลดรายการ...</p>
+                            <p id="visual_feed_summary" class="truncate text-[11px] font-medium text-slate-500 leading-tight mt-0.5">กำลังโหลดรายการ...</p>
                         </div>
                     </div>
-
-                    {# View Switcher (List vs Grid) #}
-                    <div class="flex items-center gap-0.5 bg-ink-100 p-0.5 rounded-lg border border-ink-200" role="group" aria-label="รูปแบบการแสดงผล">
-                        <button id="visual_feed_view_list" type="button" class="btn btn-xs btn-ghost px-2 py-1 h-7 min-h-0 font-medium text-ink-600 rounded-md transition-all active-view-btn" title="มุมมองแบบรายการ 1 คอลัมน์ (ภาพใหญ่)" aria-label="มุมมองแบบรายการ">
-                            <i class="ph ph-rows text-sm"></i>
-                            <span class="text-[11px]">รายการ</span>
-                        </button>
-                        <button id="visual_feed_view_grid" type="button" class="btn btn-xs btn-ghost px-2 py-1 h-7 min-h-0 font-medium text-ink-600 rounded-md transition-all" title="มุมมองแบบตาราง 2 คอลัมน์" aria-label="มุมมองแบบตาราง">
-                            <i class="ph ph-squares-four text-sm"></i>
-                            <span class="text-[11px]">ตาราง</span>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        {# View Switcher (List vs Grid) #}
+                        <div class="flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-xl border border-slate-200/80" role="group" aria-label="รูปแบบการแสดงผล">
+                            <button id="visual_feed_view_list" type="button"
+                                class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 rounded-lg transition-all cursor-pointer active-view-btn border border-transparent"
+                                title="มุมมองแบบรายการ 1 คอลัมน์ (ภาพใหญ่)" aria-label="มุมมองแบบรายการ">
+                                <i class="ph ph-rows text-sm"></i>
+                                <span class="text-[11px]">รายการ</span>
+                            </button>
+                            <button id="visual_feed_view_grid" type="button"
+                                class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 rounded-lg transition-all cursor-pointer border border-transparent"
+                                title="มุมมองแบบตาราง 2 คอลัมน์" aria-label="มุมมองแบบตาราง">
+                                <i class="ph ph-squares-four text-sm"></i>
+                                <span class="text-[11px]">ตาราง</span>
+                            </button>
+                        </div>
+                        <button id="visual_feed_retry" type="button"
+                            class="btn btn-ghost btn-xs h-7 w-7 min-h-0 shrink-0 rounded-lg p-0 text-blue-600 hover:bg-blue-50 flex items-center justify-center"
+                            aria-label="รีเฟรชรายการกล้อง" title="รีเฟรชรายการกล้อง">
+                            <i class="ph ph-arrow-clockwise text-sm" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>
 
-                {# Search Input #}
-                <div class="relative">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-ink-400">
-                        <i class="ph ph-magnifying-glass text-xs"></i>
-                    </span>
-                    <input id="visual_feed_search" type="text"
-                        placeholder="ค้นหากล้อง, ตำแหน่ง, รหัส..."
-                        class="input input-bordered input-xs w-full pl-8 pr-7 bg-white text-ink-700 placeholder:text-ink-400 font-medium focus:border-brand-500 focus:outline-none" />
-                    <button id="visual_feed_search_clear" type="button"
-                        class="absolute inset-y-0 right-0 flex items-center pr-2 text-ink-400 hover:text-ink-600 hidden"
-                        title="ล้างคำค้นหา">
-                        <i class="ph ph-x-circle text-xs"></i>
-                    </button>
-                </div>
-
-                {# Filter Selectors #}
-                <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    <select id="visual_feed_group_filter" class="select select-bordered select-xs w-full bg-white text-ink-700 font-medium">
+                <div class="grid grid-cols-[minmax(0,1fr)_7.5rem] gap-2">
+                    <div class="relative min-w-0">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none text-slate-400">
+                            <i class="ph ph-magnifying-glass text-xs" aria-hidden="true"></i>
+                        </span>
+                        <label class="sr-only" for="visual_feed_search">ค้นหากล้อง CCTV</label>
+                        <input id="visual_feed_search" type="search" aria-label="ค้นหากล้อง CCTV"
+                            placeholder="ค้นหากล้อง..."
+                            class="cctv-filter-input input input-bordered input-sm h-9 min-h-0 w-full bg-white pl-8 pr-8 text-xs font-medium text-slate-700 placeholder:text-slate-400" />
+                        <button id="visual_feed_search_clear" type="button"
+                            class="absolute inset-y-0 right-0 hidden flex items-center pr-2 text-slate-400 hover:text-slate-600"
+                            aria-label="ล้างคำค้นหา" title="ล้างคำค้นหา">
+                            <i class="ph ph-x-circle text-sm" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    <label class="sr-only" for="visual_feed_group_filter">กรองตามพื้นที่</label>
+                    <select id="visual_feed_group_filter" aria-label="กรองกล้องตามพื้นที่"
+                        class="cctv-filter-select select select-bordered select-sm h-9 min-h-0 w-full bg-white px-2 text-xs font-medium text-slate-700">
                         <option value="all" selected>พื้นที่: ทั้งหมด</option>
                     </select>
-                    <select id="visual_feed_availability_filter" class="select select-bordered select-xs w-full bg-white text-ink-700 font-medium">
-                        <option value="all" selected>สถานะ: ทั้งหมด</option>
-                        <option value="online">● ออนไลน์</option>
-                        <option value="stale">● ข้อมูลเก่า</option>
-                        <option value="degraded">● ขัดข้องบางส่วน</option>
-                        <option value="offline">● ออฟไลน์</option>
-                        <option value="unknown">● ไม่ทราบสถานะ</option>
-                    </select>
                 </div>
 
-                {# Status & Refresh Row #}
-                <div class="flex items-center justify-between gap-2 text-[10px] text-ink-500 pt-1 border-t border-ink-100">
-                    <span id="visual_feed_source_health" class="flex items-center gap-1 truncate">กำลังตรวจสอบต้นทาง...</span>
-                    <button id="visual_feed_retry" type="button" class="btn btn-ghost btn-xs min-h-0 h-6 px-2 text-brand-600 hover:bg-brand-50 font-medium flex items-center gap-1 shrink-0">
-                        <i class="ph ph-arrow-clockwise text-xs"></i>
-                        <span>รีเฟรช</span>
-                    </button>
-                </div>
             </div>
 
             {# Camera Cards Container #}
-            <div id="visual_feed_cards" class="grid flex-1 grid-cols-1 gap-3.5 overflow-y-auto p-3.5 custom-scrollbar">
-                <div class="col-span-full flex min-h-32 items-center justify-center text-xs text-ink-500">กำลังโหลดข้อมูล...</div>
+            <div id="visual_feed_cards" class="grid flex-1 grid-cols-1 content-start gap-0 overflow-y-auto px-3 custom-scrollbar">
+                <div class="col-span-full flex min-h-32 items-center justify-center text-xs text-slate-500">กำลังโหลดข้อมูล...</div>
             </div>
         </div>
-        <div class="p-3 text-center text-xs text-ink-400 bg-white border-t border-ink-100">
+        <div class="p-3 text-center text-xs text-gray-400 bg-white border-t border-gray-100">
             * การประเมินสถานะน้ำและสีเป็นการประเมินเบื้องต้นแบบไม่เป็นทางการ
         </div>
     </div>
@@ -285,50 +207,77 @@
 {# Detail & History Dialog #}
 <dialog id="visual_feed_detail_dialog" class="modal hidden" closedby="any" aria-labelledby="visual_feed_detail_title"
     aria-describedby="visual_feed_detail_meta" aria-modal="true" tabindex="-1">
-    <div class="modal-box w-11/12 max-w-4xl p-5 rounded-2xl bg-white shadow-2xl border border-ink-100">
+    <div class="cctv-modal-shell p-4 sm:p-6 space-y-4">
         {# Modal Header #}
-        <div class="flex items-start justify-between gap-3 pb-3 border-b border-ink-100">
-            <div class="space-y-1">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <span id="visual_feed_detail_badge" class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold text-white bg-emerald-600 shadow-xs">
-                        ออนไลน์
+        <div class="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+            <div class="min-w-0 flex-1">
+                <h2 id="visual_feed_detail_title" class="text-lg sm:text-xl font-bold text-slate-900 leading-snug tracking-tight truncate">รายละเอียดกล้อง CCTV</h2>
+                <div class="mt-1 flex items-center gap-2 min-w-0">
+                    <span id="visual_feed_detail_badge" class="cctv-status cctv-status--online inline-flex shrink-0 items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold shadow-xs">
+                        <span class="h-1.5 w-1.5 rounded-full bg-white"></span><span>ออนไลน์</span>
                     </span>
-                    <h2 id="visual_feed_detail_title" class="text-lg font-bold text-ink-900 leading-snug">รายละเอียดกล้อง CCTV</h2>
+                    <p id="visual_feed_detail_meta" class="truncate text-xs text-slate-500"></p>
                 </div>
-                <p id="visual_feed_detail_meta" class="text-xs text-ink-500 flex items-center gap-2"></p>
             </div>
-            <button id="visual_feed_detail_close" type="button" class="btn btn-circle btn-ghost btn-sm text-ink-400 hover:text-ink-700 hover:bg-ink-100"
-                aria-label="ปิดรายละเอียดกล้อง">✕</button>
+
+            {# State input only; users select a day from the seven-day rail below. #}
+            <input id="visual_feed_history_date" type="date" tabindex="-1" aria-hidden="true" class="sr-only" />
+            <button id="visual_feed_detail_close" type="button" class="w-11 h-11 shrink-0 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-all cursor-pointer shadow-xs"
+                aria-label="ปิดรายละเอียดกล้อง"><i class="ph ph-x text-lg" aria-hidden="true"></i></button>
         </div>
 
-        {# Latest Image View #}
-        <div id="visual_feed_detail_latest" class="mt-4 space-y-3">
-            <div id="visual_feed_detail_latest_image" class="overflow-hidden rounded-xl bg-ink-950 aspect-video flex items-center justify-center shadow-inner"></div>
-            <div id="visual_feed_detail_station_link" class="hidden"></div>
-            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
-                <p id="visual_feed_detail_latest_meta" class="text-xs text-ink-600 font-medium"></p>
-                <button id="visual_feed_history_button" type="button" class="btn btn-outline btn-sm rounded-lg text-brand-600 hover:bg-brand-50 hover:border-brand-300 font-semibold gap-1.5 hidden">
-                    <i class="ph ph-clock-counter-clockwise text-base"></i>
-                    <span>ดูประวัติ 7 วัน</span>
+        {# Unified 7-Day History & Image Viewport Section #}
+        <div id="visual_feed_history_frames" class="space-y-3">
+            {# 7-Day Horizontal Slide Selector #}
+            <div class="p-2 sm:p-2.5 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs">
+                <div class="flex items-center justify-between px-1 mb-1.5">
+                    <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                        <i class="ph ph-calendar text-sky-600 text-sm" aria-hidden="true"></i>
+                        <span>เลือกวัน</span>
+                        <span id="visual_feed_selected_day_label" class="text-[11px] font-medium text-sky-600 ml-1"></span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <button type="button" id="visual_feed_day_slide_prev"
+                            class="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 border border-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-all cursor-pointer shadow-2xs disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label="วันก่อนหน้า (สไลด์ซ้าย)" title="วันก่อนหน้า (สไลด์ซ้าย)">
+                            <i class="ph ph-caret-left text-xs font-bold" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" id="visual_feed_day_slide_next"
+                            class="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 border border-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-all cursor-pointer shadow-2xs disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label="วันถัดไป (สไลด์ขวา)" title="วันถัดไป (สไลด์ขวา)">
+                            <i class="ph ph-caret-right text-xs font-bold" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+                <div id="visual_feed_7days_rail" class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar scroll-smooth py-0.5 px-0.5" role="tablist" aria-label="แถบเลือกวันย้อนหลัง 7 วัน">
+                    {# 7-day cards rendered dynamically in Brython #}
+                </div>
+            </div>
+
+            <div id="visual_feed_history_viewport" class="cctv-history-viewport relative aspect-video rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shadow-sm">
+                <div id="visual_feed_history_frame" class="cctv-history-frame w-full h-full"></div>
+                <button id="visual_feed_history_previous" type="button"
+                    class="cctv-history-nav cctv-history-nav--previous hidden" aria-label="ดูภาพก่อนหน้า">
+                    <i class="ph ph-caret-left text-xl" aria-hidden="true"></i>
+                </button>
+                <button id="visual_feed_history_next" type="button"
+                    class="cctv-history-nav cctv-history-nav--next hidden" aria-label="ดูภาพถัดไป">
+                    <i class="ph ph-caret-right text-xl" aria-hidden="true"></i>
                 </button>
             </div>
+
+            <p id="visual_feed_history_counter" class="cctv-history-counter text-center text-xs font-medium tabular-nums" aria-live="polite"></p>
         </div>
 
-        {# 7-Day History Section #}
-        <div id="visual_feed_history_controls" class="mt-4 flex hidden items-center justify-between gap-3 p-3 bg-ink-50 rounded-xl border border-ink-200/80">
-            <label class="flex items-center gap-2 text-xs font-semibold text-ink-700">
-                <i class="ph ph-calendar text-base text-brand-600"></i>
-                <span>วันที่ (เวลาไทย):</span>
-                <input id="visual_feed_history_date" type="date" aria-label="วันที่ (เวลาไทย)" class="input input-bordered input-sm bg-white font-medium" />
-            </label>
-            <button id="visual_feed_history_back_latest" type="button" class="btn btn-ghost btn-sm text-ink-700 hover:bg-white gap-1 font-medium">
-                <i class="ph ph-arrow-left"></i>
-                <span>กลับสู่ภาพล่าสุด</span>
-            </button>
+        {# Co-located Water Station Link (Always available below the camera viewport) #}
+        <div id="visual_feed_detail_station_link" class="hidden"></div>
+
+        {# Compatibility placeholder #}
+        <div id="visual_feed_detail_latest" class="hidden" aria-hidden="true">
+            <div id="visual_feed_detail_latest_image"></div>
         </div>
-        <div id="visual_feed_history_frames" class="mt-3 hidden grid max-h-[55vh] grid-cols-1 gap-3 overflow-y-auto pr-1 custom-scrollbar sm:grid-cols-2 md:grid-cols-3">
-        </div>
-        <p id="visual_feed_history_status" class="mt-3 text-xs text-ink-500 font-medium" role="status" aria-live="polite"></p>
+
+        <p id="visual_feed_history_status" class="mt-2 text-xs text-slate-500 font-medium text-center" role="status" aria-live="polite"></p>
     </div>
 </dialog>
 <style>
@@ -342,7 +291,7 @@
     }
 
     .custom-scrollbar::-webkit-scrollbar-thumb {
-        background-color: var(--color-ink-300);
+        background-color: #cbd5e1;
         border-radius: 20px;
     }
 
@@ -363,6 +312,173 @@
 </style>
 
 <script type="text/javascript">
+    window.__sindhu_api_url = "{{ api_url }}";
+    window.__cctv_popup_cache = {};
+
+    window.cctv_popup_slide_rail = function(btn, dir) {
+        var container = btn.closest('.cctv-popup-7days');
+        if (!container) return;
+        var rail = container.querySelector('.cctv-popup-days-rail');
+        if (!rail) return;
+        rail.scrollBy({ left: 130 * dir, behavior: 'smooth' });
+    };
+
+    window.cctv_popup_select_day = function(btn, source, upstreamId, dateIso, hasHistory) {
+        var popup = btn.closest('.cctv-map-popup');
+        if (!popup) return;
+
+        var rail = popup.querySelector('.cctv-popup-days-rail');
+        if (rail) {
+            var allBtns = rail.querySelectorAll('.cctv-popup-day-btn');
+            for (var i = 0; i < allBtns.length; i++) {
+                allBtns[i].classList.remove('is-active', 'bg-sky-50', 'text-sky-700', 'border-sky-300', 'ring-2', 'ring-sky-400/30', 'font-bold');
+                allBtns[i].classList.add('bg-white', 'text-slate-600', 'border-slate-200');
+            }
+        }
+        btn.classList.remove('bg-white', 'text-slate-600', 'border-slate-200');
+        btn.classList.add('is-active', 'bg-sky-50', 'text-sky-700', 'border-sky-300', 'ring-2', 'ring-sky-400/30', 'font-bold');
+
+        var dayNameEl = btn.querySelector('.cctv-popup-day-top');
+        var dayName = dayNameEl ? dayNameEl.textContent : dateIso;
+        var selectedLabel = popup.querySelector('.cctv-popup-selected-day');
+        if (selectedLabel) selectedLabel.textContent = dayName;
+
+        var img = popup.querySelector('.cctv-popup-img');
+        var timeVal = popup.querySelector('.current-time-val');
+        var badge = popup.querySelector('.cctv-popup-live-badge');
+        var ctrls = popup.querySelector('.cctv-popup-history-ctrls');
+        var notice = popup.querySelector('.cctv-popup-info-notice');
+
+        popup.setAttribute('data-selected-date', dateIso);
+
+        if (!hasHistory) {
+            if (ctrls) ctrls.classList.add('hidden');
+            if (btn.getAttribute('data-is-today') === 'true') {
+                if (notice) notice.classList.add('hidden');
+                if (img && popup.getAttribute('data-image-url')) {
+                    img.src = popup.getAttribute('data-image-url');
+                }
+                if (badge) {
+                    badge.className = 'cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs backdrop-blur-md';
+                    badge.textContent = 'สด LIVE';
+                }
+                if (timeVal) timeVal.textContent = popup.getAttribute('data-live-time') || '--:--';
+            } else {
+                if (notice) notice.classList.remove('hidden');
+            }
+            return;
+        }
+
+        if (notice) notice.classList.add('hidden');
+
+        if (btn.getAttribute('data-is-today') === 'true') {
+            if (ctrls) ctrls.classList.add('hidden');
+            if (img && popup.getAttribute('data-image-url')) {
+                img.src = popup.getAttribute('data-image-url');
+            }
+            if (badge) {
+                badge.className = 'cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs backdrop-blur-md';
+                badge.textContent = 'สด LIVE';
+            }
+            if (timeVal) timeVal.textContent = popup.getAttribute('data-live-time') || '--:--';
+            return;
+        }
+
+        var cacheKey = source + '_' + upstreamId + '_' + dateIso;
+        var applyFrames = function(frames) {
+            popup._cctv_frames = frames;
+            popup._cctv_frame_idx = frames.length > 0 ? frames.length - 1 : -1;
+            if (frames.length > 0) {
+                var frame = frames[popup._cctv_frame_idx];
+                if (img && frame.image_url) img.src = frame.image_url;
+                var frameTime = '--:--';
+                if (frame.captured_at) {
+                    try {
+                        frameTime = new Date(frame.captured_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' });
+                    } catch (e) {
+                        frameTime = frame.captured_at.slice(11, 16);
+                    }
+                }
+                if (timeVal) timeVal.textContent = frameTime;
+                if (badge) {
+                    badge.className = 'cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider bg-sky-50 text-sky-700 border border-sky-200 shadow-xs backdrop-blur-md';
+                    badge.textContent = 'ย้อนหลัง ' + dayName;
+                }
+                if (ctrls) {
+                    ctrls.classList.remove('hidden');
+                    var timeSpan = ctrls.querySelector('.cctv-popup-frame-time');
+                    if (timeSpan) timeSpan.textContent = 'ภาพที่ ' + (popup._cctv_frame_idx + 1) + '/' + frames.length + ' (' + frameTime + ' น.)';
+                }
+            } else {
+                if (ctrls) ctrls.classList.add('hidden');
+                if (badge) {
+                    badge.className = 'cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-xs backdrop-blur-md';
+                    badge.textContent = 'ไม่มีภาพย้อนหลัง';
+                }
+            }
+        };
+
+        if (window.__cctv_popup_cache[cacheKey]) {
+            applyFrames(window.__cctv_popup_cache[cacheKey].frames || []);
+        } else {
+            if (img) img.style.opacity = '0.5';
+            var apiBase = window.__sindhu_api_url || '';
+            fetch(apiBase + '/v1/visual-feeds/' + encodeURIComponent(source) + '/' + encodeURIComponent(upstreamId) + '/history?date=' + encodeURIComponent(dateIso))
+                .then(function(res) { return res.ok ? res.json() : null; })
+                .then(function(data) {
+                    if (img) img.style.opacity = '1';
+                    if (data && data.frames) {
+                        window.__cctv_popup_cache[cacheKey] = data;
+                        applyFrames(data.frames);
+                    } else {
+                        applyFrames([]);
+                    }
+                })
+                .catch(function() {
+                    if (img) img.style.opacity = '1';
+                    applyFrames([]);
+                });
+        }
+    };
+
+    window.cctv_popup_step_frame = function(btn, delta) {
+        var popup = btn.closest('.cctv-map-popup');
+        if (!popup || !popup._cctv_frames || popup._cctv_frames.length === 0) return;
+        var frames = popup._cctv_frames;
+        var idx = (popup._cctv_frame_idx || 0) + delta;
+        if (idx < 0) idx = 0;
+        if (idx >= frames.length) idx = frames.length - 1;
+        popup._cctv_frame_idx = idx;
+        var frame = frames[idx];
+
+        var img = popup.querySelector('.cctv-popup-img');
+        var timeVal = popup.querySelector('.current-time-val');
+        var ctrls = popup.querySelector('.cctv-popup-history-ctrls');
+
+        if (img && frame.image_url) img.src = frame.image_url;
+        var frameTime = '--:--';
+        if (frame.captured_at) {
+            try {
+                frameTime = new Date(frame.captured_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' });
+            } catch (e) {
+                frameTime = frame.captured_at.slice(11, 16);
+            }
+        }
+        if (timeVal) timeVal.textContent = frameTime;
+        if (ctrls) {
+            var timeSpan = ctrls.querySelector('.cctv-popup-frame-time');
+            if (timeSpan) timeSpan.textContent = 'ภาพที่ ' + (idx + 1) + '/' + frames.length + ' (' + frameTime + ' น.)';
+        }
+    };
+
+    window.cctv_popup_open_detail = function(btn, source, upstreamId) {
+        var popup = btn.closest('.cctv-map-popup');
+        var selectedDate = popup ? popup.getAttribute('data-selected-date') : null;
+        if (window.open_cctv_detail) {
+            window.open_cctv_detail(source, upstreamId, selectedDate);
+        }
+    };
+
     window.onload = function () {
         if (!window.brython_initialized) {
             brython({
@@ -381,26 +497,20 @@
     "{{ g.lang_code }}",
     "{{ api_url }}",
     "{{ source }}",
-    fallback_zone_urls=[
-      "{{ url_for('static', filename='resources/water_flow_zones/zone_1_south.geojson') }}",
-      "{{ url_for('static', filename='resources/water_flow_zones/zone_2_west.geojson') }}",
-      "{{ url_for('static', filename='resources/water_flow_zones/zone_3_central_east.geojson') }}",
-      "{{ url_for('static', filename='resources/water_flow_zones/zone_4_north.geojson') }}"
-    ],
-    reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}",
-    rivers_url="{{ url_for('static', filename='resources/songkhla_rivers_direction.geojson') }}"
+    reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}"
     )
   visual_feeds = VisualFeedMonitor("{{ api_url }}")
   monitors.visual_feed_monitor = visual_feeds
   visual_feeds.start(monitors)
   monitors.start()
 </script>
+</main>
 {% endblock content %}
 {% block additional_js %}
 
+<script type="text/javascript" src="{{ 'brython/stations.brython.js' | static_url }}"></script>
 <script type="text/javascript" src="{{ 'brython/maps.brython.js' | static_url }}"></script>
 <script type="text/javascript" src="{{ 'brython/visual_feeds.brython.js' | static_url }}"></script>
 <script type="text/javascript" src="{{ 'brython/monitors.brython.js' | static_url }}"></script>
-<script type="text/javascript" src="{{ 'brython/stations.brython.js' | static_url }}"></script>
 
 {% endblock additional_js %}

@@ -1,4 +1,4 @@
-"""Request-time adapters for the two public CCTV providers.
+"""Request-time adapters for the public CCTV providers.
 
 The adapters deliberately normalize at the provider boundary.  Upstream
 objects are never returned, logged, or placed in a cache; only the small
@@ -20,6 +20,12 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from sindhu.config.provider_urls import (
+    DEFAULT_DWR_CCTV_BASE_URL,
+    DEFAULT_HATYAI_CCTV_BASE_URL,
+    DEFAULT_RID_CCTV_BASE_URL,
+    validate_allowed_api_base_url,
+)
 from sindhu.services.cctv_catalog import (
     DWR_CAMERAS,
     DWR_REGISTRY_VERSION,
@@ -28,6 +34,11 @@ from sindhu.services.cctv_catalog import (
     HATYAI_CAMERAS,
     HATYAI_REGISTRY_VERSION,
     HATYAI_SOURCE,
+    RID_CAMERAS,
+    RID_REGISTRY_VERSION,
+    RID_PUBLIC_SOURCE_URL,
+    RID_SOURCE,
+    RID_SOURCE_URL,
     get_camera,
 )
 
@@ -41,8 +52,14 @@ HATYAI_HOSTS = frozenset(
         "photo.hatyaicityclimate.org",
     }
 )
-HATYAI_CCTV_API_BASE_URL = "https://hatyaicityclimate.org"
-DWR_CCTV_API_BASE_URL = DWR_SOURCE_URL
+HATYAI_CCTV_BASE_URL = DEFAULT_HATYAI_CCTV_BASE_URL
+DWR_CCTV_BASE_URL = DEFAULT_DWR_CCTV_BASE_URL
+RID_CCTV_BASE_URL = DEFAULT_RID_CCTV_BASE_URL
+
+# Backwards compatibility aliases
+HATYAI_CCTV_API_BASE_URL = HATYAI_CCTV_BASE_URL
+DWR_CCTV_API_BASE_URL = DWR_CCTV_BASE_URL
+RID_CCTV_API_BASE_URL = RID_CCTV_BASE_URL
 
 HATYAI_CATALOG_PATH = "/api/flood/cams"
 HATYAI_HISTORY_PATH = "/api/flood/cam"
@@ -51,44 +68,10 @@ HATYAI_DETAIL_PATH = "/flood/cam"
 DWR_LIST_PATH = "/public/reportCctv/listPaginate"
 DWR_SNAPSHOT_PATH = "/public/reportCctv/snapshot"
 DWR_IMAGE_PATH = "/file/image/cctv"
+RID_IMAGE_PATH = "/CCTV/{station_code}/image.cgi"
 
 
-def normalize_provider_base_url(value: str) -> str:
-    """Validate and normalize an upstream provider base URL.
-
-    Provider bases are configuration, not user input, but rejecting
-    credentials and URL-delimiting components here prevents accidental
-    credential/query leakage when endpoint paths are joined at request time.
-    HTTP remains accepted for local proxies; public defaults are HTTPS.
-    """
-
-    if not isinstance(value, str):
-        raise ValueError("provider base URL must be a string")
-    raw = value.strip()
-    if not raw or len(raw) > 2048:
-        raise ValueError("provider base URL must be a non-empty URL")
-    if any(ord(char) < 33 for char in raw) or "\\" in raw:
-        raise ValueError("provider base URL contains invalid characters")
-    try:
-        parsed = urlsplit(raw)
-        hostname = parsed.hostname
-        parsed.port
-    except ValueError as error:
-        raise ValueError("provider base URL is malformed") from error
-    if (
-        parsed.scheme.lower() not in {"http", "https"}
-        or not hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.query
-        or parsed.fragment
-    ):
-        raise ValueError(
-            "provider base URL must be an absolute http(s) URL without credentials, query, or fragment"
-        )
-    return urlunsplit(
-        (parsed.scheme.lower(), parsed.netloc.lower(), parsed.path.rstrip("/"), "", "")
-    )
+normalize_provider_base_url = validate_allowed_api_base_url
 
 
 def _join_provider_url(base_url: str, path: str) -> str:
@@ -289,8 +272,10 @@ class CctvSources:
         deadline_seconds: float = SOURCE_DEADLINE_SECONDS,
         hatyai_base_url: str | None = None,
         dwr_base_url: str | None = None,
+        rid_base_url: str | None = None,
         hatyai_api_base_url: str | None = None,
         dwr_api_base_url: str | None = None,
+        rid_api_base_url: str | None = None,
     ) -> None:
         self.client = client
         self.clock = clock or (lambda: dt.datetime.now(UTC))
@@ -299,11 +284,16 @@ class CctvSources:
             raise ValueError("configure only one Hatyai provider base URL")
         if dwr_base_url is not None and dwr_api_base_url is not None:
             raise ValueError("configure only one DWR provider base URL")
+        if rid_base_url is not None and rid_api_base_url is not None:
+            raise ValueError("configure only one RID provider base URL")
         self.hatyai_base_url = normalize_provider_base_url(
             hatyai_base_url or hatyai_api_base_url or HATYAI_CCTV_API_BASE_URL
         )
         self.dwr_base_url = normalize_provider_base_url(
             dwr_base_url or dwr_api_base_url or DWR_CCTV_API_BASE_URL
+        )
+        self.rid_base_url = normalize_provider_base_url(
+            rid_base_url or rid_api_base_url or RID_CCTV_API_BASE_URL
         )
         try:
             configured_hatyai_host = urlsplit(self.hatyai_base_url).hostname
@@ -323,6 +313,8 @@ class CctvSources:
             return _join_provider_url(self.hatyai_base_url, path)
         if source == DWR_SOURCE:
             return _join_provider_url(self.dwr_base_url, path)
+        if source == RID_SOURCE:
+            return _join_provider_url(self.rid_base_url, path)
         raise SourceError("unknown_source")
 
     def _now(self) -> dt.datetime:
@@ -434,12 +426,17 @@ class CctvSources:
                 HATYAI_SOURCE, f"{HATYAI_DETAIL_PATH}/{camera['slug']}"
             )
             history_supported = True
-        else:
+        elif source == DWR_SOURCE:
             registry_version = DWR_REGISTRY_VERSION
             source_url = self._provider_url(DWR_SOURCE, "/")
             detail_url = self._provider_url(
                 DWR_SOURCE, f"/public/station/getByCode/{camera['station_code']}"
             )
+            history_supported = False
+        else:
+            registry_version = RID_REGISTRY_VERSION
+            source_url = RID_PUBLIC_SOURCE_URL
+            detail_url = RID_PUBLIC_SOURCE_URL
             history_supported = False
 
         return {
@@ -465,7 +462,11 @@ class CctvSources:
                 "provider": (
                     "Hatyai City Climate"
                     if source == HATYAI_SOURCE
-                    else "กรมทรัพยากรน้ำ"
+                    else (
+                        "กรมชลประทาน (RID)"
+                        if source == RID_SOURCE
+                        else "กรมทรัพยากรน้ำ"
+                    )
                 ),
                 "source_url": source_url,
             },
@@ -474,13 +475,15 @@ class CctvSources:
     async def latest(self, source: str) -> list[dict[str, Any]]:
         """Return one normalized latest record per registered camera."""
 
-        if source not in {HATYAI_SOURCE, DWR_SOURCE}:
+        if source not in {HATYAI_SOURCE, DWR_SOURCE, RID_SOURCE}:
             raise SourceError("unknown_source")
         try:
             async with asyncio.timeout(self.deadline_seconds):
                 if source == HATYAI_SOURCE:
                     return await self._latest_hatyai()
-                return await self._latest_dwr()
+                if source == DWR_SOURCE:
+                    return await self._latest_dwr()
+                return self._latest_rid()
         except SourceError:
             raise
         except asyncio.TimeoutError:
@@ -580,6 +583,24 @@ class CctvSources:
                 )
             )
         return records
+
+    def _latest_rid(self) -> list[dict[str, Any]]:
+        """Expose curated RID CGI cameras through our same-origin proxy.
+
+        RID's CGI response has no trustworthy capture timestamp, so its
+        availability deliberately remains unknown until an image is requested.
+        """
+        fetched_at = _iso(self._now())
+        return [
+            self._base_record(
+                RID_SOURCE,
+                camera,
+                fetched_at=fetched_at,
+                image_url=f"/v1/visual-feeds/rid/{camera['upstream_id']}/snapshot",
+                provider_status="capture_time_unavailable",
+            )
+            for camera in RID_CAMERAS
+        ]
 
     @staticmethod
     def _dwr_result_entity(result: Mapping[str, Any]) -> Mapping[str, Any] | None:
@@ -846,6 +867,25 @@ class CctvSources:
         ):
             raise SourceError("invalid_jpeg")
         return body
+
+    async def rid_snapshot(self, upstream_id: str) -> tuple[bytes, str]:
+        """Fetch a RID CGI image without exposing its legacy HTTP URL."""
+        camera = get_camera(RID_SOURCE, upstream_id)
+        if camera is None:
+            raise SourceError("unknown_camera")
+        response = await self._request(
+            "GET",
+            self._provider_url(
+                RID_SOURCE,
+                RID_IMAGE_PATH.format(station_code=camera["code"]),
+            ),
+        )
+        body = response.content
+        if body.startswith(b"\xff\xd8\xff"):
+            return body, "image/jpeg"
+        if body.startswith((b"GIF87a", b"GIF89a")):
+            return body, "image/gif"
+        raise SourceError("invalid_image")
 
 
 __all__ = ["CctvSources", "SourceError"]

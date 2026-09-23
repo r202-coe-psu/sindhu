@@ -1,6 +1,26 @@
 from browser import alert, window, ajax
+import datetime
 import json
 import math
+
+BANGKOK_TZ = datetime.timezone(datetime.timedelta(hours=7))
+
+THAI_DAYS_SHORT = ["จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."]
+THAI_MONTHS_SHORT = [
+    "",
+    "ม.ค.",
+    "ก.พ.",
+    "มี.ค.",
+    "เม.ย.",
+    "พ.ค.",
+    "มิ.ย.",
+    "ก.ค.",
+    "ส.ค.",
+    "ก.ย.",
+    "ต.ค.",
+    "พ.ย.",
+    "ธ.ค.",
+]
 
 
 def _haversine_distance(coord1, coord2):
@@ -193,8 +213,9 @@ class Map:
 
         fill = custom_style.get("fill", self.ZONE_STYLE["fillColor"])
         stroke = custom_style.get("stroke") or fill or self.ZONE_STYLE["color"]
-        is_ref = (custom_style.get("role") == "reference_boundary") or (
-            zone.get("code") == "hatyai-boundary"
+        is_ref = zone.get("zone_kind") == "reference" or (
+            custom_style.get("role") == "reference_boundary"
+            or zone.get("code") == "hatyai-boundary"
         )
         dash_array = "8, 6" if is_ref else custom_style.get("dashArray", "")
         stroke_weight = (
@@ -212,10 +233,9 @@ class Map:
 
         risk_val = level.get("risk", -1) if level else -1
 
-        # Reference boundary or normal water level (risk <= 0):
-        # Strictly preserve the admin-configured zone color and shading mode.
-        # NEVER recolor normal zones to green!
-        if is_ref or risk_val <= 0:
+        # Reference boundaries are geographic context, not a risk zone.
+        # Keep their configured dashed style and never recolour them.
+        if is_ref:
             if custom_style:
                 if state == "hover":
                     return {
@@ -258,7 +278,16 @@ class Map:
                 style_copy["fillOpacity"] = 0.25 if state == "normal" else 0.35
             return style_copy
 
-        # Active flood alert (risk >= 1: warning, critical)
+        # Zone colours follow the same risk scale as their stations.  A zone
+        # gets the worst level among its member stations; no data is grey.
+        if not level:
+            level = {
+                "risk": -1,
+                "color": "#9ca3af",
+                "border": "#6b7280",
+                "fill_opacity": 0.1,
+            }
+
         alert_color = level.get("border") or level.get("color")
         if is_shaded:
             alert_fill = level.get("color")
@@ -388,7 +417,10 @@ class Map:
             stroke_color = (
                 style.get("stroke") or style.get("fill") or self.ZONE_STYLE["color"]
             )
-            is_ref = style.get("role") == "reference_boundary"
+            is_ref = zone.get("zone_kind") == "reference" or (
+                style.get("role") == "reference_boundary"
+                or zone.get("code") == "hatyai-boundary"
+            )
             weight_val = (
                 3.0 if is_ref else max(float(style.get("stroke-width") or 2.5), 2.5)
             )
@@ -490,20 +522,30 @@ class Map:
             self.reference_boundary_layer.addTo(self.map)
 
     def fit_to_hatyai_bounds(self):
-        """Fit map view to Hat Yai reference boundary or loaded zones."""
+        """Fit map view to every loaded zone and the reference boundary."""
         try:
+            bounds = self.leaflet.latLngBounds([])
+            has_bounds = False
+
+            # Extend the bounds explicitly instead of handing a Brython list to
+            # Leaflet.featureGroup().  The latter can omit a layer while the
+            # zones are still being initialised, which left Zone 4 clipped at
+            # the top edge of the initial viewport.
+            for entry in self.zone_layers_by_id.values():
+                layer_bounds = entry["layer"].getBounds()
+                if layer_bounds and layer_bounds.isValid():
+                    bounds.extend(layer_bounds)
+                    has_bounds = True
+
             if self.reference_boundary_layer:
-                bounds = self.reference_boundary_layer.getBounds()
-                if bounds and bounds.isValid():
-                    self.map.fitBounds(bounds, {"padding": [24, 24]})
-                    return
-            if self.zone_layers_by_id:
-                group = self.leaflet.featureGroup(
-                    [entry["layer"] for entry in self.zone_layers_by_id.values()]
-                )
-                bounds = group.getBounds()
-                if bounds and bounds.isValid():
-                    self.map.fitBounds(bounds, {"padding": [24, 24]})
+                reference_bounds = self.reference_boundary_layer.getBounds()
+                if reference_bounds and reference_bounds.isValid():
+                    bounds.extend(reference_bounds)
+                    has_bounds = True
+
+            if has_bounds and bounds.isValid():
+                self.map.invalidateSize({"pan": False})
+                self.map.fitBounds(bounds, {"padding": [24, 24]})
         except Exception as e:
             print(f"fit_to_hatyai_bounds error: {e}")
 
@@ -744,8 +786,13 @@ class Map:
         return best
 
     def show_visual_feeds(self, feeds, on_feed_click=None):
-        """Create and display CCTV markers on the visual_feed_layer with custom CCTV hallmark."""
-        if not feeds or not hasattr(self, "leaflet") or not self.leaflet:
+        """Create and display CCTV markers on the visual_feed_layer."""
+        if not hasattr(self, "leaflet") or not self.leaflet:
+            return
+        if not feeds:
+            self.visual_feeds = []
+            self.visual_feed_markers_by_id = {}
+            self.set_visual_feed_layer([])
             return
 
         self.visual_feeds = feeds
@@ -793,15 +840,39 @@ class Map:
             source = str(feed.get("source", ""))
             upstream_id = str(feed.get("upstream_id", ""))
             image_url = feed.get("image_url") or ""
+            history_supported = (
+                bool(feed.get("history_supported", False))
+                or source == "hatyai_city_climate"
+            )
+            coverage = str(feed.get("coverage_group") or "พื้นที่เฝ้าระวัง")
 
-            # Hallmark: Modern CCTV camera pin icon with status color
+            source_display_names = {
+                "hatyai_city_climate": "Hatyai CCTV",
+                "rid": "กรมชลประทาน",
+                "dwr": "กรมทรัพยากรน้ำ",
+            }
+            src_label = source_display_names.get(
+                source, source.upper() if source else "CCTV"
+            )
+
+            captured_at = feed.get("captured_at")
+            time_display = "—"
+            if captured_at:
+                try:
+                    c_dt = datetime.datetime.fromisoformat(
+                        str(captured_at).replace("Z", "+00:00")
+                    )
+                    time_display = c_dt.astimezone(BANGKOK_TZ).strftime("%H:%M น.")
+                except Exception:
+                    time_display = str(captured_at)
+
+            # Modern CCTV camera pin icon with status color
             pulse_ring = (
-                f'<div class="cctv-live-glow" style="position: absolute; width: 12px; height: 12px; top: 7px; left: 8px; border-radius: 50%; pointer-events: none;"></div>'
+                f'<div class="cctv-live-glow absolute w-3 h-3 top-[7px] left-2 rounded-full pointer-events-none"></div>'
                 if availability == "online"
                 else ""
             )
-
-            icon_html = f"""<div class="cctv-marker-pin" style="position: relative; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.32)); cursor: pointer;">
+            icon_html = f"""<div class="cctv-marker-pin relative cursor-pointer [filter:drop-shadow(0_2px_5px_rgba(0,0,0,0.32))]">
   {pulse_ring}
   <svg width="28" height="35" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M17 0C7.6 0 0 7.6 0 17C0 28.5 15.2 40.8 15.8 41.3C16.5 41.9 17.5 41.9 18.2 41.3C18.8 40.8 34 28.5 34 17C34 7.6 26.4 0 17 0Z" fill="{color}"/>
@@ -834,15 +905,9 @@ class Map:
             )
 
             marker.bindTooltip(
-                f"<div style='font-family:inherit;font-size:12px;padding:2px;'><div style='font-weight:700;color:#0f172a;'>📷 {title}</div><div style='color:{color};font-weight:600;font-size:11px;margin-top:2px;'>● {status_label}</div></div>",
+                f"<div class='font-sans text-xs p-0.5'><div class='font-bold text-slate-900'>{title}</div><div class='font-semibold text-[11px] mt-0.5' style='color:{color};'>● {status_label}</div></div>",
                 {"direction": "top", "offset": [0, -32]},
             )
-
-            preview_img = ""
-            if image_url:
-                preview_img = f"""<div style="margin-top:6px; border-radius:8px; overflow:hidden; aspect-ratio:16/9; background:#0f172a; box-shadow:0 1px 3px rgba(0,0,0,0.1); display:flex; align-items:center; justify-content:center;">
-  <img src="{image_url}" alt="{title}" style="width:100%; height:100%; object-fit:cover; display:block;" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'color:#94a3b8; font-size:11px;\\'>ไม่มีภาพตัวอย่าง</div>'" />
-</div>"""
 
             # Check if there is a co-located water level station
             matched_st = self.find_matching_station(feed)
@@ -853,26 +918,153 @@ class Map:
                 st_name = str(matched_st.get("name_th") or matched_st.get("name", ""))
                 water_btn_html = f"""
   <button type="button" onclick="if(window.focus_water_station)window.focus_water_station('{st_code}','{st_src}')"
-    style="margin-top:5px; width:100%; background:var(--color-brand-500); color:white; font-size:11px; font-weight:600; padding:6px 10px; border-radius:8px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:4px; box-shadow:0 1px 2px rgba(2,132,199,0.2);">
-    <span>🌊 ดูข้อมูลระดับน้ำ ({st_name})</span>
+    class="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 text-[11px] font-medium transition-all cursor-pointer">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12c.6.5 1.2.8 2 .8s1.4-.3 2-.8c.6-.5 1.2-.8 2-.8s1.4.3 2 .8c.6.5 1.2.8 2 .8s1.4-.3 2-.8c.6-.5 1.2-.8 2-.8s1.4.3 2 .8c.6.5 1.2.8 2 .8s1.4-.3 2-.8c.6-.5 1.2-.8 2-.8s1.4.3 2 .8c.6.5 1.2.8 2 .8s1.4-.3 2-.8"/><path d="M2 18c.6.5 1.2.8 2 .8s1.4-.3 2-.8c.6-.5 1.2-.8 2-.8s1.4.3 2 .8c.6.5 1.2.8 2 .8s1.4-.3 2-.8c.6-.5 1.2-.8 2-.8s1.4.3 2 .8c.6.5 1.2.8 2 .8s1.4-.3 2-.8"/></svg>
+    <span>ข้อมูลระดับน้ำ: {st_name}</span>
   </button>"""
 
-            popup_html = f"""<div class="cctv-map-popup" style="font-family:inherit; min-width:240px; max-width:280px; padding:4px;">
-  <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:6px; margin-bottom:4px;">
-    <div style="font-weight:700; font-size:13px; color:#0f172a; line-height:1.25;">{title}</div>
-    <span style="background:{color}; color:white; font-size:10px; font-weight:700; padding:2px 7px; border-radius:9999px; white-space:nowrap; box-shadow:0 1px 2px rgba(0,0,0,0.1);">
-      {status_label}
-    </span>
-  </div>
-  {preview_img}
-  <button type="button" onclick="if(window.open_cctv_detail)window.open_cctv_detail('{source}','{upstream_id}')"
-    style="margin-top:8px; width:100%; background:var(--color-brand-600); color:white; font-size:11px; font-weight:600; padding:7px 10px; border-radius:8px; border:none; cursor:pointer; text-align:center; box-shadow:0 1px 2px rgba(37,99,235,0.2); transition:background 0.15s;">
-    🔍 ดูภาพสด / ประวัติ 7 วัน
-  </button>
-  {water_btn_html}
-</div>"""
+            today = datetime.datetime.now(BANGKOK_TZ).date()
+            days = [today - datetime.timedelta(days=i) for i in range(7)]
+            has_history = bool(feed.get("history_supported", False)) or (
+                str(source) == "hatyai_city_climate"
+            )
+            has_hist_js = "true" if has_history else "false"
 
-            marker.bindPopup(popup_html, {"maxWidth": 290})
+            day_buttons = []
+            for idx, d in enumerate(days):
+                d_iso = d.isoformat()
+                is_today = d == today
+                if is_today:
+                    top_txt = "วันนี้"
+                    badge_cls = "cctv-popup-day-btn is-active flex flex-col items-center justify-center min-w-[52px] sm:min-w-[58px] py-1 px-1.5 rounded-xl border transition-all cursor-pointer select-none shrink-0 bg-sky-50 text-sky-700 border-sky-300 ring-2 ring-sky-400/30 font-bold shadow-xs touch-manipulation active:scale-95"
+                    top_color = "text-sky-600 font-bold"
+                elif d == today - datetime.timedelta(days=1):
+                    top_txt = "เมื่อวาน"
+                    badge_cls = "cctv-popup-day-btn flex flex-col items-center justify-center min-w-[52px] sm:min-w-[58px] py-1 px-1.5 rounded-xl border transition-all cursor-pointer select-none shrink-0 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-600 border-slate-200 shadow-2xs font-medium touch-manipulation active:scale-95"
+                    top_color = "text-slate-700"
+                else:
+                    top_txt = THAI_DAYS_SHORT[d.weekday()]
+                    badge_cls = "cctv-popup-day-btn flex flex-col items-center justify-center min-w-[52px] sm:min-w-[58px] py-1 px-1.5 rounded-xl border transition-all cursor-pointer select-none shrink-0 bg-white hover:bg-slate-100 active:bg-slate-200 text-slate-600 border-slate-200 shadow-2xs font-medium touch-manipulation active:scale-95"
+                    top_color = "text-slate-700"
+                bottom_txt = f"{d.day} {THAI_MONTHS_SHORT[d.month]}"
+                is_today_js = "true" if is_today else "false"
+
+                day_buttons.append(f"""
+        <button type="button" class="{badge_cls}"
+          data-date="{d_iso}" data-is-today="{is_today_js}"
+          onclick="window.cctv_popup_select_day(this, '{source}', '{upstream_id}', '{d_iso}', {has_hist_js})"
+          title="{top_txt} ({bottom_txt})">
+          <span class="cctv-popup-day-top text-[10px] leading-tight {top_color}">{top_txt}</span>
+          <span class="text-[9px] leading-tight text-slate-400 font-mono mt-0.5">{bottom_txt}</span>
+        </button>""")
+
+            day_buttons_html = "".join(day_buttons)
+
+            popup_html = f"""<div class="cctv-map-popup bg-white text-slate-800 rounded-2xl overflow-hidden font-sans border border-slate-200/80 shadow-xl"
+  data-source="{source}"
+  data-upstream-id="{upstream_id}"
+  data-image-url="{image_url}"
+  data-live-time="{time_display}"
+  data-has-history="{has_hist_js}"
+  data-selected-date="{today.isoformat()}"
+  data-title="{title}">
+  <!-- Header: Source badge + Status -->
+  <div class="flex justify-between items-center px-3.5 pt-3 pb-2.5 border-b border-slate-100 bg-slate-50/80">
+    <div class="flex items-center gap-1.5 min-w-0">
+      <span class="px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider uppercase bg-slate-200/70 text-slate-700 border border-slate-300/60">
+        {src_label}
+      </span>
+      <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-semibold" style="background:{color}18; color:{color}; border: 1px solid {color}40;">
+        <span class="w-1.5 h-1.5 rounded-full animate-pulse" style="background:{color}; box-shadow: 0 0 6px {color};"></span>
+        {status_label}
+      </span>
+    </div>
+  </div>
+
+  <!-- Body -->
+  <div class="p-3 space-y-2">
+    <div>
+      <h3 class="font-bold text-xs sm:text-[13px] text-slate-900 leading-tight tracking-tight truncate" title="{title}">{title}</h3>
+      <p class="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1 truncate">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span class="truncate">{coverage}</span>
+      </p>
+    </div>
+
+    <!-- Image Viewport with Watermarks -->
+    <div class="relative aspect-video w-full rounded-xl overflow-hidden bg-slate-100 shadow-xs border border-slate-200/80 flex items-center justify-center">
+      <span class="text-[11px] text-slate-400 font-medium select-none pointer-events-none">ไม่มีภาพตัวอย่าง</span>
+      <img src="{image_url}" alt="{title}" class="cctv-popup-img absolute inset-0 w-full h-full object-cover transition-opacity duration-200"
+           onerror="this.style.display='none'" />
+      <div class="absolute top-2 left-2 z-10">
+        <span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-white/90 text-slate-700 backdrop-blur-md shadow-xs flex items-center gap-1 border border-slate-200/60">
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" class="text-sky-500"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 10.414V7a1 1 0 0 0-2 0v6a1 1 0 0 0 .293.707l3 3a1 1 0 0 0 1.414-1.414z"/></svg>
+          <span class="current-time-val font-semibold">{time_display}</span>
+        </span>
+      </div>
+      <div class="absolute top-2 right-2 z-10">
+        <span class="cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs backdrop-blur-md">
+          สด LIVE
+        </span>
+      </div>
+    </div>
+
+    <!-- 7-Day Horizontal Slide Rail -->
+    <div class="cctv-popup-7days mt-1 p-2 rounded-xl bg-slate-50 border border-slate-200/90 shadow-2xs">
+      <div class="flex items-center justify-between px-0.5 mb-1">
+        <div class="flex items-center gap-1.5 text-[11px] font-semibold text-slate-800">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-sky-600"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>ย้อนหลัง 7 วัน</span>
+          <span class="cctv-popup-selected-day text-[10px] font-medium text-sky-600 ml-1">วันนี้</span>
+        </div>
+        <div class="flex items-center gap-1">
+          <button type="button" onclick="window.cctv_popup_slide_rail(this, -1)"
+            class="w-6 h-6 rounded-md bg-white hover:bg-slate-100 active:bg-slate-200 border border-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer shadow-2xs touch-manipulation active:scale-90"
+            aria-label="สไลด์ซ้าย" title="สไลด์ซ้าย">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <button type="button" onclick="window.cctv_popup_slide_rail(this, 1)"
+            class="w-6 h-6 rounded-md bg-white hover:bg-slate-100 active:bg-slate-200 border border-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer shadow-2xs touch-manipulation active:scale-90"
+            aria-label="สไลด์ขวา" title="สไลด์ขวา">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="cctv-popup-days-rail flex items-center gap-1.5 overflow-x-auto no-scrollbar scroll-smooth py-0.5 px-0.5">
+        {day_buttons_html}
+      </div>
+
+      <!-- Stepper for history frames in popup -->
+      <div class="cctv-popup-history-ctrls hidden mt-1.5 flex items-center justify-between text-[11px] bg-white px-2 py-1 rounded-lg border border-slate-200 shadow-2xs">
+        <button type="button" onclick="window.cctv_popup_step_frame(this, -1)" class="flex items-center gap-1 text-slate-600 hover:text-sky-600 active:scale-95 font-medium px-2 py-1 rounded hover:bg-slate-50 cursor-pointer transition-all touch-manipulation">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+          <span>ก่อนหน้า</span>
+        </button>
+        <span class="cctv-popup-frame-time font-mono text-slate-800 font-semibold text-[10px]">--:-- น.</span>
+        <button type="button" onclick="window.cctv_popup_step_frame(this, 1)" class="flex items-center gap-1 text-slate-600 hover:text-sky-600 active:scale-95 font-medium px-2 py-1 rounded hover:bg-slate-50 cursor-pointer transition-all touch-manipulation">
+          <span>ถัดไป</span>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+
+      <!-- Notice for Realtime-only cameras (DWR / RID) -->
+      <div class="cctv-popup-info-notice hidden mt-1.5 px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-[10px] text-amber-800 flex items-center gap-1.5 leading-tight">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" class="shrink-0 text-amber-600"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        <span>กล้องจุดนี้ให้บริการเฉพาะภาพสด Realtime (ไม่มีข้อมูลภาพย้อนหลัง 7 วัน)</span>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="pt-1 flex flex-col gap-1.5">
+      {water_btn_html}
+      <button type="button" onclick="window.cctv_popup_open_detail(this, '{source}', '{upstream_id}')"
+        class="w-full flex items-center justify-center gap-1.5 py-2.5 sm:py-2 px-3 rounded-xl bg-sky-500 hover:bg-sky-600 active:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-all duration-150 cursor-pointer touch-manipulation active:scale-98">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+        <span>ขยายดูภาพคมชัดสูง / ประวัติเต็มจอ</span>
+      </button>
+    </div>
+  </div>
+</div>"""
 
             if on_feed_click:
                 marker.on("click", lambda e, f=feed: on_feed_click(f))
@@ -884,13 +1076,12 @@ class Map:
         self.set_visual_feed_layer(markers)
 
     def fly_to_visual_feed(self, source, upstream_id, zoom=17):
-        """Fly map view to the specified camera and open its popup."""
+        """Fly the map to the specified camera without opening a second UI."""
         key = f"{source}_{upstream_id}"
         marker = self.visual_feed_markers_by_id.get(key)
         if marker:
             latlng = marker.getLatLng()
             self.map.flyTo(latlng, zoom)
-            marker.openPopup()
 
     def _handle_map_click(self, e):
         if not self._pin_mode_active:

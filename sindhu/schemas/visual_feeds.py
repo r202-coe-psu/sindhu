@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime
 from enum import Enum
 import re
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional, Union
 from urllib.parse import parse_qsl, urlsplit
 
 from typing_extensions import Self
@@ -48,7 +48,9 @@ class SourceHealthStatus(str, Enum):
     UNKNOWN = "unknown"
 
 
-def _as_utc(value: datetime.datetime | str | None) -> datetime.datetime | None:
+def _as_utc(
+    value: Optional[Union[datetime.datetime, str]],
+) -> Optional[datetime.datetime]:
     if value is None:
         return None
 
@@ -90,12 +92,12 @@ class CoordinateProvenance(BaseModel):
     method: str = Field(min_length=1, max_length=500)
     effective_date: datetime.date
     registry_version: str = Field(min_length=1, max_length=100)
-    evidence_url: str | None = Field(default=None, max_length=2048)
-    reference_url: str | None = Field(default=None, max_length=2048)
+    evidence_url: Optional[str] = Field(default=None, max_length=2048)
+    reference_url: Optional[str] = Field(default=None, max_length=2048)
 
     @field_validator("evidence_url", "reference_url")
     @classmethod
-    def validate_reference_url(cls, value: str | None) -> str | None:
+    def validate_reference_url(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
         parsed = urlsplit(value)
@@ -124,28 +126,28 @@ class VisualFeed(bases.BaseSchema):
 
     source: str = Field(min_length=1, max_length=100)
     upstream_id: str = Field(min_length=1, max_length=200)
-    code: str | None = Field(default=None, max_length=200)
+    code: Optional[str] = Field(default=None, max_length=200)
     slug: str = Field(min_length=1, max_length=200)
     title_th: str = Field(min_length=1, max_length=500)
-    coverage_group: str | None = Field(default=None, max_length=200)
+    coverage_group: Optional[str] = Field(default=None, max_length=200)
 
     media_type: MediaType
     coordinate_status: CoordinateStatus = CoordinateStatus.UNVERIFIED
-    coordinates: GeoJSONPoint | None = None
-    coordinate_provenance: CoordinateProvenance | None = None
+    coordinates: Optional[GeoJSONPoint] = None
+    coordinate_provenance: Optional[CoordinateProvenance] = None
 
     availability: Availability = Availability.UNKNOWN
-    image_url: str | None = None
-    detail_url: str | None = None
-    captured_at: datetime.datetime | None = None
+    image_url: Optional[str] = None
+    detail_url: Optional[str] = None
+    captured_at: Optional[datetime.datetime] = None
     fetched_at: datetime.datetime = Field(
         default_factory=lambda: datetime.datetime.now(UTC)
     )
-    provider_status: str | None = Field(default=None, max_length=500)
+    provider_status: Optional[str] = Field(default=None, max_length=500)
     attribution: Dict[str, Any] = Field(default_factory=dict)
     raw_payload: Dict[str, Any] = Field(default_factory=dict)
-    registry_version: str | None = Field(default=None, max_length=100)
-    last_seen_at: datetime.datetime | None = None
+    registry_version: Optional[str] = Field(default=None, max_length=100)
+    last_seen_at: Optional[datetime.datetime] = None
     created_at: datetime.datetime = Field(
         default_factory=lambda: datetime.datetime.now(UTC)
     )
@@ -162,7 +164,7 @@ class VisualFeed(bases.BaseSchema):
 
     @field_validator("image_url", "detail_url")
     @classmethod
-    def validate_http_url(cls, value: str | None) -> str | None:
+    def validate_http_url(cls, value: Optional[str]) -> Optional[str]:
         if value is None:
             return None
         parsed = urlsplit(value)
@@ -197,6 +199,7 @@ class VisualFeed(bases.BaseSchema):
                 urlsplit(self.image_url).hostname or ""
             ).lower() not in HATYAI_IMAGE_HOSTS:
                 raise ValueError("Hatyai image URL host is not allowlisted")
+            return self
         return self
 
     @field_validator(
@@ -209,8 +212,8 @@ class VisualFeed(bases.BaseSchema):
     )
     @classmethod
     def normalize_timestamps(
-        cls, value: datetime.datetime | str | None
-    ) -> datetime.datetime | None:
+        cls, value: Optional[Union[datetime.datetime, str]]
+    ) -> Optional[datetime.datetime]:
         return _as_utc(value)
 
 
@@ -223,13 +226,13 @@ class SourceHealth(BaseModel):
     degraded: int = Field(default=0, ge=0)
     offline: int = Field(default=0, ge=0)
     unknown: int = Field(default=0, ge=0)
-    latest_fetched_at: datetime.datetime | None = None
+    latest_fetched_at: Optional[datetime.datetime] = None
 
     @field_validator("latest_fetched_at", mode="before")
     @classmethod
     def normalize_latest_fetched_at(
-        cls, value: datetime.datetime | str | None
-    ) -> datetime.datetime | None:
+        cls, value: Optional[Union[datetime.datetime, str]]
+    ) -> Optional[datetime.datetime]:
         return _as_utc(value)
 
 
@@ -242,7 +245,7 @@ class VisualFeedList(BaseModel):
     @field_validator("generated_at", mode="before")
     @classmethod
     def normalize_generated_at(
-        cls, value: datetime.datetime | str
+        cls, value: Union[datetime.datetime, str]
     ) -> datetime.datetime:
         normalized = _as_utc(value)
         if normalized is None:
@@ -252,7 +255,7 @@ class VisualFeedList(BaseModel):
 
 # Public request-driven DTOs intentionally do not inherit the legacy Mongo
 # schema: raw_payload, open-ended attribution and storage IDs must not escape.
-def public_cctv_url(value: str | None, *, image: bool = False) -> str | None:
+def public_cctv_url(value: Optional[str], *, image: bool = False) -> Optional[str]:
     if value is None:
         return None
     if len(value) > 2048 or any(ord(c) < 33 for c in value) or "\\" in value:
@@ -267,13 +270,16 @@ def public_cctv_url(value: str | None, *, image: bool = False) -> str | None:
         raise ValueError("CCTV URL query is not allowlisted")
     if not parsed.scheme and not parsed.netloc:
         if image and re.fullmatch(
-            r"/v1/visual-feeds/dwr/[0-9a-fA-F-]{36}/snapshot", parsed.path
+            r"/v1/visual-feeds/(?:dwr/[0-9a-fA-F-]{36}|rid/[A-Za-z0-9_-]{1,64})/snapshot",
+            parsed.path,
         ):
             return value
         raise ValueError("relative CCTV URL is not allowed")
     allowed_hosts = (
         HATYAI_IMAGE_HOSTS if image else HATYAI_IMAGE_HOSTS | {"telemetry.dwr.go.th"}
     )
+    if not image:
+        allowed_hosts = allowed_hosts | {"telerid.rid.go.th"}
     if (
         parsed.scheme != "https"
         or parsed.hostname not in allowed_hosts
@@ -297,22 +303,22 @@ class PublicAttribution(BaseModel):
 class PublicVisualFeed(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    source: Literal["hatyai_city_climate", "dwr"]
+    source: Literal["hatyai_city_climate", "dwr", "rid"]
     upstream_id: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=200)
     title_th: str = Field(min_length=1, max_length=500)
-    code: str | None = Field(default=None, max_length=200)
-    coverage_group: str | None = Field(default=None, max_length=200)
+    code: Optional[str] = Field(default=None, max_length=200)
+    coverage_group: Optional[str] = Field(default=None, max_length=200)
     media_type: Literal["cctv"] = "cctv"
     coordinate_status: CoordinateStatus = CoordinateStatus.UNVERIFIED
-    coordinates: GeoJSONPoint | None = None
-    coordinate_provenance: CoordinateProvenance | None = None
-    registry_version: str | None = None
+    coordinates: Optional[GeoJSONPoint] = None
+    coordinate_provenance: Optional[CoordinateProvenance] = None
+    registry_version: Optional[str] = None
     availability: Availability = Availability.UNKNOWN
-    provider_status: str | None = Field(default=None, max_length=100)
-    image_url: str | None = None
-    detail_url: str | None = None
-    captured_at: datetime.datetime | None = None
+    provider_status: Optional[str] = Field(default=None, max_length=100)
+    image_url: Optional[str] = None
+    detail_url: Optional[str] = None
+    captured_at: Optional[datetime.datetime] = None
     fetched_at: datetime.datetime
     history_supported: bool = False
     attribution: PublicAttribution
@@ -358,6 +364,11 @@ class PublicVisualFeed(BaseModel):
                 and path != f"/v1/visual-feeds/dwr/{self.upstream_id}/snapshot"
             ):
                 raise ValueError("DWR images must use this camera's proxy")
+            if (
+                self.source == "rid"
+                and path != f"/v1/visual-feeds/rid/{self.upstream_id}/snapshot"
+            ):
+                raise ValueError("RID images must use this camera's proxy")
             if self.source == "hatyai_city_climate" and not self.image_url.startswith(
                 "https://"
             ):
@@ -367,7 +378,7 @@ class PublicVisualFeed(BaseModel):
 
 class PublicSourceHealth(SourceHealth):
     cache_stale: bool = False
-    error: str | None = Field(default=None, max_length=100, pattern=r"^[a-z0-9_]+$")
+    error: Optional[str] = Field(default=None, max_length=100, pattern=r"^[a-z0-9_]+$")
 
 
 class PublicVisualFeedList(BaseModel):
@@ -387,7 +398,7 @@ class HistoryFrame(BaseModel):
     model_config = ConfigDict(extra="forbid")
     captured_at: datetime.datetime
     image_url: str
-    thumbnail_url: str | None = None
+    thumbnail_url: Optional[str] = None
 
     @field_validator("captured_at", mode="before")
     @classmethod
@@ -424,9 +435,16 @@ __all__ = [
     "CoordinateProvenance",
     "CoordinateStatus",
     "GeoJSONPoint",
+    "HistoryFrame",
     "MediaType",
+    "PublicAttribution",
+    "PublicSourceHealth",
+    "PublicVisualFeed",
+    "PublicVisualFeedList",
     "SourceHealth",
     "SourceHealthStatus",
     "VisualFeed",
+    "VisualFeedHistory",
     "VisualFeedList",
+    "public_cctv_url",
 ]
