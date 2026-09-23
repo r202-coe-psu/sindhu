@@ -257,9 +257,9 @@ def _availability_status_class(availability):
 
 
 def _is_displayable_camera(feed):
-    """The public monitor shows only cameras that are online with an image."""
+    """Show cameras with an image when availability is online or unknown."""
     feed = _as_dict(feed)
-    return _availability(feed) == "online" and bool(
+    return _availability(feed) in {"online", "unknown"} and bool(
         str(feed.get("image_url") or "").strip()
     )
 
@@ -438,8 +438,12 @@ class VisualFeedMonitor:
             return
         target_feeds = self.latest_feeds if feeds is None else feeds
         marker_feeds = []
+        hide_unknown = document.getElementById("hide_unknown_cctv_markers")
+        hide_unknown = bool(hide_unknown and hide_unknown.checked)
         for feed in target_feeds:
             if not _is_displayable_camera(feed) or not _has_coordinates(feed):
+                continue
+            if hide_unknown and _availability(feed) == "unknown":
                 continue
             f_copy = dict(feed)
             img = _resolve_image_url(f_copy.get("image_url"), self.api_url)
@@ -516,6 +520,9 @@ class VisualFeedMonitor:
             document["visual_feed_view_grid"].bind("click", self._on_set_view_grid)
         if "toggle_cctv_markers" in document:
             document["toggle_cctv_markers"].bind("change", self._on_toggle_cctv_markers)
+        if "hide_unknown_cctv_markers" in document:
+            document["hide_unknown_cctv_markers"].bind("change", self._on_filter)
+        self._sync_unknown_camera_filter()
         if "visual_feed_retry" in document:
             document["visual_feed_retry"].bind("click", self._on_retry)
         if "visual_feed_panel_tab" in document:
@@ -599,9 +606,30 @@ class VisualFeedMonitor:
 
     def _on_toggle_cctv_markers(self, event):
         visible = getattr(event.target, "checked", True)
+        self._sync_unknown_camera_filter()
         m = self._get_map()
         if m and hasattr(m, "set_visual_feed_layer_visible"):
             m.set_visual_feed_layer_visible(visible)
+
+    def _sync_unknown_camera_filter(self):
+        camera_toggle = document.getElementById("toggle_cctv_markers")
+        unknown_toggle = document.getElementById("hide_unknown_cctv_markers")
+        if not camera_toggle:
+            return
+
+        if unknown_toggle:
+            unknown_toggle.disabled = not camera_toggle.checked
+
+        state = document.getElementById("cctv_visibility_state")
+        if state:
+            if camera_toggle.checked:
+                state.textContent = "แสดงบนแผนที่"
+                state.classList.remove("cctv-map-state--hidden")
+                state.classList.add("cctv-map-state--visible")
+            else:
+                state.textContent = "ซ่อนบนแผนที่"
+                state.classList.remove("cctv-map-state--visible")
+                state.classList.add("cctv-map-state--hidden")
 
     def _on_filter(self, _event):
         self.render_cards()
@@ -936,7 +964,8 @@ class VisualFeedMonitor:
 
             # Status stays beside the details so the camera image stays clear.
             meta_div = _append(body, _el("div", "text-[10px] text-slate-500 truncate"))
-            meta_div.textContent = f"ออนไลน์ · {coverage} · {source_lbl}"
+            status_text = AVAILABILITY_LABELS.get(availability, "ออนไลน์")
+            meta_div.textContent = f"{status_text} · {coverage} · {source_lbl}"
 
             # Actions
             actions = _append(
@@ -1047,7 +1076,8 @@ class VisualFeedMonitor:
         _append(body, title_btn)
 
         # Keep availability out of the image, then keep source context quiet.
-        meta_parts = ["ออนไลน์", source_lbl]
+        status_text = AVAILABILITY_LABELS.get(availability, "ออนไลน์")
+        meta_parts = [status_text, source_lbl]
         if coverage and coverage != "—":
             meta_parts.append(coverage)
         meta_line = _append(

@@ -3,6 +3,8 @@ import datetime
 import json
 import math
 
+BANGKOK_TZ = datetime.timezone(datetime.timedelta(hours=7))
+
 THAI_DAYS_SHORT = ["จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."]
 THAI_MONTHS_SHORT = [
     "",
@@ -785,7 +787,12 @@ class Map:
 
     def show_visual_feeds(self, feeds, on_feed_click=None):
         """Create and display CCTV markers on the visual_feed_layer."""
-        if not feeds or not hasattr(self, "leaflet") or not self.leaflet:
+        if not hasattr(self, "leaflet") or not self.leaflet:
+            return
+        if not feeds:
+            self.visual_feeds = []
+            self.visual_feed_markers_by_id = {}
+            self.set_visual_feed_layer([])
             return
 
         self.visual_feeds = feeds
@@ -852,24 +859,20 @@ class Map:
             time_display = "—"
             if captured_at:
                 try:
-                    import datetime
-
                     c_dt = datetime.datetime.fromisoformat(
                         str(captured_at).replace("Z", "+00:00")
                     )
-                    b_tz = datetime.timezone(datetime.timedelta(hours=7))
-                    time_display = c_dt.astimezone(b_tz).strftime("%H:%M น.")
+                    time_display = c_dt.astimezone(BANGKOK_TZ).strftime("%H:%M น.")
                 except Exception:
                     time_display = str(captured_at)
 
             # Modern CCTV camera pin icon with status color
             pulse_ring = (
-                f'<div class="cctv-live-glow" style="position: absolute; width: 12px; height: 12px; top: 7px; left: 8px; border-radius: 50%; pointer-events: none;"></div>'
+                f'<div class="cctv-live-glow absolute w-3 h-3 top-[7px] left-2 rounded-full pointer-events-none"></div>'
                 if availability == "online"
                 else ""
             )
-
-            icon_html = f"""<div class="cctv-marker-pin" style="position: relative; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.32)); cursor: pointer;">
+            icon_html = f"""<div class="cctv-marker-pin relative cursor-pointer [filter:drop-shadow(0_2px_5px_rgba(0,0,0,0.32))]">
   {pulse_ring}
   <svg width="28" height="35" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M17 0C7.6 0 0 7.6 0 17C0 28.5 15.2 40.8 15.8 41.3C16.5 41.9 17.5 41.9 18.2 41.3C18.8 40.8 34 28.5 34 17C34 7.6 26.4 0 17 0Z" fill="{color}"/>
@@ -902,7 +905,7 @@ class Map:
             )
 
             marker.bindTooltip(
-                f"<div style='font-family:inherit;font-size:12px;padding:2px;'><div style='font-weight:700;color:#0f172a;'>{title}</div><div style='color:{color};font-weight:600;font-size:11px;margin-top:2px;'>● {status_label}</div></div>",
+                f"<div class='font-sans text-xs p-0.5'><div class='font-bold text-slate-900'>{title}</div><div class='font-semibold text-[11px] mt-0.5' style='color:{color};'>● {status_label}</div></div>",
                 {"direction": "top", "offset": [0, -32]},
             )
 
@@ -920,7 +923,7 @@ class Map:
     <span>ข้อมูลระดับน้ำ: {st_name}</span>
   </button>"""
 
-            today = datetime.date.today()
+            today = datetime.datetime.now(BANGKOK_TZ).date()
             days = [today - datetime.timedelta(days=i) for i in range(7)]
             has_history = bool(feed.get("history_supported", False)) or (
                 str(source) == "hatyai_city_climate"
