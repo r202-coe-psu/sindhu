@@ -11,9 +11,6 @@ from stations.metric_colors import get_metric_color as _get_metric_color
 DATA_MARKER_Z_OFFSET = 1000
 
 
-DATA_MARKER_Z_OFFSET = 1000
-
-
 class BaseMap(Map):
     def __init__(
         self,
