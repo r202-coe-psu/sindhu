@@ -532,7 +532,13 @@ function renderZoneList(zones) {
         const color = meta.stroke || meta.fill || "#2563eb";
         const mode = meta.shading_mode || "outline";
         const isActive = (z.status === "active");
-        const isRef = meta.role === "reference_boundary";
+        const isRef = z.zone_kind === "reference"
+            || (meta && meta.role === "reference_boundary")
+            || z.code === "hatyai-boundary"
+            || z.code === "hatyai"
+            || (z.code && z.code.toLowerCase().includes("hatyai") && !z.code.toLowerCase().includes("zone"))
+            || z.name === "Hat Yai"
+            || z.name_th === "หาดใหญ่";
         const stationCount = (z.stations || []).length;
 
         /* Quick toggle button for status */
@@ -557,14 +563,15 @@ function renderZoneList(zones) {
             ? '<span class="badge badge-xs badge-neutral text-[10px] py-1 px-1.5">กรอบอ้างอิง</span>'
             : '';
 
-        const rowBg = isActive ? "hover:bg-brand-50/70" : "bg-ink-50/60 opacity-80 hover:bg-ink-100/70";
-        const borderStyle = isActive ? "border-solid" : "border-dashed";
+        const rowBg = isRef ? "bg-ink-50/60" : (isActive ? "hover:bg-brand-50/70" : "bg-ink-50/60 opacity-80 hover:bg-ink-100/70");
+        const borderStyle = isRef ? "border-solid" : (isActive ? "border-solid" : "border-dashed");
+        const borderColor = isRef ? "#000000" : color;
 
         return `
-        <div class="zone-row p-3 ${rowBg} cursor-pointer transition-colors border-l-4 ${borderStyle}" style="border-left-color: ${color};" data-id="${z.id}" onclick="selectZone('${z.id}')">
+        <div class="zone-row p-3 ${rowBg} ${isRef ? 'cursor-default' : 'cursor-pointer'} transition-colors border-l-4 ${borderStyle}" style="border-left-color: ${borderColor};" data-id="${z.id}" ${isRef ? '' : `onclick="selectZone('${z.id}')"`}>
             <div class="flex justify-between items-start gap-2">
                 <div class="flex items-start gap-2.5 min-w-0 flex-1">
-                    <span class="w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 shadow-sm" style="background-color: ${color};"></span>
+                    <span class="w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 shadow-sm" style="background-color: ${borderColor};"></span>
                     <div class="truncate flex-1">
                         <div class="flex items-center gap-1.5">
                             <span class="font-bold text-ink-800 text-sm truncate">${z.name_th || z.name}</span>
@@ -645,7 +652,25 @@ function getZoneStyle(z) {
     const meta = z.metadata || {};
     const color = meta.stroke || meta.fill || "#2563eb";
     const isActive = (z.status === "active");
-    const isRef = meta.role === "reference_boundary";
+    const isRef = z.zone_kind === "reference"
+        || (meta && meta.role === "reference_boundary")
+        || z.code === "hatyai-boundary"
+        || z.code === "hatyai"
+        || (z.code && z.code.toLowerCase().includes("hatyai") && !z.code.toLowerCase().includes("zone"))
+        || z.name === "Hat Yai"
+        || z.name_th === "หาดใหญ่";
+
+    if (isRef) {
+        return {
+            color: "#000000",
+            weight: 2,
+            dashArray: "",
+            fillColor: "transparent",
+            fillOpacity: 0.0,
+            opacity: 0.95
+        };
+    }
+
     const zoneMode = meta.shading_mode || "outline";
 
     let isShaded = false;
@@ -673,8 +698,8 @@ function getZoneStyle(z) {
 
     return {
         color: color,
-        weight: isRef ? 3 : 2.5,
-        dashArray: isRef ? "8, 6" : "",
+        weight: 2.5,
+        dashArray: "",
         fillColor: isShaded ? (meta.fill || color) : "transparent",
         fillOpacity: isShaded ? opacity : 0.0,
         opacity: 0.95
@@ -692,12 +717,22 @@ function renderZonesOnMap(zones) {
         if (!z.boundary) return;
         const isReference = z.zone_kind === "reference"
             || (z.metadata && z.metadata.role === "reference_boundary")
-            || z.code === "hatyai-boundary";
+            || z.code === "hatyai-boundary"
+            || z.code === "hatyai"
+            || (z.code && z.code.toLowerCase().includes("hatyai") && !z.code.toLowerCase().includes("zone"))
+            || z.name === "Hat Yai"
+            || z.name_th === "หาดใหญ่";
         if (isReference) {
-            const referenceStyle = getZoneStyle(z);
             referenceBoundaryLayer = L.geoJson({ type: "Feature", geometry: z.boundary }, {
                 interactive: false,
-                style: referenceStyle
+                style: {
+                    color: "#000000",
+                    weight: 2,
+                    dashArray: "",
+                    fillColor: "transparent",
+                    fillOpacity: 0.0,
+                    opacity: 0.95
+                }
             }).addTo(map);
             return;
         }
@@ -711,10 +746,14 @@ function renderZonesOnMap(zones) {
             properties: { name: name }
         }, {
             style: style
-        }).bindTooltip(tooltipText, { sticky: true }).addTo(map);
+        }).bindTooltip(tooltipText, { sticky: true });
+        layer.on("click", function() {
+            selectZone(z.id);
+        });
+        layer.addTo(map);
         allZoneLayers[z.id] = layer;
     });
-    if (referenceBoundaryLayer) referenceBoundaryLayer.bringToFront();
+    if (referenceBoundaryLayer) referenceBoundaryLayer.bringToBack();
 }
 
 async function renderDefaultReferenceBoundary() {
@@ -725,8 +764,9 @@ async function renderDefaultReferenceBoundary() {
         if (referenceBoundaryLayer) map.removeLayer(referenceBoundaryLayer);
         referenceBoundaryLayer = L.geoJson({ type: "Feature", geometry: boundary }, {
             interactive: false,
-            style: { fillColor: "#000000", color: "#000000", opacity: 1, weight: 2, fillOpacity: 0 }
+            style: { fillColor: "transparent", color: "#000000", opacity: 0.95, weight: 2, fillOpacity: 0, dashArray: "" }
         }).addTo(map);
+        referenceBoundaryLayer.bringToBack();
     } catch(e) { console.error(e); }
 }
 
