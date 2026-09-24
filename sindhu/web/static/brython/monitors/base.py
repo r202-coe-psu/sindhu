@@ -16,7 +16,6 @@ class BaseMonitor:
         source=None,
         center=None,
         zoom=None,
-        fallback_zone_urls=None,
         reference_boundary_url=None,
         rivers_url=None,
     ):
@@ -29,11 +28,8 @@ class BaseMonitor:
         self.source = source
         self.center = center
         self.zoom = zoom
-        self.fallback_zone_urls = fallback_zone_urls or []
         self.reference_boundary_url = reference_boundary_url
-        self.rivers_url = (
-            rivers_url or "/static/resources/songkhla_rivers_direction.geojson"
-        )
+        self.rivers_url = rivers_url or "/static/resources/songkhla_basins.geojson"
 
         self.monitor_name = "base"
 
@@ -130,7 +126,7 @@ class BaseMonitor:
             print(f"[Monitor] Failed to load rivers: {e}")
 
     async def load_zones(self):
-        """Draw API zones, or bundled prototype GeoJSON zones 1-4."""
+        """Draw active API flood zones from database."""
         db_zones = []
         try:
             response = await aio.get(self.apis["zones"], cache=False)
@@ -138,63 +134,40 @@ class BaseMonitor:
             db_zones = data.get("zones", [])
         except Exception as e:
             print(f"[Monitor] Failed to load zones: {e}")
-            # Preserve zones already rendered during a transient refresh error.
             if self.zones:
                 return False
-            if not self.fallback_zone_urls:
-                raise
+            db_zones = []
 
-        if db_zones:
-            for z in db_zones:
-                if not z.get("style"):
-                    z["style"] = z.get("metadata") or {}
-            self.zones = [z for z in db_zones if z.get("status") != "inactive"]
-        elif self.fallback_zone_urls:
-            region_th_map = {
-                "south": "ทิศใต้",
-                "west": "ทิศตะวันตก",
-                "central_east": "ตอนกลาง-ทิศตะวันออก",
-                "north": "ทิศเหนือ",
-            }
-            fallback_zones = []
-            for index, url in enumerate(self.fallback_zone_urls):
-                try:
-                    response = await aio.get(url, cache=True)
-                    collection = json.loads(response.data)
-                    for feature in collection.get("features", []):
-                        props = feature.get("properties") or {}
-                        reg = props.get("region", "")
-                        reg_label = region_th_map.get(reg, reg)
-                        base_name_th = props.get("name_th", f"โซน {index + 1}")
-                        display_name_th = (
-                            f"{base_name_th} ({reg_label})"
-                            if reg_label
-                            else base_name_th
-                        )
-                        fallback_zones.append(
-                            {
-                                "id": f"prototype-zone-{index + 1}",
-                                "name": props.get("name", f"Zone {index + 1}"),
-                                "name_th": display_name_th,
-                                "boundary": feature.get("geometry"),
-                                "style": props,
-                                "prototype": True,
-                            }
-                        )
-                except Exception as e:
-                    print(f"load fallback zone error: {e}")
-            self.zones = fallback_zones
+        flood_zones = []
+        for z in db_zones:
+            if z.get("status") == "inactive":
+                continue
+            meta = z.get("metadata") or z.get("style") or {}
+            is_ref = (
+                z.get("zone_kind") == "reference"
+                or meta.get("role") == "reference_boundary"
+                or z.get("code") in ("hatyai-boundary", "hatyai")
+                or (
+                    z.get("code")
+                    and "hatyai" in str(z.get("code")).lower()
+                    and "zone" not in str(z.get("code")).lower()
+                )
+                or z.get("name")
+                in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
+                or z.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
+            )
+            if is_ref:
+                continue
+            if not z.get("style"):
+                z["style"] = meta
+            flood_zones.append(z)
 
+        self.zones = flood_zones
         self.map.show_all_zones(self.zones, on_select=self.on_zone_selected)
-        has_db_boundary = any(
-            (z.get("metadata") or {}).get("role") == "reference_boundary"
-            or z.get("code") == "hatyai-boundary"
-            for z in db_zones
-        )
-        if not has_db_boundary:
-            await self.load_reference_boundary()
+        await self.load_reference_boundary()
         if hasattr(self.map, "fit_to_hatyai_bounds"):
             self.map.fit_to_hatyai_bounds()
+            window.setTimeout(self.map.fit_to_hatyai_bounds, 100)
 
     async def load_reference_boundary(self):
         if not self.reference_boundary_url:
@@ -218,9 +191,6 @@ class BaseMonitor:
         aio.run(self.load_zone_stations(zone))
 
     async def load_zone_stations(self, zone):
-        if zone.get("prototype"):
-            self.on_zone_stations_empty(zone)
-            return
         # `Zone.stations` is only filled in when an admin links stations by
         # hand, so fall back to resolving the members geographically.
         stations = zone.get("stations", []) or []
