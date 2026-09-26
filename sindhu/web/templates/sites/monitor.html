@@ -1,91 +1,5 @@
 {% extends '/base/default_page.html' %}
 
-{% block additional_head %}
-<style>
-    .zone-label {
-        background: rgba(37, 99, 235, 0.85) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 6px !important;
-        padding: 4px 10px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
-    }
-
-    .zone-label::before {
-        display: none !important;
-    }
-
-    {# Visual Feed & Camera styles #}
-    .visual-feed-card {
-        /* Keep camera rows painted inside the scrollable panel.  The previous
-           content-visibility optimization made Chromium show only thin
-           placeholder lines until the panel was scrolled. */
-        content-visibility: visible !important;
-        contain: none !important;
-        min-height: 200px;
-    }
-
-    .visual-feed-card img {
-        aspect-ratio: 16 / 9;
-        object-fit: cover;
-        background: #0f172a;
-    }
-
-    .visual-feed-card[data-availability="offline"],
-    .visual-feed-card[data-availability="stale"] {
-        opacity: 0.92;
-    }
-
-    #visual_feed_detail_dialog::backdrop {
-        background: rgba(15, 23, 42, 0.65);
-        backdrop-filter: blur(4px);
-    }
-
-    .visual-feed-tab[aria-selected="true"] {
-        color: var(--color-brand-700);
-        background: #ffffff;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        font-weight: 700;
-    }
-
-    .active-view-btn {
-        background-color: #ffffff !important;
-        color: var(--color-brand-700) !important;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
-        font-weight: 700 !important;
-    }
-
-    .custom-cctv-pin {
-        background: transparent !important;
-        border: none !important;
-    }
-
-    .custom-cctv-pin:focus {
-        outline: none !important;
-    }
-
-    @keyframes cctv-pulse {
-        0% {
-            transform: scale(0.95);
-            box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
-        }
-        70% {
-            transform: scale(1);
-            box-shadow: 0 0 0 8px rgba(22, 163, 74, 0);
-        }
-        100% {
-            transform: scale(0.95);
-            box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
-        }
-    }
-
-    .cctv-live-glow {
-        animation: cctv-pulse 2s infinite;
-    }
-</style>
-{% endblock additional_head %}
 {% include 'base/map_header.html' %}
 {% block content %}
 <div class="flex flex-wrap items-center gap-3 w-full mb-1">
@@ -98,8 +12,7 @@
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     {# Map Section (Left) #}
     <div class="lg:col-span-2">
-        <div class="bg-white rounded-2xl shadow-lg border border-ink-100 overflow-hidden relative"
-            style="height: 600px;">
+        <div class="bg-white rounded-2xl shadow-lg border border-ink-100 overflow-hidden relative h-[600px]">
             <div id="loading_map" role="status" aria-live="polite"
                 class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-ink-50/80 backdrop-blur-sm transition-opacity duration-300">
                 <div class="flex flex-col items-center p-4 text-center max-w-xs">
@@ -111,7 +24,7 @@
                     </button>
                 </div>
             </div>
-            <div id="mapid" style="z-index:1; height: 100%; width:100%;"></div>
+            <div id="mapid" class="z-[1] h-full w-full"></div>
 
             <div id="pin_hint_banner"
                 class="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] bg-white/90 backdrop-blur-sm border border-ink-200 shadow-md rounded-full px-4 py-1.5 pointer-events-none hidden">
@@ -124,8 +37,7 @@
     </div>
 
     {# Data Panel Section (Right) #}
-    <div class="lg:col-span-1 flex flex-col bg-white rounded-2xl shadow-lg border border-ink-100 overflow-hidden"
-        style="height: 600px;">
+    <div class="lg:col-span-1 flex flex-col bg-white rounded-2xl shadow-lg border border-ink-100 overflow-hidden h-[600px]">
         {# Header #}
         <div class="bg-gradient-to-r from-brand-600 via-brand-700 to-brand-800 text-white p-4 flex-shrink-0 shadow-sm">
             <h2 id="panel_header_title" class="text-lg font-bold flex items-center gap-2">
@@ -331,36 +243,6 @@
         <p id="visual_feed_history_status" class="mt-3 text-xs text-ink-500 font-medium" role="status" aria-live="polite"></p>
     </div>
 </dialog>
-<style>
-    /* Custom Scrollbar for the Data List */
-    .custom-scrollbar::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .custom-scrollbar::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-        background-color: var(--color-ink-300);
-        border-radius: 20px;
-    }
-
-    {# River flow animation styles #}
-    @keyframes flow {
-        to {
-            stroke-dashoffset: -20;
-        }
-    }
-    .river-line {
-        stroke-dasharray: none;
-        transition: stroke-width 0.2s, stroke 0.2s, stroke-opacity 0.2s;
-    }
-    .flowing-river {
-        stroke-dasharray: 10, 8;
-        animation: flow 1.5s linear infinite;
-    }
-</style>
 
 <script type="text/javascript">
     window.onload = function () {
@@ -381,14 +263,8 @@
     "{{ g.lang_code }}",
     "{{ api_url }}",
     "{{ source }}",
-    fallback_zone_urls=[
-      "{{ url_for('static', filename='resources/water_flow_zones/zone_1_south.geojson') }}",
-      "{{ url_for('static', filename='resources/water_flow_zones/zone_2_west.geojson') }}",
-      "{{ url_for('static', filename='resources/water_flow_zones/zone_3_central_east.geojson') }}",
-      "{{ url_for('static', filename='resources/water_flow_zones/zone_4_north.geojson') }}"
-    ],
     reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}",
-    rivers_url="{{ url_for('static', filename='resources/songkhla_rivers_direction.geojson') }}"
+    rivers_url="{{ url_for('static', filename='resources/songkhla_basins.geojson') }}"
     )
   visual_feeds = VisualFeedMonitor("{{ api_url }}")
   monitors.visual_feed_monitor = visual_feeds

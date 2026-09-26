@@ -9,7 +9,6 @@ from sindhu import models
 from sindhu.schemas.zones import CreateUpdateZone
 from sindhu.services import zones as zones_service
 
-
 BOUNDARY_PATH = (
     Path(__file__).resolve().parents[2]
     / "sindhu"
