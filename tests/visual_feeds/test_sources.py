@@ -19,6 +19,7 @@ from sindhu.services.cctv_catalog import (
     get_camera,
 )
 from sindhu.services.cctv_sources import (
+    BANGKOK,
     CctvSources,
     DWR_IMAGE_URL,
     DWR_LIST_URL,
@@ -80,6 +81,26 @@ class CctvCatalogTests(unittest.TestCase):
             },
         )
         self.assertEqual(get_camera(RID_SOURCE, "stn04")["code"], "STN04")
+
+
+class RidSourceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_latest_catalog_marks_capture_time_unavailable_and_history_off(self):
+        async def unexpected_request(_request: httpx.Request) -> httpx.Response:
+            self.fail("RID catalog must not probe image endpoints")
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(unexpected_request)
+        ) as client:
+            records = await CctvSources(client, clock=lambda: NOW).latest(RID_SOURCE)
+
+        self.assertEqual(len(records), len(RID_CAMERAS))
+        self.assertTrue(
+            all(record["captured_at"] is None for record in records)
+        )
+        self.assertTrue(all("image_checked_at" not in record for record in records))
+        self.assertTrue(
+            all(record["history_supported"] is False for record in records)
+        )
 
 
 class HatyaiSourceTests(unittest.IsolatedAsyncioTestCase):
@@ -160,6 +181,35 @@ class HatyaiSourceTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(malformed_time["availability"], "unknown")
         self.assertEqual(malformed_time["captured_at"], None)
+
+    async def test_latest_becomes_stale_only_after_24_hours_without_new_data(self):
+        for age, expected in (
+            (dt.timedelta(hours=23, minutes=59), "online"),
+            (dt.timedelta(hours=24), "online"),
+            (dt.timedelta(hours=24, seconds=1), "stale"),
+        ):
+            with self.subTest(age=age):
+                payload = _json_fixture("hatyai_catalog.json")
+                road_camera = next(
+                    item for item in payload["items"] if item["name"] == "road30m"
+                )
+                captured_at = NOW.astimezone(BANGKOK) - age
+                road_camera["atDate"] = captured_at.replace(tzinfo=None).isoformat()
+
+                async def handler(request: httpx.Request) -> httpx.Response:
+                    return _response(request, payload)
+
+                async with httpx.AsyncClient(
+                    transport=httpx.MockTransport(handler)
+                ) as client:
+                    records = await CctvSources(client, clock=lambda: NOW).latest(
+                        HATYAI_SOURCE
+                    )
+
+                road30m = next(
+                    record for record in records if record["slug"] == "road30m"
+                )
+                self.assertEqual(road30m["availability"], expected)
 
     async def test_invalid_or_empty_catalog_is_a_typed_failure(self):
         async def empty_handler(request: httpx.Request) -> httpx.Response:

@@ -87,7 +87,7 @@ DWR_IMAGE_URL = _join_provider_url(DWR_CCTV_API_BASE_URL, DWR_IMAGE_PATH)
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_HISTORY_FRAMES = 144
 SOURCE_DEADLINE_SECONDS = 10.0
-STALE_AFTER = dt.timedelta(minutes=30)
+STALE_AFTER = dt.timedelta(hours=24)
 
 _SNAPSHOT_PATH = re.compile(
     r"^/(?P<station>[A-Za-z0-9_-]{1,64})/"
