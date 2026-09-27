@@ -280,37 +280,6 @@
         <p id="visual_feed_history_status" class="mt-2 text-xs text-slate-500 font-medium text-center" role="status" aria-live="polite"></p>
     </div>
 </dialog>
-<style>
-    /* Custom Scrollbar for the Data List */
-    .custom-scrollbar::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .custom-scrollbar::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-        background-color: #cbd5e1;
-        border-radius: 20px;
-    }
-
-    {# River flow animation styles #}
-    @keyframes flow {
-        to {
-            stroke-dashoffset: -20;
-        }
-    }
-    .river-line {
-        stroke-dasharray: none;
-        transition: stroke-width 0.2s, stroke 0.2s, stroke-opacity 0.2s;
-    }
-    .flowing-river {
-        stroke-dasharray: 10, 8;
-        animation: flow 1.5s linear infinite;
-    }
-</style>
-
 <script type="text/javascript">
     window.__sindhu_api_url = "{{ api_url }}";
     window.__cctv_popup_cache = {};
@@ -497,7 +466,8 @@
     "{{ g.lang_code }}",
     "{{ api_url }}",
     "{{ source }}",
-    reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}"
+    reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}",
+    rivers_url="{{ url_for('static', filename='resources/songkhla_basins.geojson') }}"
     )
   visual_feeds = VisualFeedMonitor("{{ api_url }}")
   monitors.visual_feed_monitor = visual_feeds

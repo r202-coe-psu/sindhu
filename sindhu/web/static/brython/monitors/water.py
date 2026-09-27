@@ -24,7 +24,6 @@ class WaterMonitor(BaseMonitor):
         source,
         center=None,
         zoom=None,
-        fallback_zone_urls=None,
         reference_boundary_url=None,
         rivers_url=None,
     ):
@@ -34,7 +33,6 @@ class WaterMonitor(BaseMonitor):
             source=source,
             center=center,
             zoom=zoom,
-            fallback_zone_urls=fallback_zone_urls,
             reference_boundary_url=reference_boundary_url,
             rivers_url=rivers_url,
         )
@@ -49,7 +47,9 @@ class WaterMonitor(BaseMonitor):
             return True
 
         metadata = station.get("metadata") or {}
-        station_type = metadata.get("station_type") if isinstance(metadata, dict) else None
+        station_type = (
+            metadata.get("station_type") if isinstance(metadata, dict) else None
+        )
         if not isinstance(station_type, str):
             return False
 
@@ -68,6 +68,12 @@ class WaterMonitor(BaseMonitor):
 
         wl_crit = metadata.get("water_level_critical")
         wl_warn = metadata.get("water_level_warning")
+        wl_evac = metadata.get("water_level_evacuation")
+        if wl_evac is None and wl_crit is not None:
+            try:
+                wl_evac = float(wl_crit) + 0.5
+            except:
+                pass
 
         waterlevel = None
         diff_wl_bank = None
@@ -78,43 +84,46 @@ class WaterMonitor(BaseMonitor):
             val = m.get("value")
             if val is not None:
                 try:
-                    if m_type in ["waterlevel", "waterlevel_msl", "waterlevel_m"]:
+                    if m_type in [
+                        "water_level",
+                        "waterlevel",
+                        "waterlevel_msl",
+                        "waterlevel_m",
+                    ]:
                         waterlevel = float(val)
                     elif m_type == "diff_wl_bank":
                         diff_wl_bank = float(val)
                 except (ValueError, TypeError):
                     pass
 
-        if waterlevel is None and diff_wl_bank is None:
-            return -1, None, None
-
-        has_threshold = False
-        crit = None
-        warn = None
-        if wl_crit is not None and wl_warn is not None:
-            try:
-                c = float(wl_crit)
-                w = float(wl_warn)
-                if c > 0 and w > 0:
-                    crit = c
-                    warn = w
-                    has_threshold = True
-            except (ValueError, TypeError):
-                has_threshold = False
-
-        if has_threshold and waterlevel is not None:
+        risk = -1
+        if waterlevel is not None and wl_crit is not None and wl_warn is not None:
             try:
                 wl = float(waterlevel)
-                if wl >= crit:
-                    return 2, waterlevel, diff_wl_bank
+                crit = float(wl_crit)
+                warn = float(wl_warn)
+                evac = float(wl_evac) if wl_evac is not None else crit + 0.5
+                if wl >= evac:
+                    risk = 3
+                elif wl >= crit:
+                    risk = 2
                 elif wl >= warn:
-                    return 1, waterlevel, diff_wl_bank
+                    risk = 1
                 else:
-                    return 0, waterlevel, diff_wl_bank
+                    risk = 0
             except:
                 pass
+        elif diff_wl_bank is not None:
+            if diff_wl_bank >= 0.5:
+                risk = 3
+            elif diff_wl_bank >= 0:
+                risk = 2
+            elif diff_wl_bank >= -0.5:
+                risk = 1
+            else:
+                risk = 0
 
-        return 0, waterlevel, diff_wl_bank
+        return risk, waterlevel, diff_wl_bank
 
     """
     ===========================================================================
@@ -217,9 +226,9 @@ class WaterMonitor(BaseMonitor):
             )
 
         while self.running:
-            print(
-                f"[Monitor:{self.monitor_name}] Cycle running (interval: {self.acquisition_interval}s)"
-            )
+            print(f"monitor: wake up {datetime.datetime.now()}")
+            print(f"monitor: {self.monitor_name} monitor")
+            print(f"monitor: sleep {self.acquisition_interval}s")
 
             await self.get_stations_metrics()
             if self.is_rain_interpolation_on():
@@ -229,19 +238,22 @@ class WaterMonitor(BaseMonitor):
             await aio.sleep(self.acquisition_interval)
 
     async def get_stations_metrics(self):
+        # Keep stations without recent measurements in the response so the map
+        # can render them with the existing "no data" state. Filtering at the
+        # API by metric type would remove every station when the latest metric is
+        # older than 24 hours.
         url = f"{self.api_url}/v1/stations/metrics/latest"
 
         self.set_map_loading(True)
         try:
             # Pass the query through `data`: with cache=False Brython appends
-            # "?ts...=0" to the URL itself, so a "?source=" already in the URL
-            # would turn into "source=all?ts...=0" and match no stations
+            # a cache-busting query parameter to the URL itself.
             response = await aio.get(url, data={"source": self.source}, cache=False)
             if response.status != 200:
                 raise RuntimeError(f"station metrics returned HTTP {response.status}")
             data = json.loads(response.data)
             if not data or not isinstance(data, dict):
-                print(f"[Monitor:{self.monitor_name}] Invalid data received: {data}")
+                print(f"monitor: error data is invalid: {data}")
                 return
 
             data["stations"] = [
@@ -258,6 +270,7 @@ class WaterMonitor(BaseMonitor):
                 station["waterlevel"] = waterlevel
                 station["diff_wl_bank"] = diff_wl_bank
                 level = metric_infos.get_risk_level(risk)
+                station["risk"] = risk
                 station["risk_color"] = level["color"]
                 station["risk_percent"] = 100
 
@@ -275,11 +288,18 @@ class WaterMonitor(BaseMonitor):
             )
 
             await self.map.update("waterlevel", data)
+            # CCTV may have loaded before station data. Rebuild its actions now
+            # so cameras next to a gauge immediately expose "ดูระดับน้ำ".
+            if self.visual_feed_monitor:
+                try:
+                    self.visual_feed_monitor.on_water_stations_updated()
+                except Exception:
+                    pass
             self.apply_marker_filters()
             self.update_zone_risks()
             self.render_data_list()
         except Exception as e:
-            print(f"[Monitor:{self.monitor_name}] Error: {e}")
+            print(f"monitor: error {e}")
             self.render_data_error("โหลดข้อมูลสถานีไม่สำเร็จ กรุณาลองใหม่อีกครั้ง")
         finally:
             self.set_map_loading(False)
@@ -342,6 +362,10 @@ class WaterMonitor(BaseMonitor):
             aio.run(self._update_and_filter())
 
     def update_zone_shading_buttons(self, mode):
+        return self.sync_zone_shading_mode_ui(mode)
+
+    def sync_zone_shading_mode_ui(self, mode):
+        """Update toggle buttons styling based on current mode."""
         if "zone_style_outline" in document and "zone_style_shaded" in document:
             btn_outline = document["zone_style_outline"]
             btn_shaded = document["zone_style_shaded"]
@@ -375,23 +399,23 @@ class WaterMonitor(BaseMonitor):
     def on_toggle_zones_layer(self, ev):
         checked = bool(ev.target.checked)
         self.map.set_zones_visible(checked)
-        for i in range(1, 5):
-            el_id = f"toggle_zone_{i}"
-            if el_id in document:
-                document[el_id].checked = checked
+        for zone in self.zones or []:
+            zid = str(zone.get("id") or "")
+            zcode = str(zone.get("code") or "")
+            for el_id in (f"toggle_zone_{zid}", f"toggle_zone_{zcode}"):
+                if el_id in document:
+                    document[el_id].checked = checked
 
-    def on_toggle_single_zone(self, zone_num, ev):
+    def on_toggle_single_zone(self, zone_key, ev):
         checked = bool(ev.target.checked)
-        self.map.set_zone_visible(str(zone_num), checked)
-        self.map.set_zone_visible(f"songkhla-zone-{zone_num}", checked)
-        self.map.set_zone_visible(f"prototype-zone-{zone_num}", checked)
-        all_checked = all(
-            document[f"toggle_zone_{i}"].checked
-            for i in range(1, 5)
-            if f"toggle_zone_{i}" in document
-        )
-        if "toggle_zones_layer" in document:
-            document["toggle_zones_layer"].checked = all_checked
+        self.map.set_zone_visible(str(zone_key), checked)
+        toggles = [
+            document[f"toggle_zone_{z.get('id')}"].checked
+            for z in (self.zones or [])
+            if z.get("id") and f"toggle_zone_{z.get('id')}" in document
+        ]
+        if "toggle_zones_layer" in document and toggles:
+            document["toggle_zones_layer"].checked = all(toggles)
 
     def on_toggle_boundary_layer(self, ev):
         self.map.set_reference_boundary_visible(bool(ev.target.checked))
@@ -539,13 +563,22 @@ class WaterMonitor(BaseMonitor):
         return metric_infos.get_risk_level(max_risk)
 
     def update_zone_risks(self):
-        """Colour zones by active station alerts (warning, critical).
+        """Colour zones by active station alerts (warning, critical, evacuate).
         Normal water levels preserve the zone's configured style."""
         for zone in self.zones or []:
             meta = zone.get("metadata") or zone.get("style") or {}
             if (
-                meta.get("role") == "reference_boundary"
-                or zone.get("code") == "hatyai-boundary"
+                zone.get("zone_kind") == "reference"
+                or meta.get("role") == "reference_boundary"
+                or zone.get("code") in ("hatyai-boundary", "hatyai")
+                or (
+                    zone.get("code")
+                    and "hatyai" in str(zone.get("code")).lower()
+                    and "zone" not in str(zone.get("code")).lower()
+                )
+                or zone.get("name")
+                in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
+                or zone.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
             ):
                 continue
             zone_id = str(zone.get("id", "") or "")
@@ -599,7 +632,9 @@ class WaterMonitor(BaseMonitor):
 
         selected_source = self.get_selected_source()
 
-        max_risk = -1  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical
+        max_risk = (
+            -1
+        )  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical, 3 = Evacuation
 
         stations_dict = {}
         for s in self.latest_data.get("stations") or []:
@@ -653,14 +688,8 @@ class WaterMonitor(BaseMonitor):
         for station in stations:
             metrics = station.get("metrics") or []
             metrics = [m for m in metrics if m and isinstance(m, dict)]
-            if not metrics:
-                continue
 
             risk, waterlevel, diff_wl_bank = self.calculate_risk(station)
-
-            # Only show stations that have valid water level data
-            if waterlevel is None and diff_wl_bank is None:
-                continue
 
             level = metric_infos.get_risk_level(risk)
             hex_color = level["color"]
@@ -706,6 +735,14 @@ class WaterMonitor(BaseMonitor):
                     display_text = f'{m_label}: <span class="font-medium text-ink-700">{value_text}</span>'
 
                 other_html += f'<div class="text-xs text-ink-500 bg-ink-50 px-2 py-1 rounded">{display_text}</div>'
+
+            if waterlevel is None and diff_wl_bank is None:
+                other_html = f"""
+                <div class="flex items-center gap-1.5 rounded-lg bg-ink-50 px-2.5 py-2 text-xs text-ink-500">
+                    <i class="ph ph-clock-counter-clockwise text-sm" aria-hidden="true"></i>
+                    <span>{level["range"]}</span>
+                </div>
+                """
 
             matched_cctv = self.find_matching_cctv(station)
             cctv_btn_html = ""

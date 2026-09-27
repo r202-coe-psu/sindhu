@@ -1,8 +1,6 @@
 import unittest
-from unittest.mock import AsyncMock, patch
+
 from sindhu.config.provider_urls import validate_allowed_api_base_url
-from sindhu.schemas.system_settings import UpdateSystemSetting
-from sindhu.api.routers.v1.system_settings import update
 
 
 class ProviderUrlsTests(unittest.TestCase):
@@ -64,47 +62,3 @@ class ProviderUrlsTests(unittest.TestCase):
             r"API base URL must be an absolute http\(s\) URL without credentials, query, or fragment",
         ):
             validate_allowed_api_base_url("https://hatyaicityclimate.org?test=1")
-
-
-class SystemSettingsUpdateRegressionTests(unittest.IsolatedAsyncioTestCase):
-    async def test_update_preserves_cctv_overrides_when_omitted(self):
-        mock_db_setting = AsyncMock()
-        mock_db_setting.hatyai_cctv_api_base_url = "https://hatyaicityclimate.org"
-        mock_db_setting.dwr_cctv_api_base_url = "https://telemetry.dwr.go.th/api"
-        mock_db_setting.rid_cctv_api_base_url = "http://119.110.213.190"
-
-        with patch(
-            "sindhu.api.routers.v1.system_settings.deps.get_system_setting",
-            return_value=mock_db_setting,
-        ):
-            # Payload from old form without CCTV fields
-            payload = UpdateSystemSetting.model_validate({"zoom": 12})
-            await update(payload, current_user=None)
-
-            mock_db_setting.update.assert_called_once()
-            set_query = mock_db_setting.update.call_args[0][0].expression
-            self.assertIn("zoom", set_query)
-            self.assertEqual(set_query["zoom"], 12)
-            self.assertNotIn("hatyai_cctv_api_base_url", set_query)
-            self.assertNotIn("dwr_cctv_api_base_url", set_query)
-            self.assertNotIn("rid_cctv_api_base_url", set_query)
-
-    async def test_update_clears_cctv_overrides_when_explicitly_null(self):
-        mock_db_setting = AsyncMock()
-        mock_db_setting.hatyai_cctv_api_base_url = "https://hatyaicityclimate.org"
-
-        with patch(
-            "sindhu.api.routers.v1.system_settings.deps.get_system_setting",
-            return_value=mock_db_setting,
-        ):
-            # Payload explicitly passing null to clear the override
-            payload = UpdateSystemSetting.model_validate(
-                {"zoom": 12, "hatyai_cctv_api_base_url": None}
-            )
-            await update(payload, current_user=None)
-
-            mock_db_setting.update.assert_called_once()
-            set_query = mock_db_setting.update.call_args[0][0].expression
-            self.assertIn("zoom", set_query)
-            self.assertIn("hatyai_cctv_api_base_url", set_query)
-            self.assertIsNone(set_query["hatyai_cctv_api_base_url"])

@@ -5,13 +5,12 @@ from tests.visual_feeds.test_service import record
 
 
 class PublicContractTests(unittest.TestCase):
-    def test_provider_base_url_environment_and_database_overrides(self):
+    def test_provider_base_url_environment_overrides(self):
         import os
         from unittest.mock import patch
 
         from sindhu.api.core.settings.app import AppSettings
-        from sindhu.config.provider_urls import resolve_provider_base_urls
-        from sindhu.schemas.system_settings import SystemSetting
+        from sindhu.schemas.system_settings import BaseSystemSetting
 
         with patch.dict(
             os.environ,
@@ -33,12 +32,14 @@ class PublicContractTests(unittest.TestCase):
             settings.RID_CCTV_API_BASE_URL, "http://host.docker.internal:8082/rid"
         )
 
-        database_override = SystemSetting(
-            hatyai_cctv_api_base_url="http://localhost:8083/hatyai"
+        self.assertFalse(
+            {
+                "hatyai_cctv_api_base_url",
+                "dwr_cctv_api_base_url",
+                "rid_cctv_api_base_url",
+            }
+            & set(BaseSystemSetting.model_fields)
         )
-        resolved = resolve_provider_base_urls(database_override, settings)
-        self.assertEqual(resolved["hatyai"], "http://localhost:8083/hatyai")
-        self.assertEqual(resolved["dwr"], "http://127.0.0.1:8081/dwr")
 
     def test_provider_base_url_settings_have_public_defaults(self):
         from sindhu.api.core.settings.app import AppSettings
