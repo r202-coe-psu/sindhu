@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
-from typing import Any, Optional
+from typing import Optional
 import urllib.parse
 
 ALLOWED_PUBLIC_API_HOSTS = frozenset(
@@ -86,37 +86,3 @@ def validate_allowed_api_base_url(
     return urllib.parse.urlunsplit(
         (scheme, parsed.netloc.lower(), parsed.path.rstrip("/"), "", "")
     )
-
-
-def resolve_provider_base_urls(
-    system_setting: Any = None,
-    settings: Any = None,
-) -> dict[str, str]:
-    """Prefer database overrides, then environment settings, then defaults."""
-    urls = {
-        "hatyai": DEFAULT_HATYAI_CCTV_BASE_URL,
-        "dwr": DEFAULT_DWR_CCTV_BASE_URL,
-        "rid": DEFAULT_RID_CCTV_BASE_URL,
-    }
-
-    if settings is not None:
-        for provider, attribute in (
-            ("hatyai", "HATYAI_CCTV_API_BASE_URL"),
-            ("dwr", "DWR_CCTV_API_BASE_URL"),
-            ("rid", "RID_CCTV_API_BASE_URL"),
-        ):
-            configured = getattr(settings, attribute, None)
-            if configured:
-                urls[provider] = validate_allowed_api_base_url(configured)
-
-    if system_setting is not None:
-        for provider, attribute in (
-            ("hatyai", "hatyai_cctv_api_base_url"),
-            ("dwr", "dwr_cctv_api_base_url"),
-            ("rid", "rid_cctv_api_base_url"),
-        ):
-            configured = getattr(system_setting, attribute, None)
-            if configured:
-                urls[provider] = validate_allowed_api_base_url(configured)
-
-    return urls

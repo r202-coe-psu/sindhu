@@ -37,7 +37,9 @@ def upstream_handler(request, *, history_date=None, source_failure=None):
                 "title": c["title_th"],
                 "enable": 1,
                 "statusMsg": None,
-                "atDate": now.strftime("%Y-%m-%d %H:%M:%S"),
+                "atDate": (
+                    now - dt.timedelta(hours=2) if str(c["upstream_id"]) == "3" else now
+                ).strftime("%Y-%m-%d %H:%M:%S"),
                 "photo": f"https://hatyaicityclimate.org/floodphoto/last/{c['slug']}.jpg",
                 "token": "fixture-secret-not-real",
             }
@@ -171,6 +173,10 @@ class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
         payload = response.json()
         self.assertEqual(payload["count"], 41)
         self.assertEqual({f["media_type"] for f in payload["visual_feeds"]}, {"cctv"})
+        self.assertNotIn("image_checked_at", response.text)
+        for feed in payload["visual_feeds"]:
+            expected_freshness = "stale" if feed["source"] == "rid" else "fresh"
+            self.assertEqual(feed["image_freshness"], expected_freshness)
         for banned in (
             "fixture-secret",
             "raw_payload",

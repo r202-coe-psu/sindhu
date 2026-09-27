@@ -17,7 +17,6 @@ from sindhu import models
 
 import httpx
 from sindhu.api.core import caching
-from sindhu.config.provider_urls import resolve_provider_base_urls
 from sindhu.services import visual_feeds
 
 
@@ -48,8 +47,6 @@ async def lifespan(app: FastAPI):
     init_redis_cache(settings)
     await models.init_beanie(app, settings)
     await init_router(app, settings)
-    system_setting = await models.SystemSetting.find_one(sort=[("_id", -1)])
-    provider_urls = resolve_provider_base_urls(system_setting, settings)
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(5.0, connect=2.0),
         limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
@@ -58,9 +55,9 @@ async def lifespan(app: FastAPI):
         visual_feeds.configure_visual_feeds(
             cctv_client,
             caching.redis_client,
-            hatyai_base_url=provider_urls["hatyai"],
-            dwr_base_url=provider_urls["dwr"],
-            rid_base_url=provider_urls["rid"],
+            hatyai_base_url=settings.HATYAI_CCTV_API_BASE_URL,
+            dwr_base_url=settings.DWR_CCTV_API_BASE_URL,
+            rid_base_url=settings.RID_CCTV_API_BASE_URL,
         )
         try:
             yield
