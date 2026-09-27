@@ -84,9 +84,12 @@ class PublicContractTests(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(ValidationError):
                 PublicVisualFeed.model_validate(record(image_url=url))
 
-    def test_strict_timestamps_and_mutable_version(self):
-        with self.assertRaises(ValidationError):
-            PublicVisualFeed.model_validate(record(captured_at="2026-09-03 11:00:00"))
+    def test_invalid_capture_time_is_preserved_as_unknown_and_mutable_version(self):
+        feed = PublicVisualFeed.model_validate(
+            record(captured_at="2026-09-03 11:00:00")
+        )
+        self.assertIsNone(feed.captured_at)
+        self.assertEqual(feed.image_freshness.value, "stale")
         feed = PublicVisualFeed.model_validate(record())
         self.assertTrue(feed.image_url.endswith("?v=123"))
         self.assertNotIn("raw_payload", feed.model_dump())
