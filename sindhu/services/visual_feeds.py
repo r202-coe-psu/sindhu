@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from sindhu.schemas.visual_feeds import (
     Availability,
     HistoryFrame,
+    ImageFreshness,
     MediaType,
     PublicSourceHealth,
     PublicVisualFeed,
@@ -29,19 +30,45 @@ from sindhu.services.cctv_catalog import (
     DWR_REGISTRY_VERSION,
     RID_REGISTRY_VERSION,
 )
-from sindhu.services.cctv_sources import CctvSources, SourceError
+from sindhu.services.cctv_sources import CctvSources, SourceError, STALE_AFTER
 
 UTC = dt.timezone.utc
 BANGKOK = ZoneInfo("Asia/Bangkok")
 SOURCES = (HATYAI_SOURCE, DWR_SOURCE, RID_SOURCE)
 PREFIX = "sindhu:cctv:v1"
 HISTORY_DAYS = 7
+IMAGE_FRESHNESS_WINDOW = dt.timedelta(hours=24)
+IMAGE_CHECK_TTL_SECONDS = int(IMAGE_FRESHNESS_WINDOW.total_seconds()) + 1
+SNAPSHOT_CONCURRENCY = 2
+SNAPSHOT_REQUEST_TIMEOUT_SECONDS = 30
 
 
 class ViewerError(Exception):
     def __init__(self, code: str, status_code: int = 503):
         self.code, self.status_code = code, status_code
         super().__init__(code)
+
+
+def image_freshness_for(
+    feed: PublicVisualFeed, now: dt.datetime | None = None
+) -> ImageFreshness:
+    """Classify image evidence, not the upstream provider's health label."""
+    checked_at = (
+        feed.image_checked_at if feed.source == RID_SOURCE else feed.captured_at
+    )
+    image_url = feed.image_url
+    if not image_url or not image_url.strip() or checked_at is None:
+        return ImageFreshness.STALE
+    if checked_at.tzinfo is None or checked_at.utcoffset() is None:
+        return ImageFreshness.STALE
+
+    current_time = now or dt.datetime.now(UTC)
+    if current_time.tzinfo is None or current_time.utcoffset() is None:
+        return ImageFreshness.STALE
+    age = current_time.astimezone(UTC) - checked_at.astimezone(UTC)
+    if dt.timedelta(0) <= age <= IMAGE_FRESHNESS_WINDOW:
+        return ImageFreshness.FRESH
+    return ImageFreshness.STALE
 
 
 def validate_history_date(value: dt.date, now: dt.datetime | None = None) -> None:
@@ -102,7 +129,7 @@ class VisualFeedService:
             )
         )
         self.cache = cache if cache is not None else CctvCache(redis_client)
-        self._snapshot_slots = 0
+        self._snapshot_semaphore = asyncio.Semaphore(SNAPSHOT_CONCURRENCY)
         self._source_config_revision = 0
 
     def reconfigure_sources(
@@ -160,14 +187,32 @@ class VisualFeedService:
             feeds = [PublicVisualFeed.model_validate(r) for r in cached.value]
         except (ValidationError, TypeError):
             raise ViewerError("invalid_cache_data") from None
+        if source == RID_SOURCE:
+            get_timestamp = getattr(self.cache, "get_timestamp", None)
+            checked_at = (
+                await asyncio.gather(
+                    *(
+                        get_timestamp(self._rid_check_key(feed.upstream_id))
+                        for feed in feeds
+                    ),
+                    return_exceptions=True,
+                )
+                if callable(get_timestamp)
+                else []
+            )
+            for feed, observation in zip(feeds, checked_at):
+                feed.image_checked_at = (
+                    observation if isinstance(observation, dt.datetime) else None
+                )
         for feed in feeds:
+            feed.image_freshness = image_freshness_for(feed, now)
             if feed.availability == Availability.OFFLINE:
                 continue
             if feed.captured_at is None or feed.captured_at > now + dt.timedelta(
                 minutes=5
             ):
                 feed.availability = Availability.UNKNOWN
-            elif now - feed.captured_at > dt.timedelta(minutes=30):
+            elif now - feed.captured_at > STALE_AFTER:
                 feed.availability = Availability.STALE
         health = build_source_health(feeds).get(
             source,
@@ -227,6 +272,12 @@ class VisualFeedService:
             )
         ]
         return sorted(filtered, key=lambda f: (f.source, f.slug)), health
+
+    def _rid_check_key(self, upstream_id: str) -> str:
+        return (
+            f"{PREFIX}:image-check:{RID_SOURCE}:{RID_REGISTRY_VERSION}:"
+            f"r{self._source_config_revision}:{upstream_id}"
+        )
 
     async def get(self, source: str, upstream_id: str):
         if get_camera(source, upstream_id) is None:
@@ -289,30 +340,31 @@ class VisualFeedService:
     async def snapshot(self, upstream_id: str) -> bytes:
         if get_camera(DWR_SOURCE, upstream_id) is None:
             raise ViewerError("visual_feed_not_found", 404)
-        if self._snapshot_slots >= 2:
-            raise ViewerError("snapshot_busy")
-        self._snapshot_slots += 1
         try:
-            async with asyncio.timeout(10):
-                return await self.sources.snapshot(upstream_id)
+            async with asyncio.timeout(SNAPSHOT_REQUEST_TIMEOUT_SECONDS):
+                async with self._snapshot_semaphore:
+                    return await self.sources.snapshot(upstream_id)
         except (SourceError, TimeoutError):
             raise ViewerError("snapshot_unavailable") from None
-        finally:
-            self._snapshot_slots -= 1
 
     async def rid_snapshot(self, upstream_id: str) -> tuple[bytes, str]:
         if get_camera(RID_SOURCE, upstream_id) is None:
             raise ViewerError("visual_feed_not_found", 404)
-        if self._snapshot_slots >= 2:
-            raise ViewerError("snapshot_busy")
-        self._snapshot_slots += 1
         try:
-            async with asyncio.timeout(10):
-                return await self.sources.rid_snapshot(upstream_id)
+            async with asyncio.timeout(SNAPSHOT_REQUEST_TIMEOUT_SECONDS):
+                async with self._snapshot_semaphore:
+                    payload, media_type = await self.sources.rid_snapshot(upstream_id)
         except (SourceError, TimeoutError):
             raise ViewerError("snapshot_unavailable") from None
-        finally:
-            self._snapshot_slots -= 1
+        checked_at = dt.datetime.now(UTC)
+        set_timestamp = getattr(self.cache, "set_timestamp", None)
+        if callable(set_timestamp):
+            await set_timestamp(
+                self._rid_check_key(upstream_id),
+                checked_at,
+                ttl_seconds=IMAGE_CHECK_TTL_SECONDS,
+            )
+        return payload, media_type
 
 
 _service: VisualFeedService | None = None

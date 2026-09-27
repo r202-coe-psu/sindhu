@@ -41,6 +41,11 @@ class Availability(str, Enum):
     UNKNOWN = "unknown"
 
 
+class ImageFreshness(str, Enum):
+    FRESH = "fresh"
+    STALE = "stale"
+
+
 class SourceHealthStatus(str, Enum):
     HEALTHY = "healthy"
     DEGRADED = "degraded"
@@ -315,22 +320,46 @@ class PublicVisualFeed(BaseModel):
     coordinate_provenance: Optional[CoordinateProvenance] = None
     registry_version: Optional[str] = None
     availability: Availability = Availability.UNKNOWN
+    image_freshness: ImageFreshness = ImageFreshness.STALE
     provider_status: Optional[str] = Field(default=None, max_length=100)
     image_url: Optional[str] = None
     detail_url: Optional[str] = None
     captured_at: Optional[datetime.datetime] = None
+    image_checked_at: Optional[datetime.datetime] = Field(
+        default=None,
+        exclude=True,
+        description="Internal timestamp of the latest successfully validated RID snapshot; not capture time.",
+    )
     fetched_at: datetime.datetime
     history_supported: bool = False
     attribution: PublicAttribution
 
-    @field_validator("captured_at", "fetched_at", mode="before")
+    @field_validator("captured_at", mode="before")
     @classmethod
-    def utc_time(cls, value):
+    def optional_capture_time(cls, value):
+        try:
+            return _as_utc(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+    @field_validator("image_checked_at", mode="before")
+    @classmethod
+    def optional_image_check_time(cls, value):
+        try:
+            return _as_utc(value)
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+    @field_validator("fetched_at", mode="before")
+    @classmethod
+    def fetched_time(cls, value):
         return _as_utc(value)
 
     @field_validator("image_url")
     @classmethod
     def safe_image(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
         return public_cctv_url(value, image=True)
 
     @field_validator("detail_url")
