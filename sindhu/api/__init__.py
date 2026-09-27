@@ -47,15 +47,6 @@ async def lifespan(app: FastAPI):
     init_redis_cache(settings)
     await models.init_beanie(app, settings)
     await init_router(app, settings)
-    system_setting = await models.SystemSetting.find_one(sort=[("_id", -1)])
-    hatyai_api_base_url = (
-        getattr(system_setting, "hatyai_cctv_api_base_url", None)
-        or settings.HATYAI_CCTV_API_BASE_URL
-    )
-    dwr_api_base_url = (
-        getattr(system_setting, "dwr_cctv_api_base_url", None)
-        or settings.DWR_CCTV_API_BASE_URL
-    )
     async with httpx.AsyncClient(
         timeout=httpx.Timeout(5.0, connect=2.0),
         limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
@@ -64,8 +55,9 @@ async def lifespan(app: FastAPI):
         visual_feeds.configure_visual_feeds(
             cctv_client,
             caching.redis_client,
-            hatyai_api_base_url=hatyai_api_base_url,
-            dwr_api_base_url=dwr_api_base_url,
+            hatyai_base_url=settings.HATYAI_CCTV_API_BASE_URL,
+            dwr_base_url=settings.DWR_CCTV_API_BASE_URL,
+            rid_base_url=settings.RID_CCTV_API_BASE_URL,
         )
         try:
             yield

@@ -129,6 +129,40 @@ class CctvCache:
         self._direct_guard = asyncio.Lock()
         self._direct_inflight = 0
 
+    async def get_timestamp(self, key: str) -> _datetime.datetime | None:
+        """Read a short-lived timestamp observation from Redis, failing closed."""
+        if not isinstance(key, str) or not key:
+            raise ValueError("key must be a non-empty canonical string")
+        try:
+            value = await self._redis_call("get", key)
+            if isinstance(value, bytes):
+                value = value.decode("ascii")
+            if not isinstance(value, str) or not value:
+                return None
+            parsed = _datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return self._as_utc(parsed)
+        except Exception:
+            return None
+
+    async def set_timestamp(
+        self,
+        key: str,
+        value: _datetime.datetime,
+        *,
+        ttl_seconds: int,
+    ) -> bool:
+        """Store only a timestamp observation, never provider image bytes."""
+        if not isinstance(key, str) or not key:
+            raise ValueError("key must be a non-empty canonical string")
+        if not isinstance(ttl_seconds, int) or ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be a positive integer")
+        timestamp = self._timestamp(value)
+        try:
+            stored = await self._redis_call("set", key, timestamp, ex=ttl_seconds)
+        except Exception:
+            return False
+        return stored is not False
+
     async def get(
         self,
         key: str,

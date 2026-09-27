@@ -93,3 +93,20 @@ async def get_visual_feed_snapshot(upstream_id: str, request: Request):
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers=headers)
     return Response(payload, media_type="image/jpeg", headers=headers)
+
+
+@router.get("/rid/{upstream_id}/snapshot")
+async def get_rid_visual_feed_snapshot(upstream_id: str, request: Request):
+    try:
+        payload, media_type = await services.visual_feeds.get_rid_snapshot(upstream_id)
+    except services.visual_feeds.ViewerError as error:
+        raise _http_error(error) from None
+    etag = '"' + hashlib.sha256(payload).hexdigest() + '"'
+    headers = {
+        "Cache-Control": "private, max-age=120",
+        "ETag": etag,
+        "X-Content-Type-Options": "nosniff",
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return Response(payload, media_type=media_type, headers=headers)
