@@ -32,7 +32,6 @@ def _haversine_distance(coord1, coord2):
 
 
 POLL_INTERVAL_SECONDS = 120
-IMAGE_STALE_AFTER_MINUTES = 30
 BANGKOK_TZ = datetime.timezone(datetime.timedelta(hours=7))
 HISTORY_DAYS = 7
 THAI_DAYS_SHORT = ["จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."]
@@ -213,19 +212,6 @@ def _valid_history_date(value, now=None):
     return selected if earliest <= selected <= latest else None
 
 
-def _is_latest_stale(feed, now=None):
-    """Age-based stale labeling applies to latest images only."""
-    captured = _parse_utc(_as_dict(feed).get("captured_at"))
-    if captured is None:
-        return False
-    age = _now_utc(now) - captured
-    return (
-        datetime.timedelta(0)
-        <= age
-        > datetime.timedelta(minutes=IMAGE_STALE_AFTER_MINUTES)
-    )
-
-
 def _filter_cctv_feeds(feeds, limit=MAX_CCTV_FEEDS):
     """Keep the public UI bounded to the registered CCTV set."""
     if not isinstance(feeds, list) or limit <= 0:
@@ -247,21 +233,54 @@ def _availability(feed):
     return value if value in AVAILABILITY_LABELS else "unknown"
 
 
-def _availability_status_class(availability):
-    """Map all camera states to the two-state visual language."""
+def _image_freshness(feed):
+    value = str(_as_dict(feed).get("image_freshness", "stale")).lower().strip()
+    return value if value in {"fresh", "stale"} else "stale"
+
+
+def _image_freshness_status_class(image_freshness):
+    return "cctv-status--fresh" if image_freshness == "fresh" else "cctv-status--stale"
+
+
+def _image_freshness_label(image_freshness):
     return (
-        "cctv-status--online"
-        if availability == "online"
-        else "cctv-status--unavailable"
+        "มีภาพใน 24 ชม."
+        if image_freshness == "fresh"
+        else "ไม่มีภาพที่ยืนยันได้ใน 24 ชม."
     )
 
 
 def _is_displayable_camera(feed):
-    """Show cameras with an image when availability is online or unknown."""
+    """Keep registered CCTV visible; availability describes freshness, not presence."""
     feed = _as_dict(feed)
-    return _availability(feed) in {"online", "unknown"} and bool(
-        str(feed.get("image_url") or "").strip()
-    )
+    return str(feed.get("media_type", "")).lower() == "cctv"
+
+
+def _history_date_label(value):
+    try:
+        selected = datetime.date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return str(value or "วันที่เลือก")
+    return f"{selected.day:02d}/{selected.month:02d}/{selected.year}"
+
+
+def _history_empty_message(selected_date):
+    return f"ไม่พบภาพย้อนหลังจากต้นทางในวันที่ {_history_date_label(selected_date)}"
+
+
+def _history_request_error_message(status, selected_date):
+    date_label = _history_date_label(selected_date)
+    if status == 503:
+        return f"API กล้องหรือต้นทางไม่พร้อม จึงโหลดประวัติวันที่ {date_label} ไม่ได้ ลองใหม่ภายหลัง"
+    if status == 422:
+        return f"วันที่ {date_label} อยู่นอกช่วงย้อนหลังที่ระบบรองรับ"
+    if status == 404:
+        return "ไม่พบกล้องนี้ในบริการประวัติภาพ"
+    if status == 400:
+        return "กล้องนี้ไม่รองรับการเรียกดูภาพย้อนหลัง"
+    if status is None:
+        return f"เชื่อมต่อ API กล้องไม่ได้ จึงยังยืนยันภาพย้อนหลังวันที่ {date_label} ไม่ได้"
+    return f"API กล้องโหลดประวัติวันที่ {date_label} ไม่สำเร็จ (HTTP {status})"
 
 
 def _el(tag, class_name=None, text_value=None):
@@ -321,7 +340,8 @@ class VisualFeedMonitor:
         self._active_date = None
         self._history_frames = []
         self._history_index = -1
-        self._touch_start_x = None
+        self._history_pointer_start_x = None
+        self._history_pointer_id = None
         self._focus_return = None
 
     def start(self, map_owner=None):
@@ -438,12 +458,12 @@ class VisualFeedMonitor:
             return
         target_feeds = self.latest_feeds if feeds is None else feeds
         marker_feeds = []
-        hide_unknown = document.getElementById("hide_unknown_cctv_markers")
-        hide_unknown = bool(hide_unknown and hide_unknown.checked)
+        hide_unconfirmed = document.getElementById("hide_unknown_cctv_markers")
+        hide_unconfirmed = bool(hide_unconfirmed and hide_unconfirmed.checked)
         for feed in target_feeds:
             if not _is_displayable_camera(feed) or not _has_coordinates(feed):
                 continue
-            if hide_unknown and _availability(feed) == "unknown":
+            if hide_unconfirmed and _image_freshness(feed) == "stale":
                 continue
             f_copy = dict(feed)
             img = _resolve_image_url(f_copy.get("image_url"), self.api_url)
@@ -521,8 +541,10 @@ class VisualFeedMonitor:
         if "toggle_cctv_markers" in document:
             document["toggle_cctv_markers"].bind("change", self._on_toggle_cctv_markers)
         if "hide_unknown_cctv_markers" in document:
-            document["hide_unknown_cctv_markers"].bind("change", self._on_filter)
-        self._sync_unknown_camera_filter()
+            document["hide_unknown_cctv_markers"].bind(
+                "change", self._on_filter
+            )
+        self._sync_unconfirmed_camera_filter()
         if "visual_feed_retry" in document:
             document["visual_feed_retry"].bind("click", self._on_retry)
         if "visual_feed_panel_tab" in document:
@@ -556,9 +578,9 @@ class VisualFeedMonitor:
             document["visual_feed_history_next"].bind("click", self._on_history_next)
         if "visual_feed_history_viewport" in document:
             viewport = document["visual_feed_history_viewport"]
-            viewport.bind("touchstart", self._on_history_touch_start)
-            viewport.bind("touchend", self._on_history_touch_end)
-            viewport.bind("touchcancel", self._on_history_touch_cancel)
+            viewport.bind("pointerdown", self._on_history_pointer_start)
+            window.bind("pointerup", self._on_history_pointer_end)
+            window.bind("pointercancel", self._on_history_pointer_cancel)
         document.bind("visibilitychange", self._on_visibility_change)
         window.bind("keydown", self._on_global_keydown)
 
@@ -606,19 +628,21 @@ class VisualFeedMonitor:
 
     def _on_toggle_cctv_markers(self, event):
         visible = getattr(event.target, "checked", True)
-        self._sync_unknown_camera_filter()
+        self._sync_unconfirmed_camera_filter()
         m = self._get_map()
         if m and hasattr(m, "set_visual_feed_layer_visible"):
             m.set_visual_feed_layer_visible(visible)
 
-    def _sync_unknown_camera_filter(self):
+    def _sync_unconfirmed_camera_filter(self):
         camera_toggle = document.getElementById("toggle_cctv_markers")
-        unknown_toggle = document.getElementById("hide_unknown_cctv_markers")
+        unconfirmed_toggle = document.getElementById(
+            "hide_unknown_cctv_markers"
+        )
         if not camera_toggle:
             return
 
-        if unknown_toggle:
-            unknown_toggle.disabled = not camera_toggle.checked
+        if unconfirmed_toggle:
+            unconfirmed_toggle.disabled = not camera_toggle.checked
 
         state = document.getElementById("cctv_visibility_state")
         if state:
@@ -672,7 +696,7 @@ class VisualFeedMonitor:
             header_title.html = """<i class="ph ph-video-camera text-xl text-blue-200" aria-hidden="true"></i><span>กล้อง CCTV เฝ้าระวังน้ำท่วม</span>"""
         header_subtitle = document.getElementById("panel_header_subtitle")
         if header_subtitle:
-            header_subtitle.textContent = "ภาพถ่ายสดและประวัติ 7 วันจากจุดเฝ้าระวัง"
+            header_subtitle.textContent = "ภาพล่าสุดและประวัติย้อนหลังตามที่แต่ละต้นทางรองรับ"
 
         self._visual_panel_active = True
         self._mode = "latest"
@@ -896,21 +920,21 @@ class VisualFeedMonitor:
         total = len(self.latest_feeds)
         if total:
             if len(visible) == total:
-                self._set_summary(f"พร้อมใช้งาน {total} จุด")
+                self._set_summary(f"กล้อง {total} จุด")
             else:
                 self._set_summary(f"แสดง {len(visible)} จาก {total} จุด")
         else:
-            self._set_summary("ไม่มีกล้องพร้อมใช้งาน")
+            self._set_summary("ไม่พบกล้อง CCTV")
         self.update_map_markers(visible)
 
     def _build_card(self, feed):
         availability = _availability(feed)
+        image_freshness = _image_freshness(feed)
         source = str(feed.get("source", ""))
         upstream_id = str(feed.get("upstream_id", ""))
         title = _text(feed.get("title_th") or feed.get("name_th") or feed.get("name"))
         coverage = _text(feed.get("coverage_group"))
         source_lbl = _source_label(feed.get("source"))
-
         image_url = _resolve_image_url(feed.get("image_url"), self.api_url)
         image_url = _version_image_url(image_url, feed.get("captured_at"))
 
@@ -921,6 +945,7 @@ class VisualFeedMonitor:
                 "visual-feed-card cctv-list-item group relative overflow-hidden rounded-xl border border-slate-200/90 bg-white transition-shadow duration-200 flex flex-col justify-between",
             )
             card.attrs["data-availability"] = availability
+            card.attrs["data-image-freshness"] = image_freshness
             card.attrs["id"] = f"cctv_card_{source}_{upstream_id}"
 
             # Image section
@@ -963,10 +988,16 @@ class VisualFeedMonitor:
             _append(body, title_btn)
 
             # Status stays beside the details so the camera image stays clear.
+            _append(
+                body,
+                _el(
+                    "span",
+                    f"cctv-status inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold text-white {_image_freshness_status_class(image_freshness)}",
+                    _image_freshness_label(image_freshness),
+                ),
+            )
             meta_div = _append(body, _el("div", "text-[10px] text-slate-500 truncate"))
-            status_text = AVAILABILITY_LABELS.get(availability, "ออนไลน์")
-            meta_div.textContent = f"{status_text} · {coverage} · {source_lbl}"
-
+            meta_div.textContent = f"{coverage} · {source_lbl}"
             # Actions
             actions = _append(
                 body,
@@ -976,7 +1007,7 @@ class VisualFeedMonitor:
                 ),
             )
 
-            detail_label = "ดูภาพวันนี้"
+            detail_label = _detail_action_label(feed)
             detail_btn = _append(
                 actions,
                 _el(
@@ -1037,6 +1068,7 @@ class VisualFeedMonitor:
             "visual-feed-card cctv-list-item group relative border-b bg-transparent py-3 transition-colors duration-150 flex flex-col",
         )
         card.attrs["data-availability"] = availability
+        card.attrs["data-image-freshness"] = image_freshness
         card.attrs["id"] = f"cctv_card_{source}_{upstream_id}"
 
         # Image Container
@@ -1075,16 +1107,22 @@ class VisualFeedMonitor:
         )
         _append(body, title_btn)
 
-        # Keep availability out of the image, then keep source context quiet.
-        status_text = AVAILABILITY_LABELS.get(availability, "ออนไลน์")
-        meta_parts = [status_text, source_lbl]
+        # Provider availability is diagnostic; the badge reports image freshness.
+        _append(
+            body,
+            _el(
+                "span",
+                f"cctv-status inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold text-white {_image_freshness_status_class(image_freshness)}",
+                _image_freshness_label(image_freshness),
+            ),
+        )
+        meta_parts = [source_lbl]
         if coverage and coverage != "—":
             meta_parts.append(coverage)
         meta_line = _append(
             body, _el("p", "truncate text-[11px] font-medium text-slate-500")
         )
         meta_line.textContent = " · ".join(meta_parts)
-
         attr = _attribution_text(feed)
         if attr:
             attr_el = _append(body, _el("div", "text-[10px] text-slate-400"))
@@ -1099,9 +1137,8 @@ class VisualFeedMonitor:
             ),
         )
 
-        # Keep the main action identical for every camera.  Providers without
-        # history simply open their current image in the same viewer.
-        detail_label = "ดูภาพวันนี้"
+        # Make the action label reflect whether the provider has a history API.
+        detail_label = _detail_action_label(feed)
         detail_btn = _append(
             actions,
             _el(
@@ -1170,6 +1207,7 @@ class VisualFeedMonitor:
         image.attrs["loading"] = "eager"
         image.attrs["decoding"] = "async"
         image.attrs["alt"] = title or "ภาพ CCTV"
+        image.attrs["draggable"] = "false"
         image.attrs["src"] = image_url
         state = _append(
             wrapper,
@@ -1256,8 +1294,7 @@ class VisualFeedMonitor:
         self._history_generation += 1
         self._latest_generation += 1
         self._populate_detail(feed)
-        self._configure_history_date()
-        self._show_history_section()
+        self._show_latest_section()
         self._render_realtime_frame(feed)
         self._open_modal()
 
@@ -1283,15 +1320,7 @@ class VisualFeedMonitor:
                 "flex h-full w-full items-center justify-center bg-slate-800 text-xs text-slate-400",
                 "ไม่มีภาพตัวอย่าง",
             )
-        previous = document.getElementById("visual_feed_history_previous")
-        following = document.getElementById("visual_feed_history_next")
-        counter = document.getElementById("visual_feed_history_counter")
-        if previous:
-            previous.classList.add("hidden")
-        if following:
-            following.classList.add("hidden")
-        if counter:
-            counter.textContent = ""
+        self._update_history_navigation()
         self._set_history_message("")
 
     def _detail_history_supported(self):
@@ -1311,6 +1340,7 @@ class VisualFeedMonitor:
             self._focus_return = None
         self._active_feed = feed
         self._mode = "history"
+        self._clear_history_frames()
         self._history_generation += 1
         generation = self._history_generation
         self._populate_detail(feed)
@@ -1321,6 +1351,11 @@ class VisualFeedMonitor:
         self._set_history_load_state("loading")
         picker = document.getElementById("visual_feed_history_date")
         self._active_date = picker.value if picker else _bangkok_today().isoformat()
+        self._show_latest_snapshot_for_date(
+            feed,
+            self._active_date,
+            "กำลังโหลดประวัติภาพ · แสดงภาพล่าสุดชั่วคราว",
+        )
         aio.run(self._fetch_history(feed, self._active_date, generation))
 
     def _open_modal(self):
@@ -1571,10 +1606,16 @@ class VisualFeedMonitor:
                 self._set_history_message("กล้องนี้มีเฉพาะภาพสด Realtime")
             return
 
+        self._clear_history_frames()
         self._history_generation += 1
         generation = self._history_generation
         self._set_history_message("กำลังโหลดประวัติภาพ…")
         self._set_history_load_state("loading")
+        self._show_latest_snapshot_for_date(
+            self._active_feed,
+            self._active_date,
+            "กำลังโหลดประวัติภาพ · แสดงภาพล่าสุดชั่วคราว",
+        )
         aio.run(self._fetch_history(self._active_feed, self._active_date, generation))
 
     def _on_day_slide_prev(self, _event=None):
@@ -1623,13 +1664,24 @@ class VisualFeedMonitor:
         source = quote(str(feed.get("source", "")), safe="")
         upstream_id = quote(str(feed.get("upstream_id", "")), safe="")
         url = f"{self.endpoint}/{source}/{upstream_id}/history?date={selected_date}"
+        response = None
         try:
             response = await aio.get(url, cache=True)
-            if (
-                getattr(response, "status", 200) < 200
-                or getattr(response, "status", 200) >= 300
-            ):
-                raise ValueError("history request failed")
+            status = getattr(response, "status", 200)
+            if status < 200 or status >= 300:
+                if (
+                    generation == self._history_generation
+                    and self._should_fetch_history()
+                ):
+                    message = _history_request_error_message(status, selected_date)
+                    if not self._show_latest_snapshot_for_date(
+                        feed,
+                        selected_date,
+                        f"{message} · แสดงภาพล่าสุดแทน",
+                    ):
+                        self._set_history_message(message)
+                    self._set_history_load_state("error")
+                return False
             parsed = json.loads(response.data)
             if not isinstance(parsed, dict) or not isinstance(
                 parsed.get("frames"), list
@@ -1643,16 +1695,51 @@ class VisualFeedMonitor:
             ):
                 return False
             self._history_frames = self._normalize_history_frames(parsed["frames"])
+            if not self._history_frames and self._show_latest_snapshot_for_date(
+                feed,
+                selected_date,
+                f"{_history_empty_message(selected_date)} · แสดงภาพล่าสุดแทน",
+            ):
+                self._set_history_load_state("empty")
+                return True
             self._render_history_frames(
                 self._history_frames, bool(parsed.get("possibly_truncated"))
             )
-            self._set_history_load_state("success")
+            self._set_history_load_state("success" if self._history_frames else "empty")
             return True
         except Exception:
             if generation == self._history_generation and self._should_fetch_history():
-                self._set_history_message("โหลดประวัติภาพไม่สำเร็จ ลองเลือกวันที่ใหม่")
+                status = getattr(response, "status", None)
+                message = (
+                    "API กล้องส่งข้อมูลประวัติไม่ถูกต้อง"
+                    if status is not None and 200 <= status < 300
+                    else _history_request_error_message(status, selected_date)
+                )
+                if not self._show_latest_snapshot_for_date(
+                    feed,
+                    selected_date,
+                    f"{message} · แสดงภาพล่าสุดแทน",
+                ):
+                    self._set_history_message(message)
                 self._set_history_load_state("error")
             return False
+
+    def _show_latest_snapshot_for_date(self, feed, selected_date, message):
+        """Keep today's verified latest image visible while history is unavailable."""
+        captured_at = _parse_utc(_as_dict(feed).get("captured_at"))
+        if (
+            captured_at is None
+            or captured_at.astimezone(BANGKOK_TZ).date().isoformat()
+            != str(selected_date)
+            or not _resolve_image_url(_as_dict(feed).get("image_url"), self.api_url)
+        ):
+            return False
+
+        self._history_frames = []
+        self._history_index = -1
+        self._render_realtime_frame(feed)
+        self._set_history_message(message)
+        return True
 
     def _normalize_history_frames(self, frames):
         normalized = []
@@ -1684,12 +1771,20 @@ class VisualFeedMonitor:
         if not frames:
             self._history_index = -1
             self._update_history_navigation()
-            self._set_history_message("วันนี้ยังไม่มีภาพประวัติจากต้นทาง")
+            self._set_history_message(_history_empty_message(self._active_date))
             return
         suffix = " · แสดงได้ไม่ครบทุกภาพจากต้นทาง" if possibly_truncated else ""
         self._set_history_message(suffix.lstrip(" ·"))
         self._history_index = len(frames) - 1
         self._render_history_frame()
+
+    def _clear_history_frames(self):
+        self._history_frames = []
+        self._history_index = -1
+        frame_container = document.getElementById("visual_feed_history_frame")
+        if frame_container:
+            frame_container.html = ""
+        self._update_history_navigation()
 
     def _render_history_frame(self):
         container = document.getElementById("visual_feed_history_frame")
@@ -1721,17 +1816,19 @@ class VisualFeedMonitor:
         has_previous = total > 0 and self._history_index > 0
         has_next = total > 0 and self._history_index < total - 1
         if previous:
-            (
+            if self._mode == "history":
                 previous.classList.remove("hidden")
-                if has_previous
-                else previous.classList.add("hidden")
-            )
+                previous.disabled = not has_previous
+                previous.attrs["aria-disabled"] = "false" if has_previous else "true"
+            else:
+                previous.classList.add("hidden")
         if following:
-            (
+            if self._mode == "history":
                 following.classList.remove("hidden")
-                if has_next
-                else following.classList.add("hidden")
-            )
+                following.disabled = not has_next
+                following.attrs["aria-disabled"] = "false" if has_next else "true"
+            else:
+                following.classList.add("hidden")
         if counter:
             counter.textContent = (
                 f"ภาพที่ {self._history_index + 1} จาก {total}" if total else ""
@@ -1784,22 +1881,30 @@ class VisualFeedMonitor:
                 pass
         self._render_history_frame()
 
-    def _on_history_touch_start(self, event):
+    def _on_history_pointer_start(self, event):
         try:
-            self._touch_start_x = float(event.touches[0].clientX)
+            if not event.isPrimary:
+                return
+            if event.pointerType == "mouse" and event.button != 0:
+                return
+            self._history_pointer_start_x = float(event.clientX)
+            self._history_pointer_id = event.pointerId
         except Exception:
-            self._touch_start_x = None
+            self._history_pointer_start_x = None
+            self._history_pointer_id = None
 
-    def _on_history_touch_end(self, event):
-        if self._touch_start_x is None:
+    def _on_history_pointer_end(self, event):
+        if self._history_pointer_start_x is None:
             return
         try:
-            end_x = float(event.changedTouches[0].clientX)
+            if event.pointerId != self._history_pointer_id:
+                return
+            end_x = float(event.clientX)
         except Exception:
-            self._touch_start_x = None
+            self._on_history_pointer_cancel()
             return
-        distance = end_x - self._touch_start_x
-        self._touch_start_x = None
+        distance = end_x - self._history_pointer_start_x
+        self._on_history_pointer_cancel(event)
         if abs(distance) < 48:
             return
         if distance > 0:
@@ -1807,8 +1912,15 @@ class VisualFeedMonitor:
         else:
             self._on_history_next()
 
-    def _on_history_touch_cancel(self, _event=None):
-        self._touch_start_x = None
+    def _on_history_pointer_cancel(self, event=None):
+        if (
+            event is not None
+            and self._history_pointer_id is not None
+            and event.pointerId != self._history_pointer_id
+        ):
+            return
+        self._history_pointer_start_x = None
+        self._history_pointer_id = None
 
     def _set_history_message(self, message):
         target = document.getElementById("visual_feed_history_status")
@@ -1853,7 +1965,7 @@ class VisualFeedMonitor:
 
     def _populate_detail(self, feed):
         title = _text(feed.get("title_th") or feed.get("name_th") or feed.get("name"))
-        availability = _availability(feed)
+        image_freshness = _image_freshness(feed)
         heading = document.getElementById("visual_feed_detail_title")
         meta = document.getElementById("visual_feed_detail_meta")
         badge = document.getElementById("visual_feed_detail_badge")
@@ -1861,17 +1973,15 @@ class VisualFeedMonitor:
         if heading:
             heading.textContent = title
         if badge:
-            badge.classList.remove("cctv-status--online", "cctv-status--unavailable")
-            badge.classList.add("cctv-status", _availability_status_class(availability))
-            if availability == "online":
-                badge.html = """<span class="w-1.5 h-1.5 rounded-full bg-white"></span><span>ออนไลน์</span>"""
-            else:
-                badge.textContent = AVAILABILITY_LABELS[availability]
+            badge.classList.remove("cctv-status--fresh", "cctv-status--stale")
+            badge.classList.add("cctv-status", _image_freshness_status_class(image_freshness))
+            badge.textContent = _image_freshness_label(image_freshness)
         if meta:
-            meta.textContent = (
-                f"{_source_label(feed.get('source'))} · "
-                f"{_text(feed.get('coverage_group'))}"
-            )
+            meta_parts = [
+                _source_label(feed.get("source")),
+                _text(feed.get("coverage_group")),
+            ]
+            meta.textContent = " · ".join(part for part in meta_parts if part)
         if latest_container:
             latest_container.html = ""
             image_url = _resolve_image_url(feed.get("image_url"), self.api_url)
@@ -1943,7 +2053,11 @@ class VisualFeedMonitor:
 
 def _supports_history(feed):
     feed = _as_dict(feed)
-    return feed.get("source") == HATYAI_SOURCE and feed.get("history_supported") is True
+    return feed.get("history_supported") is True
+
+
+def _detail_action_label(feed):
+    return "ดูภาพวันนี้" if _supports_history(feed) else "ดูภาพล่าสุด"
 
 
 def _source_label(source):

@@ -788,21 +788,6 @@ class Map:
         self.visual_feeds = feeds
         markers = []
         self.visual_feed_markers_by_id = {}
-        availability_colors = {
-            "online": "#16a34a",
-            "stale": "#d97706",
-            "degraded": "#ea580c",
-            "offline": "#dc2626",
-            "unknown": "#64748b",
-        }
-        availability_labels = {
-            "online": "ออนไลน์",
-            "stale": "ข้อมูลเก่า",
-            "degraded": "ขัดข้องบางส่วน",
-            "offline": "ออฟไลน์",
-            "unknown": "ไม่ทราบสถานะ",
-        }
-
         for feed in feeds:
             if not isinstance(feed, dict):
                 continue
@@ -817,9 +802,14 @@ class Map:
             if lat is None or lng is None:
                 continue
 
-            availability = str(feed.get("availability", "unknown")).lower()
-            color = availability_colors.get(availability, "#64748b")
-            status_label = availability_labels.get(availability, "ไม่ทราบสถานะ")
+            image_freshness = str(feed.get("image_freshness", "stale")).lower()
+            is_fresh = image_freshness == "fresh"
+            color = "#0284c7" if is_fresh else "#9ca3af"
+            status_label = (
+                "มีภาพใน 24 ชม."
+                if is_fresh
+                else "ไม่มีภาพที่ยืนยันได้ใน 24 ชม."
+            )
 
             title = (
                 feed.get("title_th")
@@ -830,10 +820,7 @@ class Map:
             source = str(feed.get("source", ""))
             upstream_id = str(feed.get("upstream_id", ""))
             image_url = feed.get("image_url") or ""
-            history_supported = (
-                bool(feed.get("history_supported", False))
-                or source == "hatyai_city_climate"
-            )
+            history_supported = feed.get("history_supported") is True
             coverage = str(feed.get("coverage_group") or "พื้นที่เฝ้าระวัง")
 
             source_display_names = {
@@ -845,22 +832,16 @@ class Map:
                 source, source.upper() if source else "CCTV"
             )
 
-            captured_at = feed.get("captured_at")
-            time_display = "—"
-            if captured_at:
-                try:
-                    c_dt = datetime.datetime.fromisoformat(
-                        str(captured_at).replace("Z", "+00:00")
-                    )
-                    time_display = c_dt.astimezone(BANGKOK_TZ).strftime("%H:%M น.")
-                except Exception:
-                    time_display = str(captured_at)
-
             # Modern CCTV camera pin icon with status color
             pulse_ring = (
                 f'<div class="cctv-live-glow absolute w-3 h-3 top-[7px] left-2 rounded-full pointer-events-none"></div>'
-                if availability == "online"
+                if is_fresh
                 else ""
+            )
+            badge_tone = (
+                "bg-sky-50 text-sky-700 border-sky-200"
+                if is_fresh
+                else "bg-slate-100 text-slate-600 border-slate-200"
             )
             icon_html = f"""<div class="cctv-marker-pin relative cursor-pointer [filter:drop-shadow(0_2px_5px_rgba(0,0,0,0.32))]">
   {pulse_ring}
@@ -915,10 +896,7 @@ class Map:
 
             today = datetime.datetime.now(BANGKOK_TZ).date()
             days = [today - datetime.timedelta(days=i) for i in range(7)]
-            has_history = bool(feed.get("history_supported", False)) or (
-                str(source) == "hatyai_city_climate"
-            )
-            has_hist_js = "true" if has_history else "false"
+            has_hist_js = "true" if history_supported else "false"
 
             day_buttons = []
             for idx, d in enumerate(days):
@@ -954,7 +932,8 @@ class Map:
   data-source="{source}"
   data-upstream-id="{upstream_id}"
   data-image-url="{image_url}"
-  data-live-time="{time_display}"
+  data-image-freshness="{image_freshness}"
+  data-status-label="{status_label}"
   data-has-history="{has_hist_js}"
   data-selected-date="{today.isoformat()}"
   data-title="{title}">
@@ -986,15 +965,9 @@ class Map:
       <span class="text-[11px] text-slate-400 font-medium select-none pointer-events-none">ไม่มีภาพตัวอย่าง</span>
       <img src="{image_url}" alt="{title}" class="cctv-popup-img absolute inset-0 w-full h-full object-cover transition-opacity duration-200"
            onerror="this.style.display='none'" />
-      <div class="absolute top-2 left-2 z-10">
-        <span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-white/90 text-slate-700 backdrop-blur-md shadow-xs flex items-center gap-1 border border-slate-200/60">
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor" class="text-sky-500"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 10.414V7a1 1 0 0 0-2 0v6a1 1 0 0 0 .293.707l3 3a1 1 0 0 0 1.414-1.414z"/></svg>
-          <span class="current-time-val font-semibold">{time_display}</span>
-        </span>
-      </div>
       <div class="absolute top-2 right-2 z-10">
-        <span class="cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs backdrop-blur-md">
-          สด LIVE
+        <span class="cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider {badge_tone} border shadow-xs backdrop-blur-md">
+          {status_label}
         </span>
       </div>
     </div>
