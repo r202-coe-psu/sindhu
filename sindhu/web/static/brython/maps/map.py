@@ -806,9 +806,9 @@ class Map:
             is_fresh = image_freshness == "fresh"
             color = "#0284c7" if is_fresh else "#9ca3af"
             status_label = (
-                "มีภาพใน 24 ชม."
+                "ออนไลน์"
                 if is_fresh
-                else "ไม่มีภาพที่ยืนยันได้ใน 24 ชม."
+                else "ขาดการเชื่อมต่อ"
             )
 
             title = (

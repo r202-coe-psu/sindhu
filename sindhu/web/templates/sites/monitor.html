@@ -210,7 +210,7 @@
                 <h2 id="visual_feed_detail_title" class="text-lg sm:text-xl font-bold text-slate-900 leading-snug tracking-tight truncate">รายละเอียดกล้อง CCTV</h2>
                 <div class="mt-1 flex items-center gap-2 min-w-0">
                     <span id="visual_feed_detail_badge" class="cctv-status cctv-status--stale inline-flex shrink-0 items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold text-white shadow-xs">
-                        ไม่มีภาพที่ยืนยันได้ใน 24 ชม.
+                        ขาดการเชื่อมต่อ
                     </span>
                     <p id="visual_feed_detail_meta" class="truncate text-xs text-slate-500"></p>
                 </div>
@@ -316,7 +316,7 @@
         var isFresh = popup.getAttribute('data-image-freshness') === 'fresh';
         var latestBadgeClass = 'cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider border shadow-xs backdrop-blur-md ' +
             (isFresh ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-100 text-slate-600 border-slate-200');
-        var latestStatus = popup.getAttribute('data-status-label') || 'ไม่มีภาพที่ยืนยันได้ใน 24 ชม.';
+        var latestStatus = popup.getAttribute('data-status-label') || 'ขาดการเชื่อมต่อ';
 
         popup.setAttribute('data-selected-date', dateIso);
 

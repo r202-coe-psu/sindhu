@@ -53,6 +53,9 @@ THAI_MONTHS_SHORT = [
 # 28 Hatyai + 2 DWR + 11 RID cameras are currently catalogued.  Keep a
 # little headroom while retaining a client-side safety cap.
 MAX_CCTV_FEEDS = 50
+HISTORY_LATEST_FALLBACK_MESSAGE = (
+    "ขณะนี้แสดงภาพล่าสุด เพราะไม่สามารถโหลดภาพรายชั่วโมง จากข้อมูลต้นทาง โปรดลองใหม่ภายหลัง"
+)
 
 HATYAI_SOURCE = "hatyai_city_climate"
 
@@ -244,9 +247,9 @@ def _image_freshness_status_class(image_freshness):
 
 def _image_freshness_label(image_freshness):
     return (
-        "มีภาพใน 24 ชม."
+        "ออนไลน์"
         if image_freshness == "fresh"
-        else "ไม่มีภาพที่ยืนยันได้ใน 24 ชม."
+        else "ขาดการเชื่อมต่อ"
     )
 
 
@@ -1677,7 +1680,7 @@ class VisualFeedMonitor:
                     if not self._show_latest_snapshot_for_date(
                         feed,
                         selected_date,
-                        f"{message} · แสดงภาพล่าสุดแทน",
+                        HISTORY_LATEST_FALLBACK_MESSAGE,
                     ):
                         self._set_history_message(message)
                     self._set_history_load_state("error")
@@ -1698,7 +1701,7 @@ class VisualFeedMonitor:
             if not self._history_frames and self._show_latest_snapshot_for_date(
                 feed,
                 selected_date,
-                f"{_history_empty_message(selected_date)} · แสดงภาพล่าสุดแทน",
+                HISTORY_LATEST_FALLBACK_MESSAGE,
             ):
                 self._set_history_load_state("empty")
                 return True
@@ -1718,7 +1721,7 @@ class VisualFeedMonitor:
                 if not self._show_latest_snapshot_for_date(
                     feed,
                     selected_date,
-                    f"{message} · แสดงภาพล่าสุดแทน",
+                    HISTORY_LATEST_FALLBACK_MESSAGE,
                 ):
                     self._set_history_message(message)
                 self._set_history_load_state("error")

@@ -160,11 +160,11 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         self.assertEqual(ui._image_freshness({"availability": "online"}), "stale")
         self.assertEqual(ui._image_freshness({"image_freshness": "unknown"}), "stale")
         self.assertEqual(
-            ui._image_freshness_label("fresh"), "มีภาพใน 24 ชม."
+            ui._image_freshness_label("fresh"), "ออนไลน์"
         )
         self.assertEqual(
             ui._image_freshness_label("stale"),
-            "ไม่มีภาพที่ยืนยันได้ใน 24 ชม.",
+            "ขาดการเชื่อมต่อ",
         )
         self.assertEqual(
             ui._image_freshness_status_class("fresh"), "cctv-status--fresh"
@@ -232,7 +232,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         card_badge = find_badge(card)
         self.assertEqual(card.attrs["data-image-freshness"], "fresh")
         self.assertIsNotNone(card_badge)
-        self.assertEqual(card_badge.textContent, "มีภาพใน 24 ชม.")
+        self.assertEqual(card_badge.textContent, "ออนไลน์")
 
         heading, badge, meta, latest, station_link = [FakeElement("div") for _ in range(5)]
         elements = {
@@ -315,7 +315,9 @@ class VisualFeedUiHelperTests(unittest.TestCase):
             self.assertEqual(bool(rendered), should_fallback)
             if should_fallback:
                 self.assertEqual(rendered, [feed])
-                self.assertIn("แสดงภาพล่าสุดแทน", messages[-1])
+                self.assertEqual(
+                    messages[-1], ui.HISTORY_LATEST_FALLBACK_MESSAGE
+                )
             else:
                 self.assertIn("โหลดประวัติวันที่", messages[-1])
             self.assertEqual(states[-1], expected_state)
@@ -784,9 +786,9 @@ class VisualFeedUiHelperTests(unittest.TestCase):
             expected_color = "#0284c7" if freshness == "fresh" else "#9ca3af"
             self.assertIn(f'fill="{expected_color}"', icon_html, availability)
             expected_label = (
-                "มีภาพใน 24 ชม."
+                "ออนไลน์"
                 if freshness == "fresh"
-                else "ไม่มีภาพที่ยืนยันได้ใน 24 ชม."
+                else "ขาดการเชื่อมต่อ"
             )
             self.assertIn(expected_label, marker.tooltip, availability)
             self.assertNotIn("ภาพล่าสุด", marker.tooltip, availability)
@@ -834,7 +836,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         )
 
         marker = map_obj.visual_feed_markers_by_id["rid_STN04"]
-        self.assertIn("มีภาพใน 24 ชม.", marker.tooltip)
+        self.assertIn("ออนไลน์", marker.tooltip)
         self.assertNotIn("ภาพล่าสุด", marker.tooltip)
         self.assertNotIn("15:47", marker.tooltip)
 
