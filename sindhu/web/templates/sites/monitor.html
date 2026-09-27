@@ -137,10 +137,6 @@
                         <div class="min-w-0">
                             <div class="flex items-center gap-1.5">
                                 <span class="text-xs font-bold text-slate-900 leading-tight">กล้อง CCTV</span>
-                                <span class="cctv-status cctv-status--online inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold">
-                                    <span class="h-1.5 w-1.5 rounded-full bg-white"></span>
-                                    <span>ออนไลน์</span>
-                                </span>
                             </div>
                             <p id="visual_feed_summary" class="truncate text-[11px] font-medium text-slate-500 leading-tight mt-0.5">กำลังโหลดรายการ...</p>
                         </div>
@@ -213,8 +209,8 @@
             <div class="min-w-0 flex-1">
                 <h2 id="visual_feed_detail_title" class="text-lg sm:text-xl font-bold text-slate-900 leading-snug tracking-tight truncate">รายละเอียดกล้อง CCTV</h2>
                 <div class="mt-1 flex items-center gap-2 min-w-0">
-                    <span id="visual_feed_detail_badge" class="cctv-status cctv-status--online inline-flex shrink-0 items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold shadow-xs">
-                        <span class="h-1.5 w-1.5 rounded-full bg-white"></span><span>ออนไลน์</span>
+                    <span id="visual_feed_detail_badge" class="cctv-status cctv-status--stale inline-flex shrink-0 items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold text-white shadow-xs">
+                        ไม่มีภาพที่ยืนยันได้ใน 24 ชม.
                     </span>
                     <p id="visual_feed_detail_meta" class="truncate text-xs text-slate-500"></p>
                 </div>
@@ -229,7 +225,7 @@
         {# Unified 7-Day History & Image Viewport Section #}
         <div id="visual_feed_history_frames" class="space-y-3">
             {# 7-Day Horizontal Slide Selector #}
-            <div class="p-2 sm:p-2.5 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs">
+            <div id="visual_feed_history_controls" class="p-2 sm:p-2.5 rounded-2xl bg-slate-50 border border-slate-200/90 shadow-2xs">
                 <div class="flex items-center justify-between px-1 mb-1.5">
                     <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
                         <i class="ph ph-calendar text-sky-600 text-sm" aria-hidden="true"></i>
@@ -254,14 +250,14 @@
                 </div>
             </div>
 
-            <div id="visual_feed_history_viewport" class="cctv-history-viewport relative aspect-video rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shadow-sm">
+            <div id="visual_feed_history_viewport" class="cctv-history-viewport relative aspect-video rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shadow-sm cursor-ew-resize select-none">
                 <div id="visual_feed_history_frame" class="cctv-history-frame w-full h-full"></div>
                 <button id="visual_feed_history_previous" type="button"
-                    class="cctv-history-nav cctv-history-nav--previous hidden" aria-label="ดูภาพก่อนหน้า">
+                    class="cctv-history-nav cctv-history-nav--previous hidden disabled:opacity-40 disabled:cursor-not-allowed" aria-label="ดูภาพก่อนหน้า">
                     <i class="ph ph-caret-left text-xl" aria-hidden="true"></i>
                 </button>
                 <button id="visual_feed_history_next" type="button"
-                    class="cctv-history-nav cctv-history-nav--next hidden" aria-label="ดูภาพถัดไป">
+                    class="cctv-history-nav cctv-history-nav--next hidden disabled:opacity-40 disabled:cursor-not-allowed" aria-label="ดูภาพถัดไป">
                     <i class="ph ph-caret-right text-xl" aria-hidden="true"></i>
                 </button>
             </div>
@@ -317,6 +313,10 @@
         var badge = popup.querySelector('.cctv-popup-live-badge');
         var ctrls = popup.querySelector('.cctv-popup-history-ctrls');
         var notice = popup.querySelector('.cctv-popup-info-notice');
+        var isFresh = popup.getAttribute('data-image-freshness') === 'fresh';
+        var latestBadgeClass = 'cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider border shadow-xs backdrop-blur-md ' +
+            (isFresh ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-100 text-slate-600 border-slate-200');
+        var latestStatus = popup.getAttribute('data-status-label') || 'ไม่มีภาพที่ยืนยันได้ใน 24 ชม.';
 
         popup.setAttribute('data-selected-date', dateIso);
 
@@ -328,10 +328,10 @@
                     img.src = popup.getAttribute('data-image-url');
                 }
                 if (badge) {
-                    badge.className = 'cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs backdrop-blur-md';
-                    badge.textContent = 'สด LIVE';
+                    badge.className = latestBadgeClass;
+                    badge.textContent = latestStatus;
                 }
-                if (timeVal) timeVal.textContent = popup.getAttribute('data-live-time') || '--:--';
+                if (timeVal) timeVal.textContent = popup.getAttribute('data-live-time') || 'เวลาไม่ทราบ';
             } else {
                 if (notice) notice.classList.remove('hidden');
             }
@@ -346,10 +346,10 @@
                 img.src = popup.getAttribute('data-image-url');
             }
             if (badge) {
-                badge.className = 'cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs backdrop-blur-md';
-                badge.textContent = 'สด LIVE';
+                badge.className = latestBadgeClass;
+                badge.textContent = latestStatus;
             }
-            if (timeVal) timeVal.textContent = popup.getAttribute('data-live-time') || '--:--';
+            if (timeVal) timeVal.textContent = popup.getAttribute('data-live-time') || 'เวลาไม่ทราบ';
             return;
         }
 

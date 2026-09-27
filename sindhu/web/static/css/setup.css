@@ -121,8 +121,8 @@
         --cctv-accent: oklch(48% 0.14 256);
         --cctv-accent-ink: oklch(98% 0.008 82);
         --cctv-focus: oklch(56% 0.19 250);
-        --cctv-online: oklch(57% 0.16 151);
-        --cctv-unavailable: oklch(56% 0.025 255);
+        --cctv-fresh: #0284c7;
+        --cctv-stale: #9ca3af;
         --cctv-error: oklch(55% 0.2 28);
         --cctv-shadow: oklch(18% 0.025 255 / 0.18);
         --cctv-overlay: oklch(18% 0.025 255 / 0.7);
@@ -229,15 +229,10 @@
         color: var(--cctv-accent-ink);
     }
 
-    .cctv-status--online { background: var(--cctv-online); }
-    .cctv-status--unavailable { background: var(--cctv-unavailable); }
+    .cctv-status--fresh { background: var(--cctv-fresh); }
+    .cctv-status--stale { background: var(--cctv-stale); }
 
     .cctv-time { font-variant-numeric: tabular-nums; }
-
-    .visual-feed-card[data-availability="offline"],
-    .visual-feed-card[data-availability="stale"] {
-        opacity: 0.92;
-    }
 
     #visual_feed_detail_dialog::backdrop {
         background: var(--cctv-overlay);
@@ -354,7 +349,7 @@
     .cctv-history-nav[data-state="success"],
     .cctv-modal-action[data-state="success"],
     #visual_feed_history_date[data-state="success"] {
-        border-color: var(--cctv-online);
+        border-color: var(--cctv-fresh);
     }
 
     .cctv-history-counter {
@@ -422,8 +417,7 @@
         .cctv-modal-action,
         .cctv-list-item { transition-duration: 0ms; }
 
-        .cctv-live-glow,
-        .cctv-status--online > span:first-child { animation: none !important; }
+        .cctv-live-glow { animation: none !important; }
     }
 
     @keyframes cctv-fade-only {
@@ -458,15 +452,15 @@
     @keyframes cctv-pulse {
         0% {
             transform: scale(0.95);
-            box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
+            box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.7);
         }
         70% {
             transform: scale(1);
-            box-shadow: 0 0 0 8px rgba(22, 163, 74, 0);
+            box-shadow: 0 0 0 8px rgba(2, 132, 199, 0);
         }
         100% {
             transform: scale(0.95);
-            box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+            box-shadow: 0 0 0 0 rgba(2, 132, 199, 0);
         }
     }
 
@@ -713,11 +707,6 @@
     background: #0f172a;
   }
 
-  .visual-feed-card[data-availability="offline"],
-  .visual-feed-card[data-availability="stale"] {
-    opacity: 0.92;
-  }
-
   #visual_feed_detail_dialog::backdrop {
     background: rgba(15, 23, 42, 0.65);
     backdrop-filter: blur(4px);
@@ -749,15 +738,15 @@
   @keyframes cctv-pulse {
     0% {
       transform: scale(0.95);
-      box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.7);
+      box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.7);
     }
     70% {
       transform: scale(1);
-      box-shadow: 0 0 0 8px rgba(22, 163, 74, 0);
+      box-shadow: 0 0 0 8px rgba(2, 132, 199, 0);
     }
     100% {
       transform: scale(0.95);
-      box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+      box-shadow: 0 0 0 0 rgba(2, 132, 199, 0);
     }
   }
 
