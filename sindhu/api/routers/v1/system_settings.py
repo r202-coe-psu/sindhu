@@ -62,7 +62,7 @@ async def update(
             detail="Not found system setting",
         )
 
-    data = system_setting.model_dump()
+    data = system_setting.model_dump(exclude_unset=True)
     await db_system_setting.update(Set(data))
 
     db_system_setting.updated_date = datetime.datetime.now()
@@ -84,7 +84,7 @@ async def get_api_token(
         )
     except:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Id is not correct",
         )
     if not db_api_token:
@@ -136,7 +136,7 @@ async def update_api_token(
         )
     except:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Id is not correct",
         )
 
@@ -173,7 +173,7 @@ async def delete_api_token(
         db_api_token = await models.ApiToken.find_one({"_id": ObjectId(api_token_id)})
     except:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Id is not correct",
         )
 

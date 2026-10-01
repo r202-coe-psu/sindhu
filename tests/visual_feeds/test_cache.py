@@ -126,6 +126,37 @@ class CctvCacheTests(unittest.IsolatedAsyncioTestCase):
             {"version", "fetched_at", "value"},
         )
 
+    async def test_timestamp_observation_uses_ttl_and_stores_no_image(self) -> None:
+        redis = FakeRedis()
+        cache = CctvCache(redis)
+        key = "sindhu:cctv:v1:image-check:rid:camera-1"
+        checked_at = datetime.datetime(2026, 9, 27, 3, 0, tzinfo=UTC)
+
+        self.assertTrue(await cache.set_timestamp(key, checked_at, ttl_seconds=86_401))
+        self.assertEqual(await cache.get_timestamp(key), checked_at)
+        self.assertLessEqual(redis.expires[key] - time.monotonic(), 86_401)
+        self.assertGreater(redis.expires[key] - time.monotonic(), 86_400)
+        self.assertEqual(
+            redis.values[key], checked_at.isoformat().replace("+00:00", "Z")
+        )
+
+    async def test_timestamp_observation_fails_closed_when_redis_is_unavailable(
+        self,
+    ) -> None:
+        cache = CctvCache(BrokenRedis())
+        checked_at = datetime.datetime(2026, 9, 27, 3, 0, tzinfo=UTC)
+
+        self.assertIsNone(
+            await cache.get_timestamp("sindhu:cctv:v1:image-check:rid:camera-1")
+        )
+        self.assertFalse(
+            await cache.set_timestamp(
+                "sindhu:cctv:v1:image-check:rid:camera-1",
+                checked_at,
+                ttl_seconds=86_401,
+            )
+        )
+
     async def test_cold_callers_singleflight_and_recheck_after_lock(self) -> None:
         redis = FakeRedis()
         cache = CctvCache(redis)
