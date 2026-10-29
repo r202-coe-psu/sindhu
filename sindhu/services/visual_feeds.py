@@ -21,25 +21,31 @@ from sindhu.schemas.visual_feeds import (
     VisualFeedHistory,
 )
 from sindhu.services.cctv_cache import CacheError, CctvCache
+from sindhu.services.cctv_logging import log_failure
 from sindhu.services.cctv_catalog import (
     DWR_SOURCE,
-    HATYAI_SOURCE,
     RID_SOURCE,
     get_camera,
-    HATYAI_REGISTRY_VERSION,
-    DWR_REGISTRY_VERSION,
-    RID_REGISTRY_VERSION,
+    HATYAI_REGISTRY_VERSION,  # noqa: F401  (re-exported; tests read service.HATYAI_REGISTRY_VERSION)
 )
-from sindhu.services.cctv_sources import CctvSources, SourceError, STALE_AFTER
+from sindhu.services.cctv_providers import PROVIDER_BY_SOURCE, SOURCES
+from sindhu.services.cctv_sources import (
+    MAX_HISTORY_FRAMES,
+    STALE_AFTER,
+    CctvSources,
+    SourceError,
+)
 
 UTC = dt.timezone.utc
 BANGKOK = ZoneInfo("Asia/Bangkok")
-SOURCES = (HATYAI_SOURCE, DWR_SOURCE, RID_SOURCE)
 PREFIX = "sindhu:cctv:v1"
-HISTORY_DAYS = 7
-IMAGE_FRESHNESS_WINDOW = dt.timedelta(hours=24)
-IMAGE_CHECK_TTL_SECONDS = int(IMAGE_FRESHNESS_WINDOW.total_seconds()) + 1
+# Hatyai photographs every 30 minutes, DWR and RID more often: a camera that
+# has missed an hour of updates is not online, whatever its provider says.
+IMAGE_FRESHNESS_WINDOW = dt.timedelta(hours=1)
+# Camera clocks can run a little ahead of ours; such an image is still fresh.
+CLOCK_SKEW_ALLOWANCE = dt.timedelta(minutes=5)
 SNAPSHOT_CONCURRENCY = 2
+HISTORY_CACHE_SECONDS = 600  # the provider adds a photo every 30 minutes
 SNAPSHOT_REQUEST_TIMEOUT_SECONDS = 30
 
 
@@ -49,31 +55,35 @@ class ViewerError(Exception):
         super().__init__(code)
 
 
+def is_recent(captured_at: dt.datetime | None, now: dt.datetime | None = None) -> bool:
+    """The one rule for "still updating", shared by badges and history.
+
+    Only the capture time of an image counts; provider health labels
+    (Hatyai's flag stays green for cameras that stopped months ago) do not.
+    """
+    if captured_at is None or captured_at.utcoffset() is None:
+        return False
+    current_time = now or dt.datetime.now(UTC)
+    if current_time.utcoffset() is None:
+        return False
+    age = current_time.astimezone(UTC) - captured_at.astimezone(UTC)
+    return -CLOCK_SKEW_ALLOWANCE <= age <= IMAGE_FRESHNESS_WINDOW
+
+
 def image_freshness_for(
     feed: PublicVisualFeed, now: dt.datetime | None = None
 ) -> ImageFreshness:
-    """Classify image evidence, not the upstream provider's health label."""
-    checked_at = (
-        feed.image_checked_at if feed.source == RID_SOURCE else feed.captured_at
-    )
-    image_url = feed.image_url
-    if not image_url or not image_url.strip() or checked_at is None:
+    """A camera is online when it has an image captured recently."""
+    if not feed.image_url or not feed.image_url.strip():
         return ImageFreshness.STALE
-    if checked_at.tzinfo is None or checked_at.utcoffset() is None:
-        return ImageFreshness.STALE
-
-    current_time = now or dt.datetime.now(UTC)
-    if current_time.tzinfo is None or current_time.utcoffset() is None:
-        return ImageFreshness.STALE
-    age = current_time.astimezone(UTC) - checked_at.astimezone(UTC)
-    if dt.timedelta(0) <= age <= IMAGE_FRESHNESS_WINDOW:
+    if is_recent(feed.captured_at, now):
         return ImageFreshness.FRESH
     return ImageFreshness.STALE
 
 
 def validate_history_date(value: dt.date, now: dt.datetime | None = None) -> None:
     today = (now or dt.datetime.now(UTC)).astimezone(BANGKOK).date()
-    if not today - dt.timedelta(days=HISTORY_DAYS - 1) <= value <= today:
+    if value > today:
         raise ViewerError("history_date_out_of_range", 422)
 
 
@@ -170,11 +180,8 @@ class VisualFeedService:
             except ValidationError:
                 raise SourceError("invalid_source_contract") from None
 
-        registry_version = {
-            HATYAI_SOURCE: HATYAI_REGISTRY_VERSION,
-            DWR_SOURCE: DWR_REGISTRY_VERSION,
-            RID_SOURCE: RID_REGISTRY_VERSION,
-        }[source]
+        provider = PROVIDER_BY_SOURCE[source]
+        registry_version = provider.registry_version
         cached = await self.cache.get(
             f"{PREFIX}:latest:{source}:{registry_version}:r{self._source_config_revision}",
             load,
@@ -187,25 +194,10 @@ class VisualFeedService:
             feeds = [PublicVisualFeed.model_validate(r) for r in cached.value]
         except (ValidationError, TypeError):
             raise ViewerError("invalid_cache_data") from None
-        if source == RID_SOURCE:
-            get_timestamp = getattr(self.cache, "get_timestamp", None)
-            checked_at = (
-                await asyncio.gather(
-                    *(
-                        get_timestamp(self._rid_check_key(feed.upstream_id))
-                        for feed in feeds
-                    ),
-                    return_exceptions=True,
-                )
-                if callable(get_timestamp)
-                else []
-            )
-            for feed, observation in zip(feeds, checked_at):
-                feed.image_checked_at = (
-                    observation if isinstance(observation, dt.datetime) else None
-                )
         for feed in feeds:
-            feed.image_freshness = image_freshness_for(feed, now)
+            # Judged when the provider was asked, so time spent in our cache
+            # does not turn a working camera offline.
+            feed.image_freshness = image_freshness_for(feed, feed.fetched_at)
             if feed.availability == Availability.OFFLINE:
                 continue
             if feed.captured_at is None or feed.captured_at > now + dt.timedelta(
@@ -273,78 +265,107 @@ class VisualFeedService:
         ]
         return sorted(filtered, key=lambda f: (f.source, f.slug)), health
 
-    def _rid_check_key(self, upstream_id: str) -> str:
-        return (
-            f"{PREFIX}:image-check:{RID_SOURCE}:{RID_REGISTRY_VERSION}:"
-            f"r{self._source_config_revision}:{upstream_id}"
-        )
-
     async def get(self, source: str, upstream_id: str):
         if get_camera(source, upstream_id) is None:
             return None
         try:
             feeds, _ = await self._catalog(source)
-        except (SourceError, CacheError):
+        except (SourceError, CacheError) as error:
+            log_failure(f"{source} catalog", "cctv_source_unavailable", error)
             raise ViewerError("cctv_source_unavailable") from None
         return next((f for f in feeds if f.upstream_id == upstream_id), None)
 
     async def history(
-        self, source: str, upstream_id: str, date: dt.date
+        self, source: str, upstream_id: str, date: dt.date | None = None
     ) -> VisualFeedHistory:
+        """Return one camera's latest photo set, optionally narrowed to a day."""
         if get_camera(source, upstream_id) is None:
             raise ViewerError("visual_feed_not_found", 404)
-        if source != HATYAI_SOURCE:
+        if not PROVIDER_BY_SOURCE[source].history_supported:
             raise ViewerError("history_not_supported", 400)
-        validate_history_date(date)
+        if date is not None:
+            validate_history_date(date)
 
         async def load():
             try:
-                data = await self.sources.history(source, upstream_id, date)
+                data = await self.sources.history(source, upstream_id)
                 frames = [HistoryFrame.model_validate(f) for f in data["frames"]]
-                if any(
-                    f.captured_at.astimezone(BANGKOK).date() != date for f in frames
-                ):
-                    raise SourceError("history_date_mismatch")
-                if len(frames) > 144:
+                if len(frames) > MAX_HISTORY_FRAMES:
                     raise SourceError("history_frame_limit")
                 return {
                     "frames": [
                         f.model_dump(mode="json")
                         for f in sorted(frames, key=lambda f: f.captured_at)
                     ],
+                    "available_dates": data.get("available_dates", []),
                     "possibly_truncated": bool(data.get("possibly_truncated", False)),
                 }
             except (ValidationError, KeyError, TypeError):
                 raise SourceError("invalid_history_contract") from None
 
-        today = dt.datetime.now(UTC).astimezone(BANGKOK).date()
-        ttl = 120 if date == today else 900
         try:
+            # One provider call per camera serves every day in its photo set.
             cached = await self.cache.get(
-                f"{PREFIX}:history:{source}:{upstream_id}:{date.isoformat()}",
+                f"{PREFIX}:history:{source}:{upstream_id}",
                 load,
-                fresh_seconds=ttl,
-                stale_seconds=ttl,
-                max_bytes=65536,
+                fresh_seconds=HISTORY_CACHE_SECONDS,
+                stale_seconds=HISTORY_CACHE_SECONDS,
+                max_bytes=CctvCache.HISTORY_MAX_BYTES,
             )
+            value = cached.value
+            frames = value["frames"]
+            # Range of everything the provider returned, before the day filter.
+            oldest = frames[0]["captured_at"] if frames else None
+            latest = frames[-1]["captured_at"] if frames else None
+            history_stale = latest is not None and not is_recent(
+                dt.datetime.fromisoformat(latest), cached.fetched_at
+            )
+            if date is not None:
+                frames = [
+                    frame
+                    for frame in frames
+                    if dt.datetime.fromisoformat(frame["captured_at"])
+                    .astimezone(BANGKOK)
+                    .date()
+                    == date
+                ]
             return VisualFeedHistory(
                 source=source,
                 upstream_id=upstream_id,
                 date=date,
                 fetched_at=cached.fetched_at,
-                **cached.value,
+                frames=frames,
+                available_dates=value["available_dates"],
+                oldest_captured_at=oldest,
+                latest_captured_at=latest,
+                history_stale=history_stale,
+                possibly_truncated=value["possibly_truncated"],
             )
-        except (SourceError, CacheError, ValidationError):
+        except (SourceError, CacheError, ValidationError, KeyError, ValueError) as error:
+            log_failure(f"{source} history", "cctv_history_unavailable", error)
             raise ViewerError("cctv_history_unavailable") from None
 
-    async def snapshot(self, upstream_id: str) -> bytes:
+    async def snapshot_token(self, upstream_id: str) -> str | None:
+        """Identity of the current DWR image (its dated path); one cheap upstream call."""
         if get_camera(DWR_SOURCE, upstream_id) is None:
             raise ViewerError("visual_feed_not_found", 404)
         try:
             async with asyncio.timeout(SNAPSHOT_REQUEST_TIMEOUT_SECONDS):
                 async with self._snapshot_semaphore:
-                    return await self.sources.snapshot(upstream_id)
-        except (SourceError, TimeoutError):
+                    return await self.sources.snapshot_token(upstream_id)
+        except (SourceError, TimeoutError) as error:
+            log_failure(f"{DWR_SOURCE} snapshot token", "snapshot_unavailable", error)
+            raise ViewerError("snapshot_unavailable") from None
+
+    async def snapshot(self, upstream_id: str, token: str | None = None) -> bytes:
+        if get_camera(DWR_SOURCE, upstream_id) is None:
+            raise ViewerError("visual_feed_not_found", 404)
+        try:
+            async with asyncio.timeout(SNAPSHOT_REQUEST_TIMEOUT_SECONDS):
+                async with self._snapshot_semaphore:
+                    return await self.sources.snapshot(upstream_id, token)
+        except (SourceError, TimeoutError) as error:
+            log_failure(f"{DWR_SOURCE} snapshot", "snapshot_unavailable", error)
             raise ViewerError("snapshot_unavailable") from None
 
     async def rid_snapshot(self, upstream_id: str) -> tuple[bytes, str]:
@@ -354,16 +375,9 @@ class VisualFeedService:
             async with asyncio.timeout(SNAPSHOT_REQUEST_TIMEOUT_SECONDS):
                 async with self._snapshot_semaphore:
                     payload, media_type = await self.sources.rid_snapshot(upstream_id)
-        except (SourceError, TimeoutError):
+        except (SourceError, TimeoutError) as error:
+            log_failure(f"{RID_SOURCE} snapshot", "snapshot_unavailable", error)
             raise ViewerError("snapshot_unavailable") from None
-        checked_at = dt.datetime.now(UTC)
-        set_timestamp = getattr(self.cache, "set_timestamp", None)
-        if callable(set_timestamp):
-            await set_timestamp(
-                self._rid_check_key(upstream_id),
-                checked_at,
-                ttl_seconds=IMAGE_CHECK_TTL_SECONDS,
-            )
         return payload, media_type
 
 
@@ -431,8 +445,12 @@ async def get_history(source, upstream_id, date):
     return await get_service().history(source, upstream_id, date)
 
 
-async def get_snapshot(upstream_id):
-    return await get_service().snapshot(upstream_id)
+async def get_snapshot_token(upstream_id):
+    return await get_service().snapshot_token(upstream_id)
+
+
+async def get_snapshot(upstream_id, token=None):
+    return await get_service().snapshot(upstream_id, token)
 
 
 async def get_rid_snapshot(upstream_id):
