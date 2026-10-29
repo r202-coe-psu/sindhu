@@ -27,6 +27,12 @@ class _DummyWindow:
     def bind(self, *_args):
         return None
 
+    def setTimeout(self, *_args):
+        return 1
+
+    def clearTimeout(self, *_args):
+        return None
+
 
 def _load_ui_module():
     browser = types.ModuleType("browser")
@@ -43,8 +49,12 @@ def _load_ui_module():
             / "visual_feeds"
             / "__init__.py"
         )
-        spec = importlib.util.spec_from_file_location("visual_feeds_ui", path)
+        # Load as a package so its relative imports (labels, map_popup) resolve.
+        spec = importlib.util.spec_from_file_location(
+            "visual_feeds_ui", path, submodule_search_locations=[str(path.parent)]
+        )
         module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
         spec.loader.exec_module(module)
         return module
 
@@ -116,7 +126,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
             "https://images.example.test/camera.jpg?v=42",
         )
 
-    def test_bangkok_date_window_is_inclusive_at_utc_boundary(self):
+    def test_history_date_is_valid_up_to_bangkok_today_with_no_fixed_lookback(self):
         before_midnight = datetime.datetime(
             2026, 9, 2, 16, 59, tzinfo=datetime.timezone.utc
         )
@@ -124,26 +134,82 @@ class VisualFeedUiHelperTests(unittest.TestCase):
 
         self.assertEqual(ui._bangkok_today(before_midnight).isoformat(), "2026-09-02")
         self.assertEqual(ui._bangkok_today(at_midnight).isoformat(), "2026-09-03")
-        self.assertEqual(
-            tuple(value.isoformat() for value in ui._history_date_window(at_midnight)),
-            ("2026-08-28", "2026-09-03"),
-        )
-        self.assertIsNotNone(ui._valid_history_date("2026-08-28", at_midnight))
-        self.assertIsNone(ui._valid_history_date("2026-08-27", at_midnight))
+        # How far back history goes is the provider's decision (see available_dates).
+        self.assertIsNotNone(ui._valid_history_date("2026-09-03", at_midnight))
+        self.assertIsNotNone(ui._valid_history_date("2026-08-01", at_midnight))
+        self.assertIsNone(ui._valid_history_date("2026-09-03", before_midnight))
         self.assertIsNone(ui._valid_history_date("2026-09-04", at_midnight))
 
-    def test_filter_keeps_cctv_only_and_caps_at_fifty(self):
-        feeds = [{"media_type": "radar", "upstream_id": "radar"}]
+    def test_short_date_label_adds_the_thai_year_only_outside_this_year(self):
+        today = datetime.date(2026, 10, 29)
+
+        self.assertEqual(
+            ui.short_date_label(datetime.date(2026, 10, 20), today), "20 ต.ค."
+        )
+        self.assertEqual(
+            ui.short_date_label(datetime.date(2025, 11, 20), today), "20 พ.ย. 68"
+        )
+
+    def test_coverage_label_is_thai_and_keeps_unknown_groups(self):
+        self.assertEqual(ui.coverage_label("kho_hong"), "คอหงส์")
+        self.assertEqual(ui.coverage_label("new_area"), "new_area")
+        self.assertEqual(ui.coverage_label(None), "—")
+
+    def test_stopped_history_names_its_last_day(self):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        monitor._history_range = (
+            "2024-09-20T08:00:20Z",
+            "2025-11-20T13:00:05Z",
+            True,
+        )
+
+        self.assertTrue(monitor._history_is_stale())
+        self.assertIn("20 พ.ย. 68", monitor._stale_history_message())
+
+    def test_arrows_cannot_step_into_days_of_a_history_that_stopped(self):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        monitor._mode = "history"
+        monitor._active_date = ui._bangkok_today().isoformat()
+        monitor._history_available_dates = ["2025-11-19", "2025-11-20"]
+        monitor._history_range = (None, "2025-11-20T13:00:05Z", True)
+
+        self.assertIsNone(monitor._adjacent_history_date(-1))
+
+        monitor._history_range = (None, "2025-11-20T13:00:05Z", False)
+        self.assertEqual(monitor._adjacent_history_date(-1), "2025-11-20")
+
+    def test_history_timeout_keeps_showing_the_latest_image(self):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        feed = {"source": ui.HATYAI_SOURCE, "upstream_id": "9"}
+        monitor._mode = "history"
+        monitor._modal_open = True
+        monitor._active_feed = feed
+        monitor._active_date = "2026-10-29"
+        shown, notices = [], []
+        monitor._show_latest_snapshot_for_date = (
+            lambda selected, day, message: shown.append((day, message)) or True
+        )
+        monitor._render_history_notice = lambda message: notices.append(message)
+        monitor._set_history_load_state = lambda _state: None
+
+        monitor._on_history_timeout(feed, monitor._history_generation)
+
+        self.assertEqual(shown, [("2026-10-29", ui.HISTORY_LATEST_FALLBACK_MESSAGE)])
+        self.assertEqual(notices, [])
+
+    def test_filter_skips_non_objects_and_caps_at_max_feeds(self):
+        feeds = ["not-a-feed"]
         feeds.extend(
-            {"media_type": "cctv", "upstream_id": str(index)} for index in range(55)
+            {"media_type": "cctv", "upstream_id": str(index)}
+            for index in range(ui.MAX_CCTV_FEEDS + 5)
         )
 
         result = ui._filter_cctv_feeds(feeds)
 
-        self.assertEqual(len(result), 50)
+        self.assertEqual(len(result), ui.MAX_CCTV_FEEDS)
         self.assertTrue(all(feed["media_type"] == "cctv" for feed in result))
         self.assertEqual(result[0]["upstream_id"], "0")
-        self.assertEqual(result[-1]["upstream_id"], "49")
+        self.assertEqual(result[-1]["upstream_id"], str(ui.MAX_CCTV_FEEDS - 1))
 
     def test_camera_visibility_does_not_depend_on_status_or_image_availability(self):
         for status in ("online", "stale", "degraded", "offline", "unknown"):
@@ -152,16 +218,14 @@ class VisualFeedUiHelperTests(unittest.TestCase):
                     {"media_type": "cctv", "availability": status, "image_url": None}
                 )
             )
-        self.assertFalse(ui._is_displayable_camera({"media_type": "radar"}))
+        self.assertFalse(ui._is_displayable_camera("not-a-feed"))
 
     def test_image_freshness_uses_only_the_api_field_and_fails_closed(self):
         self.assertEqual(ui._image_freshness({"image_freshness": "fresh"}), "fresh")
         self.assertEqual(ui._image_freshness({"image_freshness": "stale"}), "stale")
         self.assertEqual(ui._image_freshness({"availability": "online"}), "stale")
         self.assertEqual(ui._image_freshness({"image_freshness": "unknown"}), "stale")
-        self.assertEqual(
-            ui._image_freshness_label("fresh"), "ออนไลน์"
-        )
+        self.assertEqual(ui._image_freshness_label("fresh"), "ออนไลน์")
         self.assertEqual(
             ui._image_freshness_label("stale"),
             "ขาดการเชื่อมต่อ",
@@ -234,16 +298,17 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         self.assertIsNotNone(card_badge)
         self.assertEqual(card_badge.textContent, "ออนไลน์")
 
-        heading, badge, meta, latest, station_link = [FakeElement("div") for _ in range(5)]
+        heading, badge, meta, latest = [FakeElement("div") for _ in range(4)]
         elements = {
             "visual_feed_detail_title": heading,
             "visual_feed_detail_badge": badge,
             "visual_feed_detail_meta": meta,
             "visual_feed_detail_latest_image": latest,
-            "visual_feed_detail_station_link": station_link,
         }
         with (
-            patch.object(ui, "document", types.SimpleNamespace(getElementById=elements.get)),
+            patch.object(
+                ui, "document", types.SimpleNamespace(getElementById=elements.get)
+            ),
             patch.object(ui, "_el", side_effect=factory),
         ):
             monitor._populate_detail(feed)
@@ -256,7 +321,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
     def test_history_empty_and_failure_messages_name_selected_date_and_outage(self):
         self.assertEqual(
             ui._history_empty_message("2026-09-25"),
-            "ไม่พบภาพย้อนหลังจากต้นทางในวันที่ 25/09/2026",
+            "ไม่มีภาพวันที่ 25/09/2026 ในข้อมูลย้อนหลังที่ต้นทางส่งมา",
         )
         self.assertIn(
             "ไม่พร้อม",
@@ -310,14 +375,12 @@ class VisualFeedUiHelperTests(unittest.TestCase):
                 patch.object(monitor, "_should_fetch_history", return_value=True),
                 patch.object(ui.aio, "get", get, create=True),
             ):
-                asyncio.run(monitor._fetch_history(feed, selected_date, 1))
+                asyncio.run(monitor._fetch_history(feed, 1))
 
             self.assertEqual(bool(rendered), should_fallback)
             if should_fallback:
                 self.assertEqual(rendered, [feed])
-                self.assertEqual(
-                    messages[-1], ui.HISTORY_LATEST_FALLBACK_MESSAGE
-                )
+                self.assertEqual(messages[-1], ui.HISTORY_LATEST_FALLBACK_MESSAGE)
             else:
                 self.assertIn("โหลดประวัติวันที่", messages[-1])
             self.assertEqual(states[-1], expected_state)
@@ -392,6 +455,79 @@ class VisualFeedUiHelperTests(unittest.TestCase):
             self.assertTrue(following.disabled)
             self.assertEqual(counter.textContent, "")
 
+    def test_history_arrows_cross_loaded_days_without_refetching(self):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        feed = {
+            "source": "hatyai_city_climate",
+            "upstream_id": "3",
+            "history_supported": True,
+        }
+        monitor._mode = "history"
+        monitor._active_feed = feed
+        monitor._history_all_frames = monitor._normalize_history_frames(
+            [
+                # 23:30 and 00:30 Bangkok fall on different days.
+                {
+                    "captured_at": "2026-09-21T16:30:00Z",
+                    "image_url": "https://i.test/a.jpg",
+                },
+                {
+                    "captured_at": "2026-09-21T17:30:00Z",
+                    "image_url": "https://i.test/b.jpg",
+                },
+                {
+                    "captured_at": "2026-09-21T18:30:00Z",
+                    "image_url": "https://i.test/c.jpg",
+                },
+            ]
+        )
+        monitor._history_loaded_key = monitor._feed_key(feed)
+        monitor._history_available_dates = ["2026-09-21", "2026-09-22"]
+        monitor._active_date = "2026-09-21"
+        shown = []
+        monitor._render_7days_rail = lambda: None
+        monitor._render_history_frame = lambda: shown.append(
+            monitor._history_frames[monitor._history_index]["image_url"]
+        )
+        monitor._set_history_message = lambda _message: None
+        monitor._set_history_load_state = lambda _state: None
+
+        with (
+            patch.object(
+                ui,
+                "document",
+                types.SimpleNamespace(
+                    getElementById=lambda key: (
+                        types.SimpleNamespace(html="")
+                        if key == "visual_feed_history_frame"
+                        else None
+                    )
+                ),
+            ),
+            patch.object(ui, "_valid_history_date", datetime.date.fromisoformat),
+            patch.object(
+                ui.aio, "run", side_effect=AssertionError("refetched"), create=True
+            ),
+        ):
+            monitor._show_history_day()
+            monitor._on_history_next()
+            self.assertEqual(monitor._active_date, "2026-09-22")
+            monitor._on_history_next()
+            monitor._on_history_previous()
+            monitor._on_history_previous()
+
+        self.assertEqual(
+            shown,
+            [
+                "https://i.test/a.jpg",
+                "https://i.test/b.jpg",
+                "https://i.test/c.jpg",
+                "https://i.test/b.jpg",
+                "https://i.test/a.jpg",
+            ],
+        )
+        self.assertEqual(monitor._active_date, "2026-09-21")
+
     def test_open_detail_enters_today_history_when_supported(self):
         monitor = ui.VisualFeedMonitor("https://api.example.test")
         opened = []
@@ -415,7 +551,28 @@ class VisualFeedUiHelperTests(unittest.TestCase):
             )
         )
 
-    def test_realtime_only_detail_hides_history_day_selector(self):
+    def test_history_range_message_states_the_providers_real_coverage(self):
+        message = ui._history_range_message(
+            "2026-10-16T13:00:07Z", "2026-10-20T16:00:43Z", False
+        )
+
+        self.assertEqual(message, "ข้อมูลย้อนหลังจากต้นทาง 16/10/2026 – 20/10/2026")
+
+    def test_history_range_message_flags_a_camera_whose_history_stopped(self):
+        message = ui._history_range_message(
+            "2026-09-21T15:00:58Z", "2026-09-26T17:00:22Z", True
+        )
+
+        self.assertIn("21/09/2026 – 27/09/2026", message)
+        self.assertIn("หยุดอัปเดต", message)
+
+    def test_history_range_message_is_empty_without_a_usable_range(self):
+        self.assertEqual(ui._history_range_message(None, None, False), "")
+        self.assertEqual(
+            ui._history_range_message("nope", "2026-10-20T00:00:00Z", True), ""
+        )
+
+    def _open_detail_with_fake_dom(self, feed):
         class FakeClassList:
             def __init__(self, *classes):
                 self.classes = set(classes)
@@ -430,7 +587,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
             def __init__(self, *classes):
                 self.classList = FakeClassList(*classes)
 
-        controls = FakeElement()
+        controls = FakeElement("hidden")
         frames = FakeElement("hidden")
         elements = {
             "visual_feed_history_controls": controls,
@@ -438,20 +595,40 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         }
         monitor = ui.VisualFeedMonitor("https://api.example.test")
         monitor._populate_detail = lambda _feed: None
-        monitor._configure_history_date = lambda: None
+        monitor._configure_history_date = lambda target_date=None: None
         monitor._render_realtime_frame = lambda _feed: None
         monitor._open_modal = lambda: None
 
-        with patch.object(ui, "document", types.SimpleNamespace(getElementById=elements.get)):
-            monitor._open_detail(
-                {
-                    "source": "dwr",
-                    "history_supported": False,
-                    "upstream_id": "camera-1",
-                }
-            )
+        def open_history(opened_feed, event=None, target_date=None):
+            monitor._active_feed = opened_feed
+            monitor._show_history_section()
+
+        monitor._open_history = open_history
+
+        with patch.object(
+            ui, "document", types.SimpleNamespace(getElementById=elements.get)
+        ):
+            monitor._open_detail(feed)
+        return controls, frames
+
+    def test_realtime_only_detail_shows_the_image_without_day_controls(self):
+        controls, frames = self._open_detail_with_fake_dom(
+            {"source": "dwr", "history_supported": False, "upstream_id": "camera-1"}
+        )
 
         self.assertIn("hidden", controls.classList.classes)
+        self.assertNotIn("hidden", frames.classList.classes)
+
+    def test_history_detail_shows_day_controls(self):
+        controls, frames = self._open_detail_with_fake_dom(
+            {
+                "source": ui.HATYAI_SOURCE,
+                "history_supported": True,
+                "upstream_id": "camera-1",
+            }
+        )
+
+        self.assertNotIn("hidden", controls.classList.classes)
         self.assertNotIn("hidden", frames.classList.classes)
 
     def test_realtime_camera_action_is_labeled_as_latest_not_today_history(self):
@@ -476,6 +653,55 @@ class VisualFeedUiHelperTests(unittest.TestCase):
 
         self.assertEqual(opened, [feed])
 
+    def _show_on_map(self, feed, map_shows_pin=True):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        popups, opened = [], []
+
+        class MockMap:
+            def show_visual_feeds(self, feeds, on_feed_click=None):
+                pass
+
+            def open_visual_feed_popup(self, source, upstream_id, build_content):
+                popups.append((source, upstream_id, build_content()))
+                return map_shows_pin
+
+        monitor.map_owner = MockMap()
+        monitor._map_popup = lambda selected: "popup"
+        monitor._open_detail = lambda selected, event=None: opened.append(selected)
+        monitor._show_on_map(feed)
+        return popups, opened
+
+    def test_latest_image_button_opens_a_popup_on_the_camera_pin(self):
+        feed = {
+            "source": ui.HATYAI_SOURCE,
+            "upstream_id": "1",
+            "coordinates": {"type": "Point", "coordinates": [100.4, 7.0]},
+        }
+
+        popups, opened = self._show_on_map(feed)
+
+        self.assertEqual(popups, [(ui.HATYAI_SOURCE, "1", "popup")])
+        self.assertEqual(opened, [])
+
+    def test_latest_image_button_falls_back_to_viewer_without_a_pin(self):
+        feed = {"source": ui.HATYAI_SOURCE, "upstream_id": "1", "coordinates": None}
+
+        popups, opened = self._show_on_map(feed)
+
+        self.assertEqual(popups, [])
+        self.assertEqual(opened, [feed])
+
+    def test_latest_image_button_falls_back_when_the_map_hides_the_pin(self):
+        feed = {
+            "source": ui.HATYAI_SOURCE,
+            "upstream_id": "1",
+            "coordinates": {"type": "Point", "coordinates": [100.4, 7.0]},
+        }
+
+        _popups, opened = self._show_on_map(feed, map_shows_pin=False)
+
+        self.assertEqual(opened, [feed])
+
     def test_history_pointer_swipe_moves_one_frame_in_the_expected_direction(self):
         monitor = ui.VisualFeedMonitor("https://api.example.test")
         monitor._history_frames = [{"id": 1}, {"id": 2}]
@@ -490,6 +716,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
                 button=0,
                 isPrimary=True,
             )
+
         monitor._on_history_pointer_start(pointer(100))
         monitor._on_history_pointer_end(pointer(180))
         self.assertEqual(monitor._history_index, 0)
@@ -537,6 +764,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
                 button=0,
                 isPrimary=True,
             )
+
         monitor._on_history_pointer_start(pointer(100, 7))
         monitor._on_history_pointer_end(pointer(180, 8))
         self.assertEqual(monitor._history_index, 1)
@@ -594,14 +822,14 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         self.assertFalse(result)
         self.assertIsNotNone(monitor._last_latest_fetch)
 
-    def test_latest_request_keeps_media_query_intact_for_brython_aio(self):
+    def test_latest_request_uses_plain_endpoint_for_brython_aio(self):
         result, seen = __import__("asyncio").run(self._successful_refresh_request())
 
         self.assertTrue(result)
         self.assertEqual(
             seen,
             {
-                "url": "https://api.example.test/v1/visual-feeds?media_type=cctv",
+                "url": "https://api.example.test/v1/visual-feeds",
                 "kwargs": {"cache": True},
             },
         )
@@ -710,7 +938,6 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         map_obj.leaflet = DummyLeaflet()
         map_obj.visual_feeds = []
         map_obj.visual_feed_markers_by_id = {}
-        map_obj.find_matching_station = lambda _feed: None
         map_obj.set_visual_feed_layer = lambda markers: setattr(
             map_obj, "visual_feed_markers", markers
         )
@@ -754,7 +981,6 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         map_obj.leaflet = DummyLeaflet()
         map_obj.visual_feeds = []
         map_obj.visual_feed_markers_by_id = {}
-        map_obj.find_matching_station = lambda _feed: None
         map_obj.set_visual_feed_layer = lambda markers: setattr(
             map_obj, "visual_feed_markers", markers
         )
@@ -785,11 +1011,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
             icon_html = marker.options["icon"]["html"]
             expected_color = "#0284c7" if freshness == "fresh" else "#9ca3af"
             self.assertIn(f'fill="{expected_color}"', icon_html, availability)
-            expected_label = (
-                "ออนไลน์"
-                if freshness == "fresh"
-                else "ขาดการเชื่อมต่อ"
-            )
+            expected_label = "ออนไลน์" if freshness == "fresh" else "ขาดการเชื่อมต่อ"
             self.assertIn(expected_label, marker.tooltip, availability)
             self.assertNotIn("ภาพล่าสุด", marker.tooltip, availability)
 
@@ -818,7 +1040,6 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         map_obj.leaflet = DummyLeaflet()
         map_obj.visual_feeds = []
         map_obj.visual_feed_markers_by_id = {}
-        map_obj.find_matching_station = lambda _feed: None
         map_obj.set_visual_feed_layer = lambda markers: setattr(
             map_obj, "visual_feed_markers", markers
         )
@@ -829,7 +1050,6 @@ class VisualFeedUiHelperTests(unittest.TestCase):
                     "upstream_id": "STN04",
                     "image_freshness": "fresh",
                     "captured_at": "2026-09-26T08:47:00Z",
-                    "image_checked_at": "2026-09-26T08:47:00Z",
                     "coordinates": {"coordinates": [100.4, 7.0]},
                 }
             ]
@@ -941,6 +1161,135 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         self.assertFalse(unconfirmed_toggle.disabled)
         self.assertEqual(state.textContent, "แสดงบนแผนที่")
         self.assertIn("cctv-map-state--visible", state_classes)
+
+
+class _PopupMarker:
+    def __init__(self):
+        self.popup = None
+        self.opened = False
+        self._on_close = None
+
+    def bindPopup(self, content, _options):
+        self.popup = content
+        return self
+
+    def unbindPopup(self):
+        self.popup = None
+
+    def once(self, event, handler):
+        if event == "popupclose":
+            self._on_close = handler
+
+    def openPopup(self):
+        self.opened = True
+
+    def getLatLng(self):
+        return (7.0, 100.4)
+
+    def close_popup(self):
+        if self.opened:
+            self.opened = False
+            handler, self._on_close = self._on_close, None
+            if handler:
+                handler(None)
+
+
+class _PopupLayer:
+    def __init__(self):
+        self.markers = []
+
+    def addLayer(self, marker):
+        self.markers.append(marker)
+
+    def addTo(self, leaflet_map):
+        leaflet_map.layers.append(self)
+
+
+class _PopupLeafletMap:
+    def __init__(self):
+        self.layers = []
+
+    def remove(self):
+        self.layers = []
+
+    def hasLayer(self, layer):
+        return layer in self.layers
+
+    def removeLayer(self, layer):
+        # Leaflet closes a marker's popup when its layer leaves the map.
+        self.layers.remove(layer)
+        for marker in layer.markers:
+            marker.close_popup()
+
+    def getContainer(self):
+        rect = types.SimpleNamespace(top=0, bottom=400)
+        return types.SimpleNamespace(getBoundingClientRect=lambda: rect)
+
+    def getZoom(self):
+        return 17
+
+    def getCenter(self):
+        return types.SimpleNamespace(equals=lambda _latlng: True)
+
+
+class MapCameraPopupTests(unittest.TestCase):
+    def setUp(self):
+        browser = types.ModuleType("browser")
+        browser.alert = lambda *_args: None
+        browser.window = types.SimpleNamespace(innerHeight=800)
+        browser.ajax = types.SimpleNamespace()
+        self.map_module = map_module = _load_map_module(browser)
+        self.map = map_module.Map.__new__(map_module.Map)
+        self.map.map = _PopupLeafletMap()
+        self.map.leaflet = types.SimpleNamespace(layerGroup=_PopupLayer)
+        self.map.visual_feed_layer = None
+        self.map.visual_feed_layer_visible = True
+        self.first = _PopupMarker()
+        self._show_markers(self.first)
+
+    def _show_markers(self, marker):
+        """What show_visual_feeds does on every poll: new marker objects."""
+        self.map.visual_feed_markers_by_id = {"rid_STN04": marker}
+        self.map.set_visual_feed_layer([marker])
+
+    def test_popup_follows_the_camera_and_its_latest_data_across_rebuilds(self):
+        contents = iter(["popup at 13:00", "popup at 13:02"])
+        self.assertTrue(
+            self.map.open_visual_feed_popup("rid", "STN04", lambda: next(contents))
+        )
+        self.assertEqual(self.first.popup, "popup at 13:00")
+
+        rebuilt = _PopupMarker()
+        self._show_markers(rebuilt)
+
+        self.assertTrue(rebuilt.opened)
+        self.assertEqual(rebuilt.popup, "popup at 13:02")
+        self.assertIsNone(self.first.popup)
+
+    def test_popup_the_user_closed_stays_closed_after_a_rebuild(self):
+        self.map.open_visual_feed_popup("rid", "STN04", lambda: "popup")
+        self.first.close_popup()
+
+        rebuilt = _PopupMarker()
+        self._show_markers(rebuilt)
+
+        self.assertFalse(rebuilt.opened)
+        self.assertIsNone(self.first.popup)
+
+    def test_clicking_a_pin_that_shows_its_popup_does_not_open_the_viewer(self):
+        opened = []
+        marker = types.SimpleNamespace(getPopup=lambda: "popup")
+        self.map_module._open_unless_popup(marker, "feed", opened.append)
+        self.assertEqual(opened, [])
+
+        marker = types.SimpleNamespace(getPopup=lambda: None)
+        self.map_module._open_unless_popup(marker, "feed", opened.append)
+        self.assertEqual(opened, ["feed"])
+
+    def test_unknown_camera_falls_back_to_the_viewer(self):
+        self.assertFalse(
+            self.map.open_visual_feed_popup("rid", "NOPE", lambda: "popup")
+        )
 
 
 if __name__ == "__main__":
