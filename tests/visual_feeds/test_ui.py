@@ -166,6 +166,24 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         self.assertTrue(monitor._history_is_stale())
         self.assertIn("20 พ.ย. 68", monitor._stale_history_message())
 
+    def test_stopped_history_shows_the_latest_image_however_old(self):
+        monitor = ui.VisualFeedMonitor("https://api.example.test")
+        feed = {"source": ui.HATYAI_SOURCE, "upstream_id": "57"}
+        monitor._active_feed = feed
+        monitor._active_date = ui._bangkok_today().isoformat()
+        monitor._history_available_dates = ["2025-11-19", "2025-11-20"]
+        monitor._history_range = (None, "2025-11-20T13:00:05Z", True)
+        rendered, messages = [], []
+        monitor._render_realtime_frame = rendered.append
+        monitor._set_history_message = messages.append
+        monitor._set_history_load_state = lambda _state: None
+
+        monitor._show_history_day()
+
+        self.assertEqual(rendered, [feed])
+        self.assertEqual(len(messages), 1)
+        self.assertIn("หยุดอัปเดตตั้งแต่ 20 พ.ย. 68", messages[0])
+
     def test_arrows_cannot_step_into_days_of_a_history_that_stopped(self):
         monitor = ui.VisualFeedMonitor("https://api.example.test")
         monitor._mode = "history"

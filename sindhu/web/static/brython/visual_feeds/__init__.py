@@ -1774,6 +1774,9 @@ class VisualFeedMonitor:
 
     def _show_history_day(self):
         """Show the loaded photos that belong to the active Bangkok day."""
+        if not self._history_reaches_today():
+            self._show_stopped_history()
+            return
         self._history_frames = [
             frame
             for frame in self._history_all_frames
@@ -1797,6 +1800,15 @@ class VisualFeedMonitor:
             self._history_truncated and self._active_date == oldest,
         )
         self._set_history_load_state("success" if self._history_frames else "empty")
+
+    def _show_stopped_history(self):
+        """A history that stopped before today has no day to browse: show the
+        camera's latest image, however old, and say when its history stopped."""
+        self._history_frames = []
+        self._history_index = -1
+        self._render_realtime_frame(self._active_feed)
+        self._set_history_message(self._stale_history_message())
+        self._set_history_load_state("empty")
 
     def _history_is_stale(self):
         return bool(self._history_range and self._history_range[2])
