@@ -69,7 +69,10 @@ async def get_visual_feed(
     response_model=schemas.visual_feeds.VisualFeedHistory,
 )
 async def get_visual_feed_history(
-    source: str, upstream_id: str, response: Response, date: datetime.date = Query(...)
+    source: str,
+    upstream_id: str,
+    response: Response,
+    date: datetime.date | None = Query(None),
 ):
     response.headers["Cache-Control"] = "no-store"
     try:
@@ -78,21 +81,47 @@ async def get_visual_feed_history(
         raise _http_error(error) from None
 
 
-@router.get("/dwr/{upstream_id}/snapshot")
-async def get_visual_feed_snapshot(upstream_id: str, request: Request):
-    try:
-        payload = await services.visual_feeds.get_snapshot(upstream_id)
-    except services.visual_feeds.ViewerError as error:
-        raise _http_error(error) from None
-    etag = '"' + hashlib.sha256(payload).hexdigest() + '"'
-    headers = {
+def _etag(value: bytes | str) -> str:
+    data = value.encode() if isinstance(value, str) else value
+    return '"' + hashlib.sha256(data).hexdigest() + '"'
+
+
+def _image_headers(etag: str) -> dict[str, str]:
+    return {
         "Cache-Control": "private, max-age=120",
         "ETag": etag,
         "X-Content-Type-Options": "nosniff",
     }
+
+
+def _not_modified(request: Request, etag: str) -> Response | None:
     if request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers=headers)
-    return Response(payload, media_type="image/jpeg", headers=headers)
+        return Response(status_code=304, headers=_image_headers(etag))
+    return None
+
+
+def _image_response(
+    payload: bytes, media_type: str, request: Request, etag: str | None = None
+) -> Response:
+    etag = etag or _etag(payload)
+    return _not_modified(request, etag) or Response(
+        payload, media_type=media_type, headers=_image_headers(etag)
+    )
+
+
+@router.get("/dwr/{upstream_id}/snapshot")
+async def get_visual_feed_snapshot(upstream_id: str, request: Request):
+    try:
+        # The dated image path changes exactly when the image does, so it is the
+        # ETag: a repeat request costs one small upstream call, not the JPEG.
+        token = await services.visual_feeds.get_snapshot_token(upstream_id)
+        etag = _etag(token) if token else None
+        if etag and (unchanged := _not_modified(request, etag)):
+            return unchanged
+        payload = await services.visual_feeds.get_snapshot(upstream_id, token)
+    except services.visual_feeds.ViewerError as error:
+        raise _http_error(error) from None
+    return _image_response(payload, "image/jpeg", request, etag)
 
 
 @router.get("/rid/{upstream_id}/snapshot")
@@ -101,12 +130,4 @@ async def get_rid_visual_feed_snapshot(upstream_id: str, request: Request):
         payload, media_type = await services.visual_feeds.get_rid_snapshot(upstream_id)
     except services.visual_feeds.ViewerError as error:
         raise _http_error(error) from None
-    etag = '"' + hashlib.sha256(payload).hexdigest() + '"'
-    headers = {
-        "Cache-Control": "private, max-age=120",
-        "ETag": etag,
-        "X-Content-Type-Options": "nosniff",
-    }
-    if request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers=headers)
-    return Response(payload, media_type=media_type, headers=headers)
+    return _image_response(payload, media_type, request)
