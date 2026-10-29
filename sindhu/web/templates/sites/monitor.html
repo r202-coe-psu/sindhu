@@ -216,8 +216,6 @@
                 </div>
             </div>
 
-            {# State input only; users select a day from the seven-day rail below. #}
-            <input id="visual_feed_history_date" type="date" tabindex="-1" aria-hidden="true" class="sr-only" />
             <button id="visual_feed_detail_close" type="button" class="w-11 h-11 shrink-0 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-all cursor-pointer shadow-xs"
                 aria-label="ปิดรายละเอียดกล้อง"><i class="ph ph-x text-lg" aria-hidden="true"></i></button>
         </div>
@@ -235,18 +233,18 @@
                     <div class="flex items-center gap-1">
                         <button type="button" id="visual_feed_day_slide_prev"
                             class="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 border border-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-all cursor-pointer shadow-2xs disabled:opacity-30 disabled:cursor-not-allowed"
-                            aria-label="วันก่อนหน้า (สไลด์ซ้าย)" title="วันก่อนหน้า (สไลด์ซ้าย)">
+                            aria-label="เลื่อนแถบวันไปทางซ้าย" title="เลื่อนแถบวันไปทางซ้าย">
                             <i class="ph ph-caret-left text-xs font-bold" aria-hidden="true"></i>
                         </button>
                         <button type="button" id="visual_feed_day_slide_next"
                             class="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:bg-slate-200 border border-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-all cursor-pointer shadow-2xs disabled:opacity-30 disabled:cursor-not-allowed"
-                            aria-label="วันถัดไป (สไลด์ขวา)" title="วันถัดไป (สไลด์ขวา)">
+                            aria-label="เลื่อนแถบวันไปทางขวา" title="เลื่อนแถบวันไปทางขวา">
                             <i class="ph ph-caret-right text-xs font-bold" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>
-                <div id="visual_feed_7days_rail" class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar scroll-smooth py-0.5 px-0.5" role="tablist" aria-label="แถบเลือกวันย้อนหลัง 7 วัน">
-                    {# 7-day cards rendered dynamically in Brython #}
+                <div id="visual_feed_7days_rail" class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar scroll-smooth py-0.5 px-0.5" role="tablist" aria-label="วันย้อนหลังล่าสุด">
+                    {# Recent days rendered dynamically in Brython #}
                 </div>
             </div>
 
@@ -265,9 +263,6 @@
             <p id="visual_feed_history_counter" class="cctv-history-counter text-center text-xs font-medium tabular-nums" aria-live="polite"></p>
         </div>
 
-        {# Co-located Water Station Link (Always available below the camera viewport) #}
-        <div id="visual_feed_detail_station_link" class="hidden"></div>
-
         {# Compatibility placeholder #}
         <div id="visual_feed_detail_latest" class="hidden" aria-hidden="true">
             <div id="visual_feed_detail_latest_image"></div>
@@ -277,177 +272,6 @@
     </div>
 </dialog>
 <script type="text/javascript">
-    window.__sindhu_api_url = "{{ api_url }}";
-    window.__cctv_popup_cache = {};
-
-    window.cctv_popup_slide_rail = function(btn, dir) {
-        var container = btn.closest('.cctv-popup-7days');
-        if (!container) return;
-        var rail = container.querySelector('.cctv-popup-days-rail');
-        if (!rail) return;
-        rail.scrollBy({ left: 130 * dir, behavior: 'smooth' });
-    };
-
-    window.cctv_popup_select_day = function(btn, source, upstreamId, dateIso, hasHistory) {
-        var popup = btn.closest('.cctv-map-popup');
-        if (!popup) return;
-
-        var rail = popup.querySelector('.cctv-popup-days-rail');
-        if (rail) {
-            var allBtns = rail.querySelectorAll('.cctv-popup-day-btn');
-            for (var i = 0; i < allBtns.length; i++) {
-                allBtns[i].classList.remove('is-active', 'bg-sky-50', 'text-sky-700', 'border-sky-300', 'ring-2', 'ring-sky-400/30', 'font-bold');
-                allBtns[i].classList.add('bg-white', 'text-slate-600', 'border-slate-200');
-            }
-        }
-        btn.classList.remove('bg-white', 'text-slate-600', 'border-slate-200');
-        btn.classList.add('is-active', 'bg-sky-50', 'text-sky-700', 'border-sky-300', 'ring-2', 'ring-sky-400/30', 'font-bold');
-
-        var dayNameEl = btn.querySelector('.cctv-popup-day-top');
-        var dayName = dayNameEl ? dayNameEl.textContent : dateIso;
-        var selectedLabel = popup.querySelector('.cctv-popup-selected-day');
-        if (selectedLabel) selectedLabel.textContent = dayName;
-
-        var img = popup.querySelector('.cctv-popup-img');
-        var timeVal = popup.querySelector('.current-time-val');
-        var badge = popup.querySelector('.cctv-popup-live-badge');
-        var ctrls = popup.querySelector('.cctv-popup-history-ctrls');
-        var notice = popup.querySelector('.cctv-popup-info-notice');
-        var isFresh = popup.getAttribute('data-image-freshness') === 'fresh';
-        var latestBadgeClass = 'cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider border shadow-xs backdrop-blur-md ' +
-            (isFresh ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-100 text-slate-600 border-slate-200');
-        var latestStatus = popup.getAttribute('data-status-label') || 'ขาดการเชื่อมต่อ';
-
-        popup.setAttribute('data-selected-date', dateIso);
-
-        if (!hasHistory) {
-            if (ctrls) ctrls.classList.add('hidden');
-            if (btn.getAttribute('data-is-today') === 'true') {
-                if (notice) notice.classList.add('hidden');
-                if (img && popup.getAttribute('data-image-url')) {
-                    img.src = popup.getAttribute('data-image-url');
-                }
-                if (badge) {
-                    badge.className = latestBadgeClass;
-                    badge.textContent = latestStatus;
-                }
-                if (timeVal) timeVal.textContent = popup.getAttribute('data-live-time') || 'เวลาไม่ทราบ';
-            } else {
-                if (notice) notice.classList.remove('hidden');
-            }
-            return;
-        }
-
-        if (notice) notice.classList.add('hidden');
-
-        if (btn.getAttribute('data-is-today') === 'true') {
-            if (ctrls) ctrls.classList.add('hidden');
-            if (img && popup.getAttribute('data-image-url')) {
-                img.src = popup.getAttribute('data-image-url');
-            }
-            if (badge) {
-                badge.className = latestBadgeClass;
-                badge.textContent = latestStatus;
-            }
-            if (timeVal) timeVal.textContent = popup.getAttribute('data-live-time') || 'เวลาไม่ทราบ';
-            return;
-        }
-
-        var cacheKey = source + '_' + upstreamId + '_' + dateIso;
-        var applyFrames = function(frames) {
-            popup._cctv_frames = frames;
-            popup._cctv_frame_idx = frames.length > 0 ? frames.length - 1 : -1;
-            if (frames.length > 0) {
-                var frame = frames[popup._cctv_frame_idx];
-                if (img && frame.image_url) img.src = frame.image_url;
-                var frameTime = '--:--';
-                if (frame.captured_at) {
-                    try {
-                        frameTime = new Date(frame.captured_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' });
-                    } catch (e) {
-                        frameTime = frame.captured_at.slice(11, 16);
-                    }
-                }
-                if (timeVal) timeVal.textContent = frameTime;
-                if (badge) {
-                    badge.className = 'cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider bg-sky-50 text-sky-700 border border-sky-200 shadow-xs backdrop-blur-md';
-                    badge.textContent = 'ย้อนหลัง ' + dayName;
-                }
-                if (ctrls) {
-                    ctrls.classList.remove('hidden');
-                    var timeSpan = ctrls.querySelector('.cctv-popup-frame-time');
-                    if (timeSpan) timeSpan.textContent = 'ภาพที่ ' + (popup._cctv_frame_idx + 1) + '/' + frames.length + ' (' + frameTime + ' น.)';
-                }
-            } else {
-                if (ctrls) ctrls.classList.add('hidden');
-                if (badge) {
-                    badge.className = 'cctv-popup-live-badge px-2 py-0.5 rounded-md text-[9px] font-bold tracking-wider bg-slate-100 text-slate-600 border border-slate-200 shadow-xs backdrop-blur-md';
-                    badge.textContent = 'ไม่มีภาพย้อนหลัง';
-                }
-            }
-        };
-
-        if (window.__cctv_popup_cache[cacheKey]) {
-            applyFrames(window.__cctv_popup_cache[cacheKey].frames || []);
-        } else {
-            if (img) img.style.opacity = '0.5';
-            var apiBase = window.__sindhu_api_url || '';
-            fetch(apiBase + '/v1/visual-feeds/' + encodeURIComponent(source) + '/' + encodeURIComponent(upstreamId) + '/history?date=' + encodeURIComponent(dateIso))
-                .then(function(res) { return res.ok ? res.json() : null; })
-                .then(function(data) {
-                    if (img) img.style.opacity = '1';
-                    if (data && data.frames) {
-                        window.__cctv_popup_cache[cacheKey] = data;
-                        applyFrames(data.frames);
-                    } else {
-                        applyFrames([]);
-                    }
-                })
-                .catch(function() {
-                    if (img) img.style.opacity = '1';
-                    applyFrames([]);
-                });
-        }
-    };
-
-    window.cctv_popup_step_frame = function(btn, delta) {
-        var popup = btn.closest('.cctv-map-popup');
-        if (!popup || !popup._cctv_frames || popup._cctv_frames.length === 0) return;
-        var frames = popup._cctv_frames;
-        var idx = (popup._cctv_frame_idx || 0) + delta;
-        if (idx < 0) idx = 0;
-        if (idx >= frames.length) idx = frames.length - 1;
-        popup._cctv_frame_idx = idx;
-        var frame = frames[idx];
-
-        var img = popup.querySelector('.cctv-popup-img');
-        var timeVal = popup.querySelector('.current-time-val');
-        var ctrls = popup.querySelector('.cctv-popup-history-ctrls');
-
-        if (img && frame.image_url) img.src = frame.image_url;
-        var frameTime = '--:--';
-        if (frame.captured_at) {
-            try {
-                frameTime = new Date(frame.captured_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Bangkok' });
-            } catch (e) {
-                frameTime = frame.captured_at.slice(11, 16);
-            }
-        }
-        if (timeVal) timeVal.textContent = frameTime;
-        if (ctrls) {
-            var timeSpan = ctrls.querySelector('.cctv-popup-frame-time');
-            if (timeSpan) timeSpan.textContent = 'ภาพที่ ' + (idx + 1) + '/' + frames.length + ' (' + frameTime + ' น.)';
-        }
-    };
-
-    window.cctv_popup_open_detail = function(btn, source, upstreamId) {
-        var popup = btn.closest('.cctv-map-popup');
-        var selectedDate = popup ? popup.getAttribute('data-selected-date') : null;
-        if (window.open_cctv_detail) {
-            window.open_cctv_detail(source, upstreamId, selectedDate);
-        }
-    };
-
     window.onload = function () {
         if (!window.brython_initialized) {
             brython({
