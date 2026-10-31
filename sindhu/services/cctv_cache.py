@@ -18,6 +18,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, TypeAlias
 
+from redis.exceptions import RedisError
+
+from sindhu.services.cctv_logging import log_failure
+
 UTC = _datetime.timezone.utc
 JSONValue: TypeAlias = list[Any] | dict[str, Any]
 Clock: TypeAlias = Callable[[], _datetime.datetime]
@@ -129,40 +133,6 @@ class CctvCache:
         self._direct_guard = asyncio.Lock()
         self._direct_inflight = 0
 
-    async def get_timestamp(self, key: str) -> _datetime.datetime | None:
-        """Read a short-lived timestamp observation from Redis, failing closed."""
-        if not isinstance(key, str) or not key:
-            raise ValueError("key must be a non-empty canonical string")
-        try:
-            value = await self._redis_call("get", key)
-            if isinstance(value, bytes):
-                value = value.decode("ascii")
-            if not isinstance(value, str) or not value:
-                return None
-            parsed = _datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
-            return self._as_utc(parsed)
-        except Exception:
-            return None
-
-    async def set_timestamp(
-        self,
-        key: str,
-        value: _datetime.datetime,
-        *,
-        ttl_seconds: int,
-    ) -> bool:
-        """Store only a timestamp observation, never provider image bytes."""
-        if not isinstance(key, str) or not key:
-            raise ValueError("key must be a non-empty canonical string")
-        if not isinstance(ttl_seconds, int) or ttl_seconds <= 0:
-            raise ValueError("ttl_seconds must be a positive integer")
-        timestamp = self._timestamp(value)
-        try:
-            stored = await self._redis_call("set", key, timestamp, ex=ttl_seconds)
-        except Exception:
-            return False
-        return stored is not False
-
     async def get(
         self,
         key: str,
@@ -185,7 +155,7 @@ class CctvCache:
 
         observation = await self._read(key)
         if not observation.redis_ok:
-            return await self._direct_fetch(loader, effective_max_bytes)
+            return await self._direct_fetch(key, loader, effective_max_bytes)
 
         now = self._now()
         state = self._entry_state(
@@ -205,7 +175,7 @@ class CctvCache:
 
         lock_status, lock_handle = await self._acquire_lock(key)
         if lock_status == "unavailable":
-            return await self._direct_fetch(loader, effective_max_bytes)
+            return await self._direct_fetch(key, loader, effective_max_bytes)
         if lock_handle is None:
             if state == "stale":
                 return self._result(observation.entry, stale=True)
@@ -228,7 +198,7 @@ class CctvCache:
                 # is failing.  Cancellation still takes the normal release
                 # path in finally.
                 release_lock = False
-                return await self._direct_fetch(loader, effective_max_bytes)
+                return await self._direct_fetch(key, loader, effective_max_bytes)
 
             now = self._now()
             rechecked_state = self._entry_state(
@@ -246,7 +216,7 @@ class CctvCache:
             if rechecked_state in {"cold", "expired"} and recheck.error is not None:
                 raise CacheError(recheck.error)
 
-            outcome = await self._run_loader(loader)
+            outcome = await self._run_loader(key, loader)
             if outcome.error is not None:
                 marker_written = await self._write_error(key, outcome.error)
                 if not marker_written:
@@ -349,9 +319,13 @@ class CctvCache:
             try:
                 observation = await asyncio.wait_for(self._read(key), timeout=remaining)
             except asyncio.TimeoutError:
-                return await self._direct_fetch(loader, max_bytes)
+                # Running out of our own wait is a cold miss; only a read that
+                # Redis itself made slow falls back to fetching directly.
+                if deadline - asyncio.get_running_loop().time() <= 0:
+                    raise CacheError(ERROR_COLD_MISS) from None
+                return await self._direct_fetch(key, loader, max_bytes)
             if not observation.redis_ok:
-                return await self._direct_fetch(loader, max_bytes)
+                return await self._direct_fetch(key, loader, max_bytes)
 
             state = self._entry_state(
                 observation.entry,
@@ -374,6 +348,7 @@ class CctvCache:
 
     async def _direct_fetch(
         self,
+        key: str,
         loader: Callable[[], Any],
         max_bytes: int,
     ) -> CacheResult:
@@ -381,7 +356,7 @@ class CctvCache:
         if not entered:
             raise CacheError(ERROR_REDIS_UNAVAILABLE)
         try:
-            outcome = await self._run_loader(loader)
+            outcome = await self._run_loader(key, loader)
             if outcome.error is not None:
                 raise CacheError(outcome.error)
             assert outcome.value is not None
@@ -397,7 +372,7 @@ class CctvCache:
         finally:
             await self._leave_direct()
 
-    async def _run_loader(self, loader: Callable[[], Any]) -> _LoadOutcome:
+    async def _run_loader(self, key: str, loader: Callable[[], Any]) -> _LoadOutcome:
         try:
             loaded = loader()
             if inspect.isawaitable(loaded):
@@ -405,15 +380,18 @@ class CctvCache:
                     loaded,
                     timeout=self.REFRESH_DEADLINE_SECONDS,
                 )
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as error:
+            log_failure(f"load {key}", ERROR_REFRESH_TIMEOUT, error)
             return _LoadOutcome(error=ERROR_REFRESH_TIMEOUT)
-        except Exception:
+        except Exception as error:
+            log_failure(f"load {key}", ERROR_LOADER_FAILED, error)
             return _LoadOutcome(error=ERROR_LOADER_FAILED)
 
         try:
             value, fetched_at = self._unpack_loader_result(loaded)
             self._json_bytes(value)
-        except Exception:
+        except Exception as error:
+            log_failure(f"load {key}", ERROR_INVALID_VALUE, error)
             return _LoadOutcome(error=ERROR_INVALID_VALUE)
         return _LoadOutcome(value=value, fetched_at=fetched_at)
 
@@ -438,7 +416,8 @@ class CctvCache:
         try:
             raw_data = await self._redis_call("get", key)
             raw_error = await self._redis_call("get", self._error_key(key))
-        except Exception:
+        except Exception as error:
+            log_failure(f"read {key}", ERROR_REDIS_UNAVAILABLE, error)
             return _Observation(redis_ok=False)
 
         entry = self._decode_data(raw_data)
@@ -458,7 +437,8 @@ class CctvCache:
                     nx=True,
                     ex=self.LOCK_TTL_SECONDS,
                 )
-            except Exception:
+            except Exception as error:
+                log_failure(f"lock {lock_key}", ERROR_REDIS_UNAVAILABLE, error)
                 return "unavailable", None
             if acquired:
                 return "acquired", _LockHandle(key=lock_key, token=token)
@@ -480,7 +460,8 @@ class CctvCache:
                 redis_lock.acquire(blocking=False),
                 timeout=self.REDIS_OPERATION_TIMEOUT_SECONDS,
             )
-        except Exception:
+        except Exception as error:
+            log_failure(f"lock {lock_key}", ERROR_REDIS_UNAVAILABLE, error)
             return "unavailable", None
         if acquired:
             return "acquired", _LockHandle(key=lock_key, redis_lock=redis_lock)
@@ -501,9 +482,10 @@ class CctvCache:
                     handle.key,
                     handle.token,
                 )
-        except Exception:
+        except Exception as error:
             # Expiry is safe: the compare/delete script (or redis-py Lock)
             # leaves a newer owner's lock untouched.
+            log_failure(f"unlock {handle.key}", ERROR_REDIS_UNAVAILABLE, error)
             return
 
     async def _store_data(
@@ -523,7 +505,8 @@ class CctvCache:
             return False
         try:
             stored = await self._redis_call("set", key, encoded, ex=ttl)
-        except Exception:
+        except Exception as error:
+            log_failure(f"write {key}", ERROR_REDIS_UNAVAILABLE, error)
             return False
         return stored is not False
 
@@ -541,14 +524,16 @@ class CctvCache:
                 payload,
                 ex=self.ERROR_COOLDOWN_SECONDS,
             )
-        except Exception:
+        except Exception as error:
+            log_failure(f"write error {key}", ERROR_REDIS_UNAVAILABLE, error)
             return False
         return written is not False
 
     async def _delete_error(self, key: str) -> bool:
         try:
             deleted = await self._redis_call("delete", self._error_key(key))
-        except Exception:
+        except Exception as error:
+            log_failure(f"delete error {key}", ERROR_REDIS_UNAVAILABLE, error)
             return False
         return deleted is not False
 
@@ -564,7 +549,10 @@ class CctvCache:
             self._direct_inflight = max(0, self._direct_inflight - 1)
 
     async def _redis_call(self, method_name: str, *args: Any, **kwargs: Any) -> Any:
-        method = getattr(self._redis, method_name)
+        method = getattr(self._redis, method_name, None)
+        if method is None:
+            # No client configured is an outage to report, not a code bug.
+            raise RedisError(f"redis client has no {method_name}")
         return await self._maybe_await(
             method(*args, **kwargs),
             timeout=self.REDIS_OPERATION_TIMEOUT_SECONDS,
@@ -724,7 +712,8 @@ class CctvCache:
                     payload["fetched_at"].replace("Z", "+00:00")
                 )
             )
-        except Exception:
+        except Exception as error:
+            log_failure("decode cache entry", ERROR_INVALID_VALUE, error)
             return None
         return _Entry(value=value, fetched_at=fetched_at)
 

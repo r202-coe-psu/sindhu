@@ -12,6 +12,9 @@ import math
 import time
 from urllib.parse import quote, urljoin, urlparse
 
+from .labels import THAI_DAYS_SHORT, coverage_label, short_date_label
+from .map_popup import build_map_popup
+
 
 def _haversine_distance(coord1, coord2):
     """Calculate distance in meters between two [lon, lat] coordinates."""
@@ -33,29 +36,11 @@ def _haversine_distance(coord1, coord2):
 
 POLL_INTERVAL_SECONDS = 120
 BANGKOK_TZ = datetime.timezone(datetime.timedelta(hours=7))
-HISTORY_DAYS = 7
-THAI_DAYS_SHORT = ["จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."]
-THAI_MONTHS_SHORT = [
-    "",
-    "ม.ค.",
-    "ก.พ.",
-    "มี.ค.",
-    "เม.ย.",
-    "พ.ค.",
-    "มิ.ย.",
-    "ก.ค.",
-    "ส.ค.",
-    "ก.ย.",
-    "ต.ค.",
-    "พ.ย.",
-    "ธ.ค.",
-]
-# 28 Hatyai + 2 DWR + 11 RID cameras are currently catalogued.  Keep a
+# 42 Hatyai + 2 DWR + 11 RID cameras are currently catalogued.  Keep a
 # little headroom while retaining a client-side safety cap.
-MAX_CCTV_FEEDS = 50
-HISTORY_LATEST_FALLBACK_MESSAGE = (
-    "ขณะนี้แสดงภาพล่าสุด เพราะไม่สามารถโหลดภาพรายชั่วโมง จากข้อมูลต้นทาง โปรดลองใหม่ภายหลัง"
-)
+MAX_CCTV_FEEDS = 100
+HISTORY_LATEST_FALLBACK_MESSAGE = "ขณะนี้แสดงภาพล่าสุด เพราะไม่สามารถโหลดภาพรายชั่วโมง จากข้อมูลต้นทาง โปรดลองใหม่ภายหลัง"
+HISTORY_REQUEST_TIMEOUT_MS = 12000
 
 HATYAI_SOURCE = "hatyai_city_climate"
 
@@ -196,11 +181,6 @@ def _bangkok_today(now=None):
     return _now_utc(now).astimezone(BANGKOK_TZ).date()
 
 
-def _history_date_window(now=None):
-    today = _bangkok_today(now)
-    return today - datetime.timedelta(days=HISTORY_DAYS - 1), today
-
-
 def _valid_history_date(value, now=None):
     try:
         if isinstance(value, datetime.datetime):
@@ -211,8 +191,7 @@ def _valid_history_date(value, now=None):
             selected = datetime.date.fromisoformat(str(value))
     except (TypeError, ValueError):
         return None
-    earliest, latest = _history_date_window(now)
-    return selected if earliest <= selected <= latest else None
+    return selected if selected <= _bangkok_today(now) else None
 
 
 def _filter_cctv_feeds(feeds, limit=MAX_CCTV_FEEDS):
@@ -222,8 +201,6 @@ def _filter_cctv_feeds(feeds, limit=MAX_CCTV_FEEDS):
     result = []
     for feed in feeds:
         if not isinstance(feed, dict):
-            continue
-        if str(feed.get("media_type", "")).lower() != "cctv":
             continue
         result.append(feed)
         if len(result) >= limit:
@@ -246,17 +223,12 @@ def _image_freshness_status_class(image_freshness):
 
 
 def _image_freshness_label(image_freshness):
-    return (
-        "ออนไลน์"
-        if image_freshness == "fresh"
-        else "ขาดการเชื่อมต่อ"
-    )
+    return "ออนไลน์" if image_freshness == "fresh" else "ขาดการเชื่อมต่อ"
 
 
 def _is_displayable_camera(feed):
     """Keep registered CCTV visible; availability describes freshness, not presence."""
-    feed = _as_dict(feed)
-    return str(feed.get("media_type", "")).lower() == "cctv"
+    return isinstance(feed, dict)
 
 
 def _history_date_label(value):
@@ -268,7 +240,23 @@ def _history_date_label(value):
 
 
 def _history_empty_message(selected_date):
-    return f"ไม่พบภาพย้อนหลังจากต้นทางในวันที่ {_history_date_label(selected_date)}"
+    return f"ไม่มีภาพวันที่ {_history_date_label(selected_date)} ในข้อมูลย้อนหลังที่ต้นทางส่งมา"
+
+
+def _history_range_message(oldest, latest, stale):
+    """Say how far back the provider's photos go, and when a camera stopped."""
+    first, last = _parse_utc(oldest), _parse_utc(latest)
+    if first is None or last is None:
+        return ""
+    first_day = first.astimezone(BANGKOK_TZ).date().isoformat()
+    last_day = last.astimezone(BANGKOK_TZ).date().isoformat()
+    text = (
+        f"ข้อมูลย้อนหลังจากต้นทาง {_history_date_label(first_day)}"
+        f" – {_history_date_label(last_day)}"
+    )
+    if stale:
+        text += " · ภาพย้อนหลังของกล้องนี้หยุดอัปเดต"
+    return text
 
 
 def _history_request_error_message(status, selected_date):
@@ -342,6 +330,14 @@ class VisualFeedMonitor:
         self._active_feed = None
         self._active_date = None
         self._history_frames = []
+        # Hatyai serves one latest photo set per camera; days are sliced locally.
+        self._history_all_frames = []
+        self._history_loaded_key = None
+        self._history_truncated = False
+        self._history_range = None
+        self._history_date_pinned = False
+        self._history_available_dates = []
+        self._history_entry_edge = None
         self._history_index = -1
         self._history_pointer_start_x = None
         self._history_pointer_id = None
@@ -357,11 +353,6 @@ class VisualFeedMonitor:
                     source, upstream_id, date_iso
                 )
             )
-            window.focus_water_station_from_modal = (
-                lambda code, source=None: self._focus_water_station_from_modal(
-                    code, source
-                )
-            )
         except Exception:
             pass
         self._bind_controls()
@@ -370,11 +361,6 @@ class VisualFeedMonitor:
             self._monitor_started = True
             aio.run(self.monitor())
         aio.run(self._initial_load())
-
-    def _focus_water_station_from_modal(self, code, source=None):
-        self._close_detail()
-        if hasattr(window, "focus_water_station"):
-            window.focus_water_station(code, source)
 
     def find_matching_station(self, feed):
         """Find the nearest co-located water station for a given CCTV camera."""
@@ -509,6 +495,42 @@ class VisualFeedMonitor:
             if len(coords) >= 2:
                 m.map.flyTo([coords[1], coords[0]], 17)
 
+    def _show_on_map(self, feed, event=None):
+        """Show the latest image above the camera's pin; without a pin, open
+        the full viewer instead."""
+        m = self._get_map()
+        shown = (
+            _has_coordinates(feed)
+            and hasattr(m, "open_visual_feed_popup")
+            and m.open_visual_feed_popup(
+                str(feed.get("source", "")),
+                str(feed.get("upstream_id", "")),
+                lambda: self._map_popup(self._latest_version_of(feed)),
+            )
+        )
+        if not shown:
+            self._open_detail(feed, event)
+
+    def _latest_version_of(self, feed):
+        key = self._feed_key(feed)
+        return next(
+            (f for f in self.latest_feeds if self._feed_key(f) == key), feed
+        )
+
+    def _map_popup(self, feed):
+        title = _text(feed.get("title_th") or feed.get("name_th") or feed.get("name"))
+        image_freshness = _image_freshness(feed)
+        image_url = _resolve_image_url(feed.get("image_url"), self.api_url)
+        image_url = _version_image_url(image_url, feed.get("captured_at"))
+
+        return build_map_popup(
+            title,
+            self._image_view(image_url, title) if image_url else None,
+            _image_freshness_label(image_freshness),
+            _image_freshness_status_class(image_freshness),
+            lambda event: self._open_detail(feed, event),
+        )
+
     def stop(self):
         self.running = False
         self._invalidate_latest()
@@ -544,9 +566,7 @@ class VisualFeedMonitor:
         if "toggle_cctv_markers" in document:
             document["toggle_cctv_markers"].bind("change", self._on_toggle_cctv_markers)
         if "hide_unknown_cctv_markers" in document:
-            document["hide_unknown_cctv_markers"].bind(
-                "change", self._on_filter
-            )
+            document["hide_unknown_cctv_markers"].bind("change", self._on_filter)
         self._sync_unconfirmed_camera_filter()
         if "visual_feed_retry" in document:
             document["visual_feed_retry"].bind("click", self._on_retry)
@@ -561,10 +581,6 @@ class VisualFeedMonitor:
             dialog.bind("click", self._on_modal_click)
         if "visual_feed_detail_close" in document:
             document["visual_feed_detail_close"].bind("click", self._on_close_detail)
-        if "visual_feed_history_date" in document:
-            document["visual_feed_history_date"].bind(
-                "change", self._on_history_date_change
-            )
         if "visual_feed_day_slide_prev" in document:
             document["visual_feed_day_slide_prev"].bind(
                 "click", self._on_day_slide_prev
@@ -572,6 +588,10 @@ class VisualFeedMonitor:
         if "visual_feed_day_slide_next" in document:
             document["visual_feed_day_slide_next"].bind(
                 "click", self._on_day_slide_next
+            )
+        if "visual_feed_7days_rail" in document:
+            document["visual_feed_7days_rail"].bind(
+                "scroll", self._update_day_slide_buttons
             )
         if "visual_feed_history_previous" in document:
             document["visual_feed_history_previous"].bind(
@@ -638,9 +658,7 @@ class VisualFeedMonitor:
 
     def _sync_unconfirmed_camera_filter(self):
         camera_toggle = document.getElementById("toggle_cctv_markers")
-        unconfirmed_toggle = document.getElementById(
-            "hide_unknown_cctv_markers"
-        )
+        unconfirmed_toggle = document.getElementById("hide_unknown_cctv_markers")
         if not camera_toggle:
             return
 
@@ -699,7 +717,9 @@ class VisualFeedMonitor:
             header_title.html = """<i class="ph ph-video-camera text-xl text-blue-200" aria-hidden="true"></i><span>กล้อง CCTV เฝ้าระวังน้ำท่วม</span>"""
         header_subtitle = document.getElementById("panel_header_subtitle")
         if header_subtitle:
-            header_subtitle.textContent = "ภาพล่าสุดและประวัติย้อนหลังตามที่แต่ละต้นทางรองรับ"
+            header_subtitle.textContent = (
+                "ภาพล่าสุดและประวัติย้อนหลังตามที่แต่ละต้นทางรองรับ"
+            )
 
         self._visual_panel_active = True
         self._mode = "latest"
@@ -792,7 +812,7 @@ class VisualFeedMonitor:
         self._last_latest_fetch = time.monotonic()
         try:
             # The backend cache is authoritative; do not add a cache-buster.
-            response = await aio.get(f"{self.endpoint}?media_type=cctv", cache=True)
+            response = await aio.get(self.endpoint, cache=True)
             if (
                 getattr(response, "status", 200) < 200
                 or getattr(response, "status", 200) >= 300
@@ -864,7 +884,7 @@ class VisualFeedMonitor:
         option.attrs["value"] = "all"
         selector <= option
         for group in groups:
-            option = _el("option", text_value=group)
+            option = _el("option", text_value=coverage_label(group))
             option.attrs["value"] = group
             selector <= option
         selector.value = selected if selected == "all" or selected in groups else "all"
@@ -899,7 +919,7 @@ class VisualFeedMonitor:
                     + " "
                     + str(feed.get("code") or "")
                     + " "
-                    + str(feed.get("coverage_group") or "")
+                    + coverage_label(feed.get("coverage_group"))
                 ).lower()
                 if query not in searchable:
                     continue
@@ -936,7 +956,7 @@ class VisualFeedMonitor:
         source = str(feed.get("source", ""))
         upstream_id = str(feed.get("upstream_id", ""))
         title = _text(feed.get("title_th") or feed.get("name_th") or feed.get("name"))
-        coverage = _text(feed.get("coverage_group"))
+        coverage = coverage_label(feed.get("coverage_group"))
         source_lbl = _source_label(feed.get("source"))
         image_url = _resolve_image_url(feed.get("image_url"), self.api_url)
         image_url = _version_image_url(image_url, feed.get("captured_at"))
@@ -954,10 +974,11 @@ class VisualFeedMonitor:
             # Image section
             img_container = _el(
                 "div",
-                "visual-feed-media relative aspect-video bg-slate-900 overflow-hidden cursor-pointer",
+                "visual-feed-media relative aspect-video bg-slate-900 overflow-hidden"
+                + " cursor-pointer",
             )
             if image_url:
-                img_view = self._image_view(image_url, title, latest=True)
+                img_view = self._image_view(image_url, title)
                 img_container <= img_view
             else:
                 img_container <= _el(
@@ -980,14 +1001,15 @@ class VisualFeedMonitor:
             # Title
             title_btn = _el(
                 "button",
-                "text-left text-xs font-bold leading-snug text-slate-800 hover:text-blue-600 transition-colors line-clamp-2",
+                "text-left text-xs font-bold leading-snug text-slate-800"
+                + " hover:text-blue-600 transition-colors cursor-pointer line-clamp-2",
             )
             title_btn.attrs["type"] = "button"
-            title_btn.attrs["aria-label"] = f"เปิดรายละเอียด {title}"
-            title_btn.textContent = title
+            title_btn.attrs["aria-label"] = f"เปิดดูกล้อง {title}"
             title_btn.bind(
                 "click", lambda event, selected=feed: self._open_detail(selected, event)
             )
+            title_btn.textContent = title
             _append(body, title_btn)
 
             # Status stays beside the details so the camera image stays clear.
@@ -1022,7 +1044,7 @@ class VisualFeedMonitor:
             detail_btn.attrs["type"] = "button"
             detail_btn.attrs["title"] = detail_label
             detail_btn.bind(
-                "click", lambda event, selected=feed: self._open_detail(selected, event)
+                "click", lambda event, selected=feed: self._show_on_map(selected, event)
             )
 
             if _has_coordinates(feed):
@@ -1036,7 +1058,9 @@ class VisualFeedMonitor:
                 map_btn.attrs["type"] = "button"
                 map_btn.attrs["title"] = "ดูบนแผนที่"
                 map_btn.attrs["aria-label"] = f"ดู {title} บนแผนที่"
-                map_btn.html = '<i class="ph ph-map-pin text-sm" aria-hidden="true"></i>'
+                map_btn.html = (
+                    '<i class="ph ph-map-pin text-sm" aria-hidden="true"></i>'
+                )
                 map_btn.bind(
                     "click", lambda event, selected=feed: self._fly_to_camera(selected)
                 )
@@ -1055,7 +1079,9 @@ class VisualFeedMonitor:
                 water_btn.attrs["type"] = "button"
                 water_btn.attrs["title"] = "ดูระดับน้ำ"
                 water_btn.attrs["aria-label"] = f"ดูระดับน้ำใกล้ {title}"
-                water_btn.html = '<i class="ph ph-waves text-sm" aria-hidden="true"></i>'
+                water_btn.html = (
+                    '<i class="ph ph-waves text-sm" aria-hidden="true"></i>'
+                )
                 water_btn.bind(
                     "click",
                     lambda event, code=st_code, src=st_src: self._on_view_station(
@@ -1077,10 +1103,11 @@ class VisualFeedMonitor:
         # Image Container
         img_container = _el(
             "div",
-            "visual-feed-media relative aspect-video bg-slate-900 overflow-hidden cursor-pointer rounded-xl shadow-sm",
+            "visual-feed-media relative aspect-video bg-slate-900 overflow-hidden rounded-xl shadow-sm"
+            + " cursor-pointer",
         )
         if image_url:
-            img_view = self._image_view(image_url, title, latest=True)
+            img_view = self._image_view(image_url, title)
             img_container <= img_view
         else:
             img_container <= _el(
@@ -1100,14 +1127,15 @@ class VisualFeedMonitor:
         # Title button
         title_btn = _el(
             "button",
-            "min-w-0 text-left text-sm font-bold leading-snug text-slate-900 hover:text-blue-600 transition-colors",
+            "min-w-0 text-left text-sm font-bold leading-snug text-slate-900"
+            + " hover:text-blue-600 transition-colors cursor-pointer",
         )
         title_btn.attrs["type"] = "button"
-        title_btn.attrs["aria-label"] = f"เปิดรายละเอียด {title}"
-        title_btn.textContent = title
+        title_btn.attrs["aria-label"] = f"เปิดดูกล้อง {title}"
         title_btn.bind(
             "click", lambda event, selected=feed: self._open_detail(selected, event)
         )
+        title_btn.textContent = title
         _append(body, title_btn)
 
         # Provider availability is diagnostic; the badge reports image freshness.
@@ -1140,7 +1168,6 @@ class VisualFeedMonitor:
             ),
         )
 
-        # Make the action label reflect whether the provider has a history API.
         detail_label = _detail_action_label(feed)
         detail_btn = _append(
             actions,
@@ -1152,7 +1179,7 @@ class VisualFeedMonitor:
         )
         detail_btn.attrs["type"] = "button"
         detail_btn.bind(
-            "click", lambda event, selected=feed: self._open_detail(selected, event)
+            "click", lambda event, selected=feed: self._show_on_map(selected, event)
         )
 
         if _has_coordinates(feed):
@@ -1199,7 +1226,7 @@ class VisualFeedMonitor:
         if hasattr(window, "focus_water_station"):
             window.focus_water_station(code, source)
 
-    def _image_view(self, image_url, title, latest=False):
+    def _image_view(self, image_url, title):
         wrapper = _el(
             "div",
             "relative w-full aspect-video min-h-[140px] bg-slate-900 overflow-hidden flex items-center justify-center",
@@ -1234,7 +1261,8 @@ class VisualFeedMonitor:
         state.classList.add("sr-only")
 
     def _on_image_error(self, image, state):
-        # This is a local browser rendering state, never a hardware status.
+        # A browser rendering state only: the status badge always shows the
+        # server's image_freshness, the one source of truth.
         image.attrs["data-image-state"] = "error"
         image.style.display = "none"
         state.className = "flex flex-col items-center justify-center gap-1 text-slate-400 text-xs p-3 text-center"
@@ -1296,9 +1324,14 @@ class VisualFeedMonitor:
         self._mode = "realtime"
         self._history_generation += 1
         self._latest_generation += 1
+        self._history_available_dates = []
+        self._history_entry_edge = None
+        self._clear_history_frames()
         self._populate_detail(feed)
-        self._show_latest_section()
+        self._configure_history_date(target_date=_bangkok_today().isoformat())
+        self._show_history_section()
         self._render_realtime_frame(feed)
+        self._set_history_message("กล้องนี้มีเฉพาะภาพสด Realtime")
         self._open_modal()
 
     def _render_realtime_frame(self, feed):
@@ -1314,7 +1347,7 @@ class VisualFeedMonitor:
                 container,
                 _el("figure", "is-entering overflow-hidden bg-slate-100"),
             )
-            image_view = self._image_view(image_url, title, latest=True)
+            image_view = self._image_view(image_url, title)
             image_view.attrs["data-full-image-url"] = image_url
             figure <= image_view
         else:
@@ -1343,6 +1376,13 @@ class VisualFeedMonitor:
             self._focus_return = None
         self._active_feed = feed
         self._mode = "history"
+        self._history_all_frames = []
+        self._history_loaded_key = None
+        self._history_truncated = False
+        self._history_range = None
+        self._history_date_pinned = bool(target_date)
+        self._history_available_dates = []
+        self._history_entry_edge = None
         self._clear_history_frames()
         self._history_generation += 1
         generation = self._history_generation
@@ -1352,14 +1392,13 @@ class VisualFeedMonitor:
         self._open_modal()
         self._set_history_message("กำลังโหลดประวัติภาพ…")
         self._set_history_load_state("loading")
-        picker = document.getElementById("visual_feed_history_date")
-        self._active_date = picker.value if picker else _bangkok_today().isoformat()
+        self._render_history_notice("กำลังโหลดประวัติภาพ…", loading=True)
         self._show_latest_snapshot_for_date(
             feed,
             self._active_date,
             "กำลังโหลดประวัติภาพ · แสดงภาพล่าสุดชั่วคราว",
         )
-        aio.run(self._fetch_history(feed, self._active_date, generation))
+        aio.run(self._fetch_history(feed, generation))
 
     def _open_modal(self):
         modal = document.getElementById("visual_feed_detail_dialog")
@@ -1474,15 +1513,8 @@ class VisualFeedMonitor:
             self._close_detail(event)
 
     def _configure_history_date(self, target_date=None):
-        picker = document.getElementById("visual_feed_history_date")
-        earliest, latest = _history_date_window()
         chosen = _valid_history_date(target_date) if target_date else None
-        selected = chosen.isoformat() if chosen else latest.isoformat()
-        if picker:
-            picker.attrs["min"] = earliest.isoformat()
-            picker.attrs["max"] = latest.isoformat()
-            picker.value = selected
-        self._active_date = selected
+        self._active_date = (chosen or _bangkok_today()).isoformat()
         self._render_7days_rail()
 
     def _render_7days_rail(self):
@@ -1490,11 +1522,29 @@ class VisualFeedMonitor:
         if not rail:
             return
         rail.html = ""
-        earliest, latest = _history_date_window()
-        today = latest
+        # Cameras without provider history, or whose history stopped before
+        # today, show only their latest image: day controls would offer only
+        # days from before the camera stopped.
+        controls = document.getElementById("visual_feed_history_controls")
+        has_history = (
+            _supports_history(self._active_feed) and self._history_reaches_today()
+        )
+        if controls:
+            if has_history:
+                controls.classList.remove("hidden")
+            else:
+                controls.classList.add("hidden")
+        if not has_history:
+            return
+        today = _bangkok_today()
         active_iso = self._active_date or today.isoformat()
 
-        days = [earliest + datetime.timedelta(days=i) for i in range(HISTORY_DAYS)]
+        # Only days that really have provider photos; a pinned empty day stays
+        # visible so the selection is not lost.
+        day_values = set(self._history_available_dates)
+        if self._history_loaded_key:
+            day_values.add(active_iso)
+        days = [datetime.date.fromisoformat(value) for value in sorted(day_values)]
         active_card = None
         for d in days:
             d_iso = d.isoformat()
@@ -1505,7 +1555,7 @@ class VisualFeedMonitor:
                 top_text = "เมื่อวาน"
             else:
                 top_text = THAI_DAYS_SHORT[d.weekday()]
-            bottom_text = f"{d.day} {THAI_MONTHS_SHORT[d.month]}"
+            bottom_text = short_date_label(d, today)
 
             btn = _el(
                 "button",
@@ -1535,38 +1585,40 @@ class VisualFeedMonitor:
         if active_card:
             try:
                 active_card.scrollIntoView(
-                    {"behavior": "smooth", "inline": "center", "block": "nearest"}
+                    {"behavior": "smooth", "inline": "nearest", "block": "nearest"}
                 )
             except Exception:
                 pass
 
         self._update_day_slide_buttons()
 
-    def _update_day_slide_buttons(self):
-        earliest, latest = _history_date_window()
+    def _update_day_slide_buttons(self, _event=None):
+        latest = _bangkok_today()
         btn_prev = document.getElementById("visual_feed_day_slide_prev")
         btn_next = document.getElementById("visual_feed_day_slide_next")
+        rail = document.getElementById("visual_feed_7days_rail")
         label_el = document.getElementById("visual_feed_selected_day_label")
+        if rail:
+            if btn_prev:
+                btn_prev.disabled = rail.scrollLeft <= 1
+            if btn_next:
+                btn_next.disabled = (
+                    rail.scrollLeft + rail.clientWidth >= rail.scrollWidth - 1
+                )
         if self._active_date:
             try:
                 curr = datetime.date.fromisoformat(self._active_date)
-                if btn_prev:
-                    btn_prev.disabled = curr <= earliest
-                if btn_next:
-                    btn_next.disabled = curr >= latest
                 if label_el:
                     if curr == latest:
                         label_el.textContent = "(วันนี้)"
                     elif curr == latest - datetime.timedelta(days=1):
                         label_el.textContent = "(เมื่อวาน)"
                     else:
-                        label_el.textContent = (
-                            f"({curr.day} {THAI_MONTHS_SHORT[curr.month]})"
-                        )
+                        label_el.textContent = f"({short_date_label(curr, latest)})"
             except Exception:
                 pass
 
-    def _on_select_day(self, date_str):
+    def _on_select_day(self, date_str, edge=None):
         if not self._active_feed:
             return
         selected = _valid_history_date(date_str)
@@ -1575,80 +1627,36 @@ class VisualFeedMonitor:
         if self._active_date == selected.isoformat():
             return
         self._active_date = selected.isoformat()
-        picker = document.getElementById("visual_feed_history_date")
-        if picker:
-            picker.value = self._active_date
+        self._history_entry_edge = edge
+        self._history_date_pinned = True
         self._render_7days_rail()
 
-        if not _supports_history(self._active_feed):
-            earliest, latest = _history_date_window()
-            container = document.getElementById("visual_feed_history_frame")
-            counter = document.getElementById("visual_feed_history_counter")
-            if counter:
-                counter.textContent = ""
-            prev_btn = document.getElementById("visual_feed_history_previous")
-            next_btn = document.getElementById("visual_feed_history_next")
-            if prev_btn:
-                prev_btn.classList.add("hidden")
-            if next_btn:
-                next_btn.classList.add("hidden")
-
-            if selected == latest:
-                self._render_realtime_frame(self._active_feed)
-            else:
-                if container:
-                    container.html = ""
-                    notice = _append(
-                        container,
-                        _el(
-                            "div",
-                            "flex flex-col items-center justify-center gap-2 h-full w-full bg-slate-50 text-slate-500 text-xs p-6 text-center select-none",
-                        ),
-                    )
-                    notice.html = '<i class="ph ph-video-camera-slash text-3xl text-slate-400" aria-hidden="true"></i><span>กล้องจุดนี้ให้บริการเฉพาะภาพสด Realtime<br><span class="text-[11px] text-slate-400 mt-1 block">(ไม่มีข้อมูลภาพย้อนหลัง 7 วัน)</span></span>'
-                self._set_history_message("กล้องนี้มีเฉพาะภาพสด Realtime")
+        if self._history_loaded_key == self._feed_key(self._active_feed):
+            self._show_history_day()
             return
-
         self._clear_history_frames()
         self._history_generation += 1
         generation = self._history_generation
         self._set_history_message("กำลังโหลดประวัติภาพ…")
         self._set_history_load_state("loading")
+        self._render_history_notice("กำลังโหลดประวัติภาพ…", loading=True)
         self._show_latest_snapshot_for_date(
             self._active_feed,
             self._active_date,
             "กำลังโหลดประวัติภาพ · แสดงภาพล่าสุดชั่วคราว",
         )
-        aio.run(self._fetch_history(self._active_feed, self._active_date, generation))
+        aio.run(self._fetch_history(self._active_feed, generation))
+
+    def _scroll_day_rail(self, direction):
+        rail = document.getElementById("visual_feed_7days_rail")
+        if rail:
+            rail.scrollBy({"left": direction * 130, "behavior": "smooth"})
 
     def _on_day_slide_prev(self, _event=None):
-        if not self._active_date:
-            return
-        earliest, latest = _history_date_window()
-        curr = datetime.date.fromisoformat(self._active_date)
-        prev_d = curr - datetime.timedelta(days=1)
-        if prev_d >= earliest:
-            self._on_select_day(prev_d.isoformat())
+        self._scroll_day_rail(-1)
 
     def _on_day_slide_next(self, _event=None):
-        if not self._active_date:
-            return
-        earliest, latest = _history_date_window()
-        curr = datetime.date.fromisoformat(self._active_date)
-        next_d = curr + datetime.timedelta(days=1)
-        if next_d <= latest:
-            self._on_select_day(next_d.isoformat())
-
-    def _on_history_date_change(self, _event):
-        if not self._active_feed:
-            return
-        picker = document.getElementById("visual_feed_history_date")
-        selected = _valid_history_date(picker.value if picker else None)
-        if selected is None:
-            self._set_history_message("เลือกวันที่ย้อนหลังไม่เกิน 7 วันในเวลาไทย")
-            self._set_history_load_state("error")
-            return
-        self._on_select_day(selected.isoformat())
+        self._scroll_day_rail(1)
 
     def _on_back_to_latest(self, _event):
         if not self._active_feed:
@@ -1661,13 +1669,17 @@ class VisualFeedMonitor:
         if self._should_poll_latest():
             aio.run(self.refresh())
 
-    async def _fetch_history(self, feed, selected_date, generation):
+    async def _fetch_history(self, feed, generation):
         if not self._should_fetch_history() or generation != self._history_generation:
             return False
         source = quote(str(feed.get("source", "")), safe="")
         upstream_id = quote(str(feed.get("upstream_id", "")), safe="")
-        url = f"{self.endpoint}/{source}/{upstream_id}/history?date={selected_date}"
+        url = f"{self.endpoint}/{source}/{upstream_id}/history"
         response = None
+        timeout_id = window.setTimeout(
+            lambda: self._on_history_timeout(feed, generation),
+            HISTORY_REQUEST_TIMEOUT_MS,
+        )
         try:
             response = await aio.get(url, cache=True)
             status = getattr(response, "status", 200)
@@ -1676,13 +1688,14 @@ class VisualFeedMonitor:
                     generation == self._history_generation
                     and self._should_fetch_history()
                 ):
-                    message = _history_request_error_message(status, selected_date)
+                    message = _history_request_error_message(status, self._active_date)
                     if not self._show_latest_snapshot_for_date(
                         feed,
-                        selected_date,
+                        self._active_date,
                         HISTORY_LATEST_FALLBACK_MESSAGE,
                     ):
                         self._set_history_message(message)
+                        self._render_history_notice(message)
                     self._set_history_load_state("error")
                 return False
             parsed = json.loads(response.data)
@@ -1694,21 +1707,31 @@ class VisualFeedMonitor:
                 generation != self._history_generation
                 or not self._should_fetch_history()
                 or self._feed_key(self._active_feed) != self._feed_key(feed)
-                or self._active_date != selected_date
             ):
                 return False
-            self._history_frames = self._normalize_history_frames(parsed["frames"])
-            if not self._history_frames and self._show_latest_snapshot_for_date(
-                feed,
-                selected_date,
-                HISTORY_LATEST_FALLBACK_MESSAGE,
-            ):
-                self._set_history_load_state("empty")
-                return True
-            self._render_history_frames(
-                self._history_frames, bool(parsed.get("possibly_truncated"))
+            self._history_all_frames = self._normalize_history_frames(parsed["frames"])
+            self._history_loaded_key = self._feed_key(feed)
+            self._history_truncated = bool(parsed.get("possibly_truncated"))
+            self._history_range = (
+                parsed.get("oldest_captured_at"),
+                parsed.get("latest_captured_at"),
+                bool(parsed.get("history_stale")),
             )
-            self._set_history_load_state("success" if self._history_frames else "empty")
+            # The server already lists the Bangkok days its photos cover.
+            self._history_available_dates = sorted(
+                str(day) for day in parsed.get("available_dates") or []
+            )
+            if (
+                not self._history_date_pinned
+                and self._history_available_dates
+                and self._active_date not in self._history_available_dates
+                and not self._history_is_stale()
+            ):
+                # Open on the newest day that actually has photos.  A stopped
+                # history stays on today's latest image instead of an old day.
+                self._active_date = self._history_available_dates[-1]
+            self._render_7days_rail()
+            self._show_history_day()
             return True
         except Exception:
             if generation == self._history_generation and self._should_fetch_history():
@@ -1716,16 +1739,95 @@ class VisualFeedMonitor:
                 message = (
                     "API กล้องส่งข้อมูลประวัติไม่ถูกต้อง"
                     if status is not None and 200 <= status < 300
-                    else _history_request_error_message(status, selected_date)
+                    else _history_request_error_message(status, self._active_date)
                 )
                 if not self._show_latest_snapshot_for_date(
                     feed,
-                    selected_date,
+                    self._active_date,
                     HISTORY_LATEST_FALLBACK_MESSAGE,
                 ):
                     self._set_history_message(message)
+                    self._render_history_notice(message)
                 self._set_history_load_state("error")
             return False
+        finally:
+            window.clearTimeout(timeout_id)
+
+    def _on_history_timeout(self, feed, generation):
+        if (
+            generation != self._history_generation
+            or self._mode != "history"
+            or not self._modal_open
+            or self._feed_key(self._active_feed) != self._feed_key(feed)
+        ):
+            return
+        self._history_generation += 1
+        message = "โหลดภาพย้อนหลังไม่สำเร็จ โปรดลองอีกครั้งภายหลัง"
+        if not self._show_latest_snapshot_for_date(
+            feed,
+            self._active_date,
+            HISTORY_LATEST_FALLBACK_MESSAGE,
+        ):
+            self._set_history_message(message)
+            self._render_history_notice(message)
+        self._set_history_load_state("error")
+
+    def _show_history_day(self):
+        """Show the loaded photos that belong to the active Bangkok day."""
+        if not self._history_reaches_today():
+            self._show_stopped_history()
+            return
+        self._history_frames = [
+            frame
+            for frame in self._history_all_frames
+            if _frame_date(frame) == self._active_date
+        ]
+        if not self._history_frames and self._show_latest_snapshot_for_date(
+            self._active_feed,
+            self._active_date,
+            self._stale_history_message()
+            if self._history_is_stale()
+            else HISTORY_LATEST_FALLBACK_MESSAGE,
+        ):
+            self._set_history_load_state("empty")
+            return
+        # Only the oldest day can be cut off by the provider's photo limit.
+        oldest = (
+            self._history_available_dates[0] if self._history_available_dates else None
+        )
+        self._render_history_frames(
+            self._history_frames,
+            self._history_truncated and self._active_date == oldest,
+        )
+        self._set_history_load_state("success" if self._history_frames else "empty")
+
+    def _show_stopped_history(self):
+        """A history that stopped before today has no day to browse: show the
+        camera's latest image, however old, and say when its history stopped."""
+        self._history_frames = []
+        self._history_index = -1
+        self._render_realtime_frame(self._active_feed)
+        self._set_history_message(self._stale_history_message())
+        self._set_history_load_state("empty")
+
+    def _history_is_stale(self):
+        return bool(self._history_range and self._history_range[2])
+
+    def _history_reaches_today(self):
+        return (
+            not self._history_is_stale()
+            or _bangkok_today().isoformat() in self._history_available_dates
+        )
+
+    def _stale_history_message(self):
+        latest = _parse_utc(self._history_range[1])
+        if latest is None:
+            return "ภาพย้อนหลังของกล้องนี้หยุดอัปเดต · แสดงภาพล่าสุดแทน"
+        last_day = latest.astimezone(BANGKOK_TZ).date()
+        return (
+            "ภาพย้อนหลังของกล้องนี้หยุดอัปเดตตั้งแต่ "
+            f"{short_date_label(last_day, _bangkok_today())} · แสดงภาพล่าสุดแทน"
+        )
 
     def _show_latest_snapshot_for_date(self, feed, selected_date, message):
         """Keep today's verified latest image visible while history is unavailable."""
@@ -1772,13 +1874,29 @@ class VisualFeedMonitor:
             return
         frame_container.html = ""
         if not frames:
+            self._history_entry_edge = None
             self._history_index = -1
             self._update_history_navigation()
-            self._set_history_message(_history_empty_message(self._active_date))
+            message = _history_empty_message(self._active_date)
+            range_message = (
+                _history_range_message(*self._history_range)
+                if self._history_range
+                else ""
+            )
+            if range_message:
+                message = f"{message} ({range_message})"
+            self._set_history_message(message)
+            self._render_history_notice(message)
             return
-        suffix = " · แสดงได้ไม่ครบทุกภาพจากต้นทาง" if possibly_truncated else ""
-        self._set_history_message(suffix.lstrip(" ·"))
-        self._history_index = len(frames) - 1
+        notes = [
+            _history_range_message(*self._history_range) if self._history_range else "",
+            "แสดงได้ไม่ครบทุกภาพจากต้นทาง" if possibly_truncated else "",
+        ]
+        self._set_history_message(" · ".join(note for note in notes if note))
+        self._history_index = (
+            0 if self._history_entry_edge == "earliest" else len(frames) - 1
+        )
+        self._history_entry_edge = None
         self._render_history_frame()
 
     def _clear_history_frames(self):
@@ -1788,6 +1906,34 @@ class VisualFeedMonitor:
         if frame_container:
             frame_container.html = ""
         self._update_history_navigation()
+
+    def _render_history_notice(self, message, loading=False):
+        container = document.getElementById("visual_feed_history_frame")
+        if not container:
+            return
+        container.html = ""
+        notice = _append(
+            container,
+            _el(
+                "div",
+                "flex h-full w-full flex-col items-center justify-center gap-3 bg-slate-50 p-6 text-center text-sm text-slate-500",
+            ),
+        )
+        icon = _append(
+            notice,
+            _el(
+                "i",
+                "ph "
+                + (
+                    "ph-circle-notch animate-spin text-sky-500"
+                    if loading
+                    else "ph-video-camera-slash text-slate-400"
+                )
+                + " text-3xl",
+            ),
+        )
+        icon.attrs["aria-hidden"] = "true"
+        notice <= _el("span", "max-w-md", message)
 
     def _render_history_frame(self):
         container = document.getElementById("visual_feed_history_frame")
@@ -1816,8 +1962,12 @@ class VisualFeedMonitor:
         previous = document.getElementById("visual_feed_history_previous")
         following = document.getElementById("visual_feed_history_next")
         counter = document.getElementById("visual_feed_history_counter")
-        has_previous = total > 0 and self._history_index > 0
-        has_next = total > 0 and self._history_index < total - 1
+        has_previous = (total > 0 and self._history_index > 0) or bool(
+            self._adjacent_history_date(-1)
+        )
+        has_next = (total > 0 and self._history_index < total - 1) or bool(
+            self._adjacent_history_date(1)
+        )
         if previous:
             if self._mode == "history":
                 previous.classList.remove("hidden")
@@ -1837,15 +1987,39 @@ class VisualFeedMonitor:
                 f"ภาพที่ {self._history_index + 1} จาก {total}" if total else ""
             )
 
+    def _adjacent_history_date(self, direction):
+        # Same rule as the day rail: a history that stopped before today offers
+        # no days to step into.
+        if (
+            self._mode != "history"
+            or not self._active_date
+            or not self._history_reaches_today()
+        ):
+            return None
+        dates = self._history_available_dates
+        if direction < 0:
+            return next(
+                (value for value in reversed(dates) if value < self._active_date), None
+            )
+        return next((value for value in dates if value > self._active_date), None)
+
     def _on_history_previous(self, _event=None):
         if self._history_index > 0:
             self._history_index -= 1
             self._render_history_frame()
+        else:
+            previous_date = self._adjacent_history_date(-1)
+            if previous_date:
+                self._on_select_day(previous_date, edge="latest")
 
     def _on_history_next(self, _event=None):
         if self._history_index < len(self._history_frames) - 1:
             self._history_index += 1
             self._render_history_frame()
+        else:
+            next_date = self._adjacent_history_date(1)
+            if next_date:
+                self._on_select_day(next_date, edge="earliest")
 
     def _on_history_slider_input(self, event=None):
         try:
@@ -1931,15 +2105,9 @@ class VisualFeedMonitor:
             target.textContent = _text(message, "")
 
     def _set_history_load_state(self, state):
-        for element_id in (
-            "visual_feed_history_date",
-            "visual_feed_history_frames",
-        ):
-            element = document.getElementById(element_id)
-            if element:
-                element.attrs["data-state"] = state
         frames = document.getElementById("visual_feed_history_frames")
         if frames:
+            frames.attrs["data-state"] = state
             frames.attrs["aria-busy"] = "true" if state == "loading" else "false"
 
     def _show_latest_section(self):
@@ -1962,7 +2130,11 @@ class VisualFeedMonitor:
         if latest:
             latest.classList.add("hidden")
         if controls:
-            controls.classList.remove("hidden")
+            # Day controls only make sense for cameras the provider keeps history for.
+            if _supports_history(self._active_feed):
+                controls.classList.remove("hidden")
+            else:
+                controls.classList.add("hidden")
         if frames:
             frames.classList.remove("hidden")
 
@@ -1977,12 +2149,14 @@ class VisualFeedMonitor:
             heading.textContent = title
         if badge:
             badge.classList.remove("cctv-status--fresh", "cctv-status--stale")
-            badge.classList.add("cctv-status", _image_freshness_status_class(image_freshness))
+            badge.classList.add(
+                "cctv-status", _image_freshness_status_class(image_freshness)
+            )
             badge.textContent = _image_freshness_label(image_freshness)
         if meta:
             meta_parts = [
                 _source_label(feed.get("source")),
-                _text(feed.get("coverage_group")),
+                coverage_label(feed.get("coverage_group")),
             ]
             meta.textContent = " · ".join(part for part in meta_parts if part)
         if latest_container:
@@ -1990,51 +2164,13 @@ class VisualFeedMonitor:
             image_url = _resolve_image_url(feed.get("image_url"), self.api_url)
             image_url = _version_image_url(image_url, feed.get("captured_at"))
             if image_url:
-                latest_container <= self._image_view(image_url, title, latest=True)
+                latest_container <= self._image_view(image_url, title)
             else:
                 latest_container <= _el(
                     "div",
                     "flex aspect-video items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-500",
                     "ไม่มีภาพล่าสุด",
                 )
-        station_link = document.getElementById("visual_feed_detail_station_link")
-        if station_link:
-            matched_st = self.find_matching_station(feed)
-            if matched_st:
-                st_code = str(matched_st.get("code", ""))
-                st_name = str(matched_st.get("name_th") or matched_st.get("name", ""))
-                st_src = str(matched_st.get("source", ""))
-                wl_val = None
-                for m in matched_st.get("metrics") or []:
-                    if str(m.get("metric_type", "")).lower() == "waterlevel":
-                        wl_val = m.get("value")
-                        break
-                wl_str = ""
-                if wl_val is not None:
-                    try:
-                        wl_str = f" · ระดับน้ำ {float(wl_val):.2f} ม."
-                    except Exception:
-                        pass
-
-                station_link.html = f"""
-                <div class="rounded-2xl border border-blue-200/80 bg-blue-50/50 p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
-                    <div class="flex items-center gap-3 min-w-0">
-                        <i class="ph ph-waves text-2xl text-blue-600 shrink-0" aria-hidden="true"></i>
-                        <div class="min-w-0">
-                            <div class="font-bold text-xs sm:text-sm text-blue-950 truncate">สถานีวัดน้ำที่ตั้งเดียวกัน: {st_name}</div>
-                            <div class="text-[11px] text-blue-700 font-medium">รหัสสถานี #{st_code}{wl_str}</div>
-                        </div>
-                    </div>
-                    <button type="button" onclick="if(window.focus_water_station_from_modal)window.focus_water_station_from_modal('{st_code}','{st_src}')"
-                        class="btn btn-sm btn-primary gap-1.5 text-white shrink-0 font-medium rounded-xl shadow-xs px-3.5">
-                        <i class="ph ph-waves"></i> ดูระดับน้ำ
-                    </button>
-                </div>
-                """
-                station_link.classList.remove("hidden")
-            else:
-                station_link.html = ""
-                station_link.classList.add("hidden")
 
     def _refresh_open_detail(self):
         if self._modal_open and self._active_feed:
@@ -2052,6 +2188,10 @@ class VisualFeedMonitor:
     def _feed_key(self, feed):
         feed = _as_dict(feed)
         return (str(feed.get("source", "")), str(feed.get("upstream_id", "")))
+
+
+def _frame_date(frame):
+    return frame["captured_at"].astimezone(BANGKOK_TZ).date().isoformat()
 
 
 def _supports_history(feed):

@@ -229,6 +229,57 @@
         color: var(--cctv-accent-ink);
     }
 
+    /* Card badge: its own line, only as wide as its label. */
+    .visual-feed-card .cctv-status {
+        display: flex;
+        width: fit-content;
+        align-self: flex-start;
+        margin-block-start: 0.25rem;
+    }
+
+    /* Camera popup on the map (brython/visual_feeds/map_popup.py). */
+    .cctv-map-popup {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .cctv-map-popup__image { border-radius: 0.5rem; }
+
+    .cctv-map-popup__empty {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        aspect-ratio: 16 / 9;
+        border-radius: 0.5rem;
+        background: var(--cctv-paper-raised);
+        color: var(--cctv-muted);
+        font-size: 0.75rem;
+    }
+
+    .cctv-map-popup__title {
+        font-size: 0.875rem;
+        font-weight: 700;
+        line-height: 1.375;
+        color: var(--cctv-ink);
+    }
+
+    .cctv-map-popup__footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    .cctv-map-popup .cctv-status {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 9999px;
+        padding: 0.25rem 0.5rem;
+        font-size: 10px;
+        font-weight: 600;
+    }
+
     .cctv-status--fresh { background: var(--cctv-fresh); }
     .cctv-status--stale { background: var(--cctv-stale); }
 
