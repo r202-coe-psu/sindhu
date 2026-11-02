@@ -299,6 +299,75 @@ class ZoneStyleTests(unittest.TestCase):
         self.assertEqual(map_view.map.invalidations, [{"pan": False}])
 
 
+class _Storage:
+    def __init__(self, value=None):
+        self.value = value
+
+    def getItem(self, key):
+        return self.value
+
+
+class _Media:
+    def __init__(self, matches):
+        self.matches = matches
+
+
+class _LegendWindow:
+    def __init__(self, saved=None, wide=True):
+        self.localStorage = _Storage(saved)
+        self._wide = wide
+
+    def matchMedia(self, query):
+        return _Media(self._wide)
+
+
+class LegendTests(unittest.TestCase):
+    """The legend folds to a chip so it doesn't cover the map on phones."""
+
+    LEVELS = [
+        {"color": "#22c55e", "label": "ปกติ", "range": "ต่ำกว่าเฝ้าระวัง"},
+        {"color": "#ef4444", "label": "วิกฤต", "range": "ถึงระดับวิกฤต"},
+    ]
+
+    def make_map(self):
+        from maps.base import BaseMap
+
+        map_view = BaseMap.__new__(BaseMap)
+        map_view.map = _BrowserStub()
+        map_view.zone_legend_entries = []
+        return map_view
+
+    def starts_collapsed(self, saved, wide):
+        import maps.base as base_module
+
+        saved_window = base_module.window
+        base_module.window = _LegendWindow(saved, wide)
+        try:
+            return self.make_map().legend_starts_collapsed()
+        finally:
+            base_module.window = saved_window
+
+    def test_folded_chip_shows_only_the_colours(self):
+        html = self.make_map().legend_html(self.LEVELS, "ระดับน้ำ", collapsed=True)
+        self.assertIn('aria-expanded="false"', html)
+        self.assertIn("#ef4444", html)
+        self.assertNotIn("ถึงระดับวิกฤต", html)
+
+    def test_open_legend_lists_every_level(self):
+        html = self.make_map().legend_html(self.LEVELS, "ระดับน้ำ", collapsed=False)
+        self.assertIn('aria-expanded="true"', html)
+        for level in self.LEVELS:
+            self.assertIn(level["label"], html)
+
+    def test_folded_by_default_on_narrow_screens_only(self):
+        self.assertTrue(self.starts_collapsed(saved=None, wide=False))
+        self.assertFalse(self.starts_collapsed(saved=None, wide=True))
+
+    def test_the_viewer_choice_wins_over_screen_width(self):
+        self.assertFalse(self.starts_collapsed(saved="0", wide=False))
+        self.assertTrue(self.starts_collapsed(saved="1", wide=True))
+
+
 class RiverStyleTests(unittest.TestCase):
     def style(self, fclass, zoom):
         map_view = Map.__new__(Map)

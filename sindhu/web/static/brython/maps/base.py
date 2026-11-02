@@ -889,10 +889,37 @@ class BaseMap(Map):
             </div>
         """
 
-    def render_legend(self, levels, title, subtitle=""):
-        from browser import document as doc
+    LEGEND_COLLAPSED_KEY = "sindhu_monitor_legend_collapsed"
 
-        self._legend_args = (levels, title, subtitle)
+    def legend_starts_collapsed(self):
+        """Folded on phones and tablets, where it covers too much of the map,
+        unless the viewer already chose otherwise on this device."""
+        try:
+            saved = window.localStorage.getItem(self.LEGEND_COLLAPSED_KEY)
+        except Exception:
+            saved = None
+        if saved in ("0", "1"):
+            return saved == "1"
+        try:
+            return not window.matchMedia("(min-width: 1024px)").matches
+        except Exception:
+            return False
+
+    def legend_html(self, levels, title, subtitle="", collapsed=False):
+        """Legend card: the full key, or a small chip of the risk colours."""
+        swatches = "".join(
+            f'<span class="inline-block w-2.5 h-2.5 rounded-sm" style="background-color: {level["color"]};"></span>'
+            for level in levels
+        )
+        if collapsed:
+            return f"""
+        <button type="button" class="map-legend-toggle flex items-center gap-1.5 bg-base-100/95 backdrop-blur-sm border border-ink-200 rounded-full shadow-md pl-2.5 pr-2 py-1.5 cursor-pointer hover:border-brand-400"
+            aria-expanded="false" aria-label="แสดงคำอธิบายสี: {title}" title="แสดงคำอธิบายสี">
+            <i class="ph ph-palette text-brand-600 text-sm" aria-hidden="true"></i>
+            <span class="flex items-center gap-0.5" aria-hidden="true">{swatches}</span>
+            <i class="ph ph-caret-up text-ink-500 text-xs" aria-hidden="true"></i>
+        </button>
+        """
 
         rows = ""
         for level in levels:
@@ -903,6 +930,35 @@ class BaseMap(Map):
                 <span class="text-[10px] text-ink-400 leading-tight ml-auto pl-2 whitespace-nowrap">{level["range"]}</span>
             </div>
             """
+
+        subtitle_html = ""
+        if subtitle:
+            subtitle_html = f'<div class="text-[9px] text-ink-400">{subtitle}</div>'
+
+        return f"""
+        <div class="bg-base-100/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
+            <button type="button" class="map-legend-toggle w-full flex items-center gap-1.5 pb-1 mb-1.5 border-b border-ink-100 text-left cursor-pointer"
+                aria-expanded="true" aria-label="ย่อคำอธิบายสี" title="ย่อคำอธิบายสี">
+                <i class="ph ph-palette text-brand-600 text-sm" aria-hidden="true"></i>
+                <div class="leading-tight min-w-0 flex-1">
+                    <div class="text-[11px] font-semibold text-ink-700">{title}</div>
+                    {subtitle_html}
+                </div>
+                <i class="ph ph-caret-down text-ink-500 text-xs" aria-hidden="true"></i>
+            </button>
+            <div class="flex flex-col gap-1">
+                {rows}
+            </div>
+            {self.zone_legend_html()}
+        </div>
+        """
+
+    def render_legend(self, levels, title, subtitle=""):
+        from browser import document as doc
+
+        self._legend_args = (levels, title, subtitle)
+        if getattr(self, "_legend_collapsed", None) is None:
+            self._legend_collapsed = self.legend_starts_collapsed()
 
         container = self._metric_legend_container
         if container is None:
@@ -918,25 +974,27 @@ class BaseMap(Map):
             self.leaflet.DomEvent.disableClickPropagation(container)
             self.leaflet.DomEvent.disableScrollPropagation(container)
 
-        subtitle_html = ""
-        if subtitle:
-            subtitle_html = f'<div class="text-[9px] text-ink-400">{subtitle}</div>'
+        container.html = self.legend_html(
+            levels, title, subtitle, collapsed=self._legend_collapsed
+        )
+        toggle = container.select_one(".map-legend-toggle")
+        if toggle:
+            toggle.bind("click", self._on_legend_toggle)
 
-        container.html = f"""
-        <div class="bg-base-100/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
-            <div class="flex items-center gap-1.5 pb-1 mb-1.5 border-b border-ink-100">
-                <i class="ph ph-palette text-brand-600 text-sm"></i>
-                <div class="leading-tight">
-                    <div class="text-[11px] font-semibold text-ink-700">{title}</div>
-                    {subtitle_html}
-                </div>
-            </div>
-            <div class="flex flex-col gap-1">
-                {rows}
-            </div>
-            {self.zone_legend_html()}
-        </div>
-        """
+    def _on_legend_toggle(self, event=None):
+        self._legend_collapsed = not self._legend_collapsed
+        try:
+            window.localStorage.setItem(
+                self.LEGEND_COLLAPSED_KEY, "1" if self._legend_collapsed else "0"
+            )
+        except Exception:
+            pass
+        self.refresh_legend()
+        # The card was redrawn: keep keyboard focus on its toggle.
+        container = self._metric_legend_container
+        toggle = container.select_one(".map-legend-toggle") if container else None
+        if toggle:
+            toggle.focus()
 
     def marker_key(self, source, code):
         return f"{str(source).lower()}:{code}"
