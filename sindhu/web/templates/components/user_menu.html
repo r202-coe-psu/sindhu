@@ -12,18 +12,18 @@
     </span>
     <i class="ph ph-caret-down text-ink-400 text-sm hidden md:inline"></i>
   </div>
-  <ul tabindex="0" class="dropdown-content menu bg-white rounded-2xl z-30 mt-2 w-56 p-2 shadow-lg border border-ink-100">
+  <ul tabindex="0" class="dropdown-content menu bg-base-100 rounded-2xl z-30 mt-2 w-56 p-2 shadow-lg border border-ink-100">
     <li class="menu-title px-3 pt-2 pb-1">
       <span class="text-xs text-ink-400">ลงชื่อเข้าใช้เป็น</span>
       <span class="text-sm font-semibold text-ink-800 normal-case">{{ _display }}</span>
     </li>
     <li>
-      <a href="{{ url_for('system_settings.index') }}" class="text-ink-700 hover:bg-brand-50 hover:text-primary">
+      <a href="{{ url_for('system_settings.index') }}" class="text-ink-700 hover:bg-brand-50 hover:text-brand-600">
         <i class="ph ph-gear text-lg"></i> ตั้งค่าระบบ
       </a>
     </li>
     <li>
-      <a href="{{ url_for('accounts.logout') }}" class="text-error hover:bg-red-50">
+      <a href="{{ url_for('accounts.logout') }}" class="text-error hover:bg-red-500/15">
         <i class="ph ph-sign-out text-lg"></i> ออกจากระบบ
       </a>
     </li>

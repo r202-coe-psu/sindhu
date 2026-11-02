@@ -23,74 +23,79 @@
 
 
 /*
- * เฝ้าดู palette — one source of truth for the site's colours.
+ * เฝ้าดู palette — one source of truth for the site's colours (#41).
  *
- * brand: น้ำลึก (deep water) cerulean, used for primary actions, links and highlights.
- * ink:   cool blue-grey neutrals for text, borders and surfaces.
+ * The site uses one dark theme modelled on Windy: neutral greys with no hue
+ * cast, white text, and the logo's blue as the only accent.
+ *
+ * brand: the logo's blue.  ink: neutral greys for text, borders and surfaces.
+ * Both scales keep the roles their numbers had on the old light theme, so
+ * classes already written for it still do the right thing:
+ *   50–100   subtle surfaces / tints (now dark)
+ *   200–300  borders and dividers
+ *   400–500  muted text and accents
+ *   600–950  body and heading text (now light)
  * Templates use brand-* / ink-* (never raw blue-*, gray-*, slate-*) so the
- * palette can be retuned here. Risk/status colours (emerald, amber, red …)
- * carry meaning and stay on Tailwind's defaults.
+ * palette can be retuned here.  Risk/status colours carry meaning and stay
+ * on Tailwind's defaults.
  *
  * `static` keeps every variable in app.css so inline styles in Brython
  * popups can use var(--color-brand-600) even when no class references it.
  */
 @theme static {
-  --color-brand-50: oklch(97.6% 0.013 222);
-  --color-brand-100: oklch(94.6% 0.029 224);
-  --color-brand-200: oklch(89.4% 0.054 226);
-  --color-brand-300: oklch(81.5% 0.088 228);
-  --color-brand-400: oklch(71% 0.116 231);
-  --color-brand-500: oklch(61% 0.126 234);
-  --color-brand-600: oklch(52% 0.116 237);
-  --color-brand-700: oklch(45% 0.1 239);
-  --color-brand-800: oklch(38% 0.083 241);
-  --color-brand-900: oklch(31.5% 0.066 243);
-  --color-brand-950: oklch(22.5% 0.048 245);
+  --color-brand-50: #1e3047;
+  --color-brand-100: #23395a;
+  --color-brand-200: #2a4a75;
+  --color-brand-300: #3567a6;
+  --color-brand-400: #4f95e6;
+  --color-brand-500: #5aa2f5;
+  --color-brand-600: #7ab8ff;   /* links and icons: 6.8:1 on base-100 */
+  --color-brand-700: #9ccaff;
+  --color-brand-800: #bddeff;
+  --color-brand-900: #ddefff;
+  --color-brand-950: #f0f8ff;
 
-  --color-ink-50: oklch(98.4% 0.004 235);
-  --color-ink-100: oklch(96.6% 0.007 235);
-  --color-ink-200: oklch(92.8% 0.011 237);
-  --color-ink-300: oklch(87.2% 0.016 239);
-  --color-ink-400: oklch(71.5% 0.022 241);
-  --color-ink-500: oklch(55.5% 0.026 243);
-  --color-ink-600: oklch(44.5% 0.026 245);
-  --color-ink-700: oklch(37% 0.025 247);
-  --color-ink-800: oklch(28% 0.022 249);
-  --color-ink-900: oklch(21% 0.02 251);
-  --color-ink-950: oklch(14.5% 0.016 253);
+  --color-ink-50: #262626;
+  --color-ink-100: #333333;
+  --color-ink-200: #404040;
+  --color-ink-300: #525252;
+  --color-ink-400: #9e9e9e;     /* captions: ≥ 4.5:1 on base-100 */
+  --color-ink-500: #ababab;
+  --color-ink-600: #c2c2c2;
+  --color-ink-700: #d4d4d4;
+  --color-ink-800: #e5e5e5;
+  --color-ink-900: #f5f5f5;
+  --color-ink-950: #fafafa;
 }
 
 @plugin "daisyui/theme" {
   name: "sindhu";
   default: true;
-  prefersdark: false;
-  color-scheme: light;
+  prefersdark: true;
+  color-scheme: dark;
 
-  /* Brand: deep water cerulean */
-  --color-primary: oklch(52% 0.116 237);                /* brand-600 */
-  --color-primary-content: oklch(98.4% 0.004 235);      /* ink-50 */
+  /* Primary: the logo's blue, for buttons and the selected menu item */
+  --color-primary: #0069d5;                 /* white text 5.3:1 */
+  --color-primary-content: #ffffff;
 
-  /* Secondary: dusk-over-the-lake navy, for quieter emphasis */
-  --color-secondary: oklch(38% 0.083 241);              /* brand-800 */
-  --color-secondary-content: oklch(97.6% 0.013 222);    /* brand-50 */
+  --color-secondary: #404040;               /* ink-200 */
+  --color-secondary-content: #f5f5f5;
 
-  /* Accent: shoreline sand — warm complement to the blues */
-  --color-accent: oklch(80% 0.115 78);
-  --color-accent-content: oklch(28% 0.05 60);
+  --color-accent: #7ab8ff;                  /* brand-600 */
+  --color-accent-content: #0b1a2c;
 
-  /* Neutral */
-  --color-neutral: oklch(28% 0.022 249);                /* ink-800 */
-  --color-neutral-content: oklch(98.4% 0.004 235);      /* ink-50 */
+  --color-neutral: #171717;
+  --color-neutral-content: #f5f5f5;
 
-  /* Surfaces */
-  --color-base-100: oklch(100% 0 0);                    /* white */
-  --color-base-200: oklch(97.6% 0.008 228);             /* misty water */
-  --color-base-300: oklch(93.5% 0.016 230);
-  --color-base-content: oklch(21% 0.02 251);            /* ink-900 */
+  /* Surfaces, as on Windy: page, then bars/cards, then the deepest wells */
+  --color-base-100: #2b2b2b;                /* sidebar, header, cards, panels */
+  --color-base-200: #1f1f1f;                /* page */
+  --color-base-300: #171717;
+  --color-base-content: #f5f5f5;            /* ink-900 */
 
   /* Status */
-  --color-info: oklch(61% 0.126 234);                   /* brand-500 */
-  --color-info-content: oklch(98.4% 0.004 235);
+  --color-info: #5aa2f5;                    /* brand-500 */
+  --color-info-content: #0b1a2c;
   --color-success: oklch(62% 0.14 158);
   --color-success-content: oklch(98% 0 0);
   --color-warning: oklch(76.9% 0.188 70.08);            /* amber */
@@ -230,7 +235,7 @@ body.map-focus .map-page .map-reset { bottom: 12px !important; }
   align-items: center;
   justify-content: center;
   font-size: 1.125rem;
-  border-top: 1px solid #ccc;
+  border-top: 1px solid var(--color-ink-200);
 }
 .map-focus-btn[aria-pressed="true"] { background: var(--color-brand-100); color: var(--color-brand-700); }
 
@@ -261,24 +266,63 @@ body.map-focus .map-focus-hint {
   body.map-focus .map-focus-hint { animation-timing-function: steps(1, end); }
 }
 
+/*
+ * Leaflet's own controls, popups and tooltips in the dark theme.  Station
+ * tooltips (.tooltip-marker) draw their own card and stay transparent.
+ */
+.leaflet-container { background: var(--color-base-200); font-family: inherit; }
+.leaflet-bar,
+.leaflet-touch .leaflet-bar,
+.leaflet-touch .leaflet-control-layers { border-color: var(--color-ink-200); }
+.leaflet-bar a,
+.leaflet-bar a:hover,
+.leaflet-bar a:focus {
+  background-color: var(--color-base-100);
+  color: var(--color-ink-800);
+  border-bottom-color: var(--color-ink-200);
+}
+.leaflet-bar a:hover { background-color: var(--color-ink-100); }
+.leaflet-bar a.leaflet-disabled { background-color: var(--color-ink-50); color: var(--color-ink-300); }
+.leaflet-control-layers { background: var(--color-base-100); color: var(--color-ink-800); }
+.leaflet-control-layers-toggle { filter: invert(0.9); }
+.leaflet-control-layers-separator { border-top-color: var(--color-ink-200); }
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip { background: var(--color-base-100); color: var(--color-ink-900); }
+.leaflet-container a.leaflet-popup-close-button { color: var(--color-ink-500); }
+.leaflet-container a.leaflet-popup-close-button:hover { color: var(--color-ink-900); }
+.leaflet-tooltip:not(.tooltip-marker) {
+  background: var(--color-base-100);
+  border-color: var(--color-ink-200);
+  color: var(--color-ink-900);
+}
+.leaflet-tooltip-top:not(.tooltip-marker)::before { border-top-color: var(--color-base-100); }
+.leaflet-tooltip-bottom:not(.tooltip-marker)::before { border-bottom-color: var(--color-base-100); }
+.leaflet-tooltip-left:not(.tooltip-marker)::before { border-left-color: var(--color-base-100); }
+.leaflet-tooltip-right:not(.tooltip-marker)::before { border-right-color: var(--color-base-100); }
+.leaflet-container .leaflet-control-attribution {
+  background: color-mix(in oklab, var(--color-base-100) 80%, transparent);
+  color: var(--color-ink-500);
+}
+.leaflet-control-attribution a { color: var(--color-brand-600); }
+
 /* CCTV monitoring page styles (scoped) */
 .monitor-page { overflow-x: clip; }
 @scope (.monitor-page) {
 /* CCTV Monitoring Panel & Historical Feed Modal — Light Minimalist Theme */
     :scope {
-        --cctv-paper: oklch(98% 0.008 82);
-        --cctv-paper-raised: oklch(96% 0.012 82);
-        --cctv-ink: oklch(23% 0.035 255);
-        --cctv-muted: oklch(44% 0.025 255);
-        --cctv-rule: oklch(85% 0.018 82);
-        --cctv-accent: oklch(48% 0.14 256);
-        --cctv-accent-ink: oklch(98% 0.008 82);
-        --cctv-focus: oklch(56% 0.19 250);
-        --cctv-fresh: #0284c7;
-        --cctv-stale: #9ca3af;
+        --cctv-paper: var(--color-base-100);
+        --cctv-paper-raised: var(--color-ink-100);
+        --cctv-ink: var(--color-base-300);
+        --cctv-muted: var(--color-ink-500);
+        --cctv-rule: var(--color-ink-200);
+        --cctv-accent: var(--color-primary);
+        --cctv-accent-ink: var(--color-ink-900);
+        --cctv-focus: var(--color-brand-500);
+        --cctv-fresh: var(--color-brand-600);
+        --cctv-stale: #6b7280;
         --cctv-error: oklch(55% 0.2 28);
-        --cctv-shadow: oklch(18% 0.025 255 / 0.18);
-        --cctv-overlay: oklch(18% 0.025 255 / 0.7);
+        --cctv-shadow: rgb(0 0 0 / 0.45);
+        --cctv-overlay: rgb(0 0 0 / 0.7);
         --cctv-radius-sm: 0.75rem;
         --cctv-radius-md: 1rem;
         --cctv-radius-lg: 1.5rem;
@@ -367,8 +411,8 @@ body.map-focus .map-focus-hint {
 
     #cctv_map_options > summary::-webkit-details-marker { display: none; }
     #cctv_map_options[open] .cctv-options-caret { transform: rotate(180deg); }
-    .cctv-map-state--visible { color: #0369a1; background: #f0f9ff; }
-    .cctv-map-state--hidden { color: #4b5563; background: #f3f4f6; }
+    .cctv-map-state--visible { color: var(--color-brand-700); background: var(--color-brand-50); }
+    .cctv-map-state--hidden { color: var(--color-ink-600); background: var(--color-ink-100); }
 
     .cctv-list-item {
         border-color: var(--cctv-rule);
@@ -414,7 +458,7 @@ body.map-focus .map-focus-hint {
         font-size: 0.875rem;
         font-weight: 700;
         line-height: 1.375;
-        color: var(--cctv-ink);
+        color: var(--color-ink-900);
     }
 
     .cctv-map-popup__footer {
@@ -453,7 +497,7 @@ body.map-focus .map-focus-hint {
         border: 0;
         border-radius: 1.5rem;
         background: transparent;
-        color: #0f172a;
+        color: var(--color-ink-900);
     }
 
     #visual_feed_detail_dialog[open] .cctv-modal-shell {
@@ -464,18 +508,18 @@ body.map-focus .map-focus-hint {
         width: 100%;
         max-height: min(76dvh, 34rem);
         overflow-y: auto;
-        border: 1px solid #e2e8f0;
+        border: 1px solid var(--color-ink-200);
         border-radius: 1.5rem;
-        background: #ffffff;
+        background: var(--color-base-100);
         box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(15, 23, 42, 0.05);
-        color: #0f172a;
+        color: var(--color-ink-900);
     }
 
     .cctv-history-viewport {
         position: relative;
         overflow: hidden;
         border-radius: 1rem;
-        background: #f1f5f9;
+        background: var(--color-ink-100);
         touch-action: pan-y;
     }
 
@@ -491,12 +535,12 @@ body.map-focus .map-focus-hint {
         width: 2.75rem;
         height: 2.75rem;
         place-items: center;
-        border: 1px solid rgba(226, 232, 240, 0.9);
+        border: 1px solid var(--color-ink-200);
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.9);
+        background: color-mix(in oklab, var(--color-base-100) 90%, transparent);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
-        color: #1e293b;
+        color: var(--color-ink-900);
         box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
         transform: translateY(-50%);
         cursor: pointer;
@@ -504,10 +548,10 @@ body.map-focus .map-focus-hint {
     }
 
     .cctv-history-nav:hover {
-        background: #ffffff;
-        color: #0284c7;
+        background: var(--color-base-100);
+        color: var(--color-brand-600);
         transform: translateY(-50%) scale(1.08);
-        border-color: #38bdf8;
+        border-color: var(--color-brand-500);
         box-shadow: 0 4px 16px rgba(2, 132, 199, 0.25);
     }
 
@@ -637,9 +681,9 @@ body.map-focus .map-focus-hint {
     }
 
     .active-view-btn {
-        background-color: #ffffff !important;
-        color: #2563eb !important;
-        border-color: #cbd5e1 !important;
+        background-color: var(--color-base-100) !important;
+        color: var(--color-brand-600) !important;
+        border-color: var(--color-ink-300) !important;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
         font-weight: 700 !important;
     }
@@ -677,8 +721,8 @@ body.map-focus .map-focus-hint {
         padding: 0 !important;
         border-radius: 1.25rem !important;
         overflow: hidden !important;
-        background: #ffffff !important;
-        border: 1px solid #e2e8f0 !important;
+        background: var(--color-base-100) !important;
+        border: 1px solid var(--color-ink-200) !important;
         box-shadow: 0 20px 35px -10px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(15, 23, 42, 0.05) !important;
         max-width: calc(100vw - 24px) !important;
     }
@@ -719,9 +763,9 @@ body.map-focus .map-focus-hint {
     .cctv-luxury-popup .leaflet-popup-close-button {
         top: 8px !important;
         right: 8px !important;
-        color: #64748b !important;
-        background: #f1f5f9 !important;
-        border: 1px solid #e2e8f0 !important;
+        color: var(--color-ink-500) !important;
+        background: var(--color-ink-100) !important;
+        border: 1px solid var(--color-ink-200) !important;
         border-radius: 9999px !important;
         width: 28px !important;
         height: 28px !important;
@@ -737,8 +781,8 @@ body.map-focus .map-focus-hint {
     }
     .cctv-luxury-popup .leaflet-popup-close-button:hover,
     .cctv-luxury-popup .leaflet-popup-close-button:active {
-        color: #0f172a !important;
-        background: #e2e8f0 !important;
+        color: var(--color-ink-900) !important;
+        background: var(--color-ink-200) !important;
         transform: scale(1.08) !important;
     }
 
@@ -790,10 +834,10 @@ body.map-focus .map-focus-hint {
         border-radius: 9999px;
         background: linear-gradient(
             to right,
-            #e2e8f0 0%,
-            #bae6fd 30%,
-            #38bdf8 60%,
-            #0284c7 85%,
+            var(--color-ink-200) 0%,
+            var(--color-brand-300) 30%,
+            var(--color-brand-500) 60%,
+            var(--color-brand-600) 85%,
             #10b981 100%
         );
         outline: none;
@@ -809,7 +853,7 @@ body.map-focus .map-focus-hint {
         height: 18px;
         border-radius: 50%;
         background: #ffffff;
-        border: 2.5px solid #0284c7;
+        border: 2.5px solid var(--color-brand-600);
         box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35), 0 1px 2px rgba(0, 0, 0, 0.1);
         cursor: pointer;
         transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -826,7 +870,7 @@ body.map-focus .map-focus-hint {
         height: 18px;
         border-radius: 50%;
         background: #ffffff;
-        border: 2.5px solid #0284c7;
+        border: 2.5px solid var(--color-brand-600);
         box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35), 0 1px 2px rgba(0, 0, 0, 0.1);
         cursor: pointer;
         transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -840,44 +884,44 @@ body.map-focus .map-focus-hint {
 
     /* Minimalist Period Hour Chips - Modern Light Clean */
     .cctv-period-pill {
-        border: 1px solid #e2e8f0;
-        background: #ffffff;
-        color: #475569;
+        border: 1px solid var(--color-ink-200);
+        background: var(--color-base-100);
+        color: var(--color-ink-600);
         transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
         cursor: pointer;
     }
     .cctv-period-pill:hover {
-        border-color: #93c5fd;
-        background: #f8fafc;
-        color: #0f172a;
+        border-color: var(--color-brand-400);
+        background: var(--color-ink-50);
+        color: var(--color-ink-900);
         transform: translateY(-1px);
     }
     .cctv-period-pill.is-active {
-        background: #e0f2fe !important;
-        color: #0284c7 !important;
-        border-color: #38bdf8 !important;
+        background: var(--color-brand-100) !important;
+        color: var(--color-brand-600) !important;
+        border-color: var(--color-brand-500) !important;
         box-shadow: 0 2px 6px rgba(2, 132, 199, 0.15) !important;
         font-weight: 700 !important;
     }
 
     /* 7-Day Slide Rail & Cards - Modern Light Clean */
     .cctv-day-card {
-        border: 1px solid #e2e8f0;
-        background: #ffffff;
-        color: #475569;
+        border: 1px solid var(--color-ink-200);
+        background: var(--color-base-100);
+        color: var(--color-ink-600);
         transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
         cursor: pointer;
     }
     .cctv-day-card:hover {
-        border-color: #93c5fd;
-        background: #f8fafc;
-        color: #0f172a;
+        border-color: var(--color-brand-400);
+        background: var(--color-ink-50);
+        color: var(--color-ink-900);
         transform: translateY(-1px);
     }
     .cctv-day-card.is-active {
-        background: #e0f2fe !important;
-        color: #0284c7 !important;
-        border-color: #38bdf8 !important;
+        background: var(--color-brand-100) !important;
+        color: var(--color-brand-600) !important;
+        border-color: var(--color-brand-500) !important;
         box-shadow: 0 2px 6px rgba(2, 132, 199, 0.18) !important;
         font-weight: 700 !important;
     }
@@ -908,23 +952,23 @@ body.map-focus .map-focus-hint {
   .visual-feed-card img {
     aspect-ratio: 16 / 9;
     object-fit: cover;
-    background: #0f172a;
+    background: #000;
   }
 
   #visual_feed_detail_dialog::backdrop {
-    background: rgba(15, 23, 42, 0.65);
+    background: rgb(0 0 0 / 0.7);
     backdrop-filter: blur(4px);
   }
 
   .visual-feed-tab[aria-selected="true"] {
     color: var(--color-brand-700);
-    background: #ffffff;
+    background: var(--color-base-100);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     font-weight: 700;
   }
 
   .active-view-btn {
-    background-color: #ffffff !important;
+    background-color: var(--color-base-100) !important;
     color: var(--color-brand-700) !important;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
     font-weight: 700 !important;

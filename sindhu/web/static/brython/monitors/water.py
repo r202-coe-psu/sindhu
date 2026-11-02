@@ -371,20 +371,20 @@ class WaterMonitor(BaseMonitor):
             btn_shaded = document["zone_style_shaded"]
             if mode == "outline":
                 btn_outline.classList.add(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
+                    "bg-base-100", "shadow-sm", "text-brand-700", "font-bold"
                 )
                 btn_outline.classList.remove("text-ink-600")
                 btn_shaded.classList.remove(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
+                    "bg-base-100", "shadow-sm", "text-brand-700", "font-bold"
                 )
                 btn_shaded.classList.add("text-ink-600")
             else:
                 btn_shaded.classList.add(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
+                    "bg-base-100", "shadow-sm", "text-brand-700", "font-bold"
                 )
                 btn_shaded.classList.remove("text-ink-600")
                 btn_outline.classList.remove(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
+                    "bg-base-100", "shadow-sm", "text-brand-700", "font-bold"
                 )
                 btn_outline.classList.add("text-ink-600")
 
@@ -721,7 +721,7 @@ class WaterMonitor(BaseMonitor):
                         if v < 0:
                             display_text = f'{m_label}: <span class="font-medium text-ink-700">ต่ำกว่าตลิ่ง {abs(v):.2f} ม.</span>'
                         elif v > 0:
-                            display_text = f'{m_label}: <span class="font-medium text-red-600">ล้นตลิ่ง {v:.2f} ม.</span>'
+                            display_text = f'{m_label}: <span class="font-medium text-red-400">ล้นตลิ่ง {v:.2f} ม.</span>'
                         else:
                             display_text = f'{m_label}: <span class="font-medium text-yellow-600">เสมอระดับตลิ่งพอดี</span>'
                     except:
@@ -770,7 +770,7 @@ class WaterMonitor(BaseMonitor):
 
             html_content += f"""
             <div data-station-code="{station.get("code", "")}" data-station-source="{station.get("source", "")}"
-                class="bg-white border border-ink-100 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-brand-300 transition-all duration-200 cursor-pointer">
+                class="bg-base-100 border border-ink-100 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-brand-300 transition-all duration-200 cursor-pointer">
                 <div class="flex justify-between items-start mb-2">
                     <div>
                         <h3 class="font-bold text-ink-800 text-base">{name}</h3>

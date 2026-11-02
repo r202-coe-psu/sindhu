@@ -11,7 +11,7 @@ System Setting
   <div class="card bg-base-100 shadow-xl border border-base-200">
     <div class="card-body">
       <div class="flex items-center gap-3 mb-6">
-        <i class="ph-fill ph-gear text-3xl text-primary"></i>
+        <i class="ph-fill ph-gear text-3xl text-brand-600"></i>
         <h2 class="card-title text-2xl font-bold">System Setting</h2>
       </div>
 
@@ -21,7 +21,7 @@ System Setting
         {# Map Setting Section #}
         <section class="space-y-4">
           <div class="flex items-center gap-2 border-b border-base-200 pb-2">
-            <i class="ph ph-map-trifold text-xl text-primary"></i>
+            <i class="ph ph-map-trifold text-xl text-brand-600"></i>
             <h3 class="text-lg font-semibold">Map Setting</h3>
           </div>
           
@@ -37,7 +37,7 @@ System Setting
         {# Interpolations Section #}
         <section class="space-y-4">
           <div class="flex items-center gap-2 border-b border-base-200 pb-2">
-            <i class="ph ph-chart-scatter text-xl text-primary"></i>
+            <i class="ph ph-chart-scatter text-xl text-brand-600"></i>
             <h3 class="text-lg font-semibold text-base-content">Interpolations summary setting</h3>
           </div>
           
@@ -67,7 +67,7 @@ System Setting
     <div class="card-body">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div class="flex items-center gap-3">
-          <i class="ph-fill ph-api text-3xl text-primary"></i>
+          <i class="ph-fill ph-api text-3xl text-brand-600"></i>
           <h2 class="card-title text-2xl font-bold">API Setting</h2>
         </div>
         <a class="btn btn-primary btn-sm md:btn-md gap-2" href="{{ url_for('system_settings.add_api_token')}}">
@@ -92,7 +92,7 @@ System Setting
               <td class="font-medium align-top py-4">{{ key.source }}</td>
               <td class="align-top py-4">
                 <div class="flex flex-col gap-1">
-                  <button onclick="access_token_modal_{{ key.id }}.showModal()" class="btn btn-xs btn-ghost text-primary justify-start px-0 font-semibold hover:bg-primary/10">
+                  <button onclick="access_token_modal_{{ key.id }}.showModal()" class="btn btn-xs btn-ghost text-brand-600 justify-start px-0 font-semibold hover:bg-primary/10">
                     <i class="ph ph-key"></i> Access Token
                   </button>
                   <button onclick="refresh_token_modal_{{ key.id }}.showModal()" class="btn btn-xs btn-ghost text-secondary justify-start px-0 font-semibold hover:bg-secondary/10">
@@ -114,7 +114,7 @@ System Setting
               </td>
               <td class="align-top py-4">
                 <div class="flex justify-center gap-1">
-                  <a href="{{ url_for('system_settings.edit_api_token', api_token_id=key.id)}}" class="btn btn-square btn-sm btn-ghost hover:text-primary tooltip" data-tip="Edit">
+                  <a href="{{ url_for('system_settings.edit_api_token', api_token_id=key.id)}}" class="btn btn-square btn-sm btn-ghost hover:text-brand-600 tooltip" data-tip="Edit">
                     <i class="ph ph-pencil-simple text-lg"></i>
                   </a>
                   <button onclick="delete_modal_{{ key.id }}.showModal()" class="btn btn-square btn-sm btn-ghost hover:text-error tooltip" data-tip="Delete">

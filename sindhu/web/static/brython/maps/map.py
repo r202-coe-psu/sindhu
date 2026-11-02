@@ -619,8 +619,8 @@ class Map:
         btn.href = "#"
         btn.title = "ปักหมุดบนแผนที่"
         btn.attrs["role"] = "button"
-        btn.html = '<svg width="14" height="18" viewBox="0 0 30 40"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="#6b7280"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg>'
-        btn.style.cssText = "display:flex;align-items:center;justify-content:center;width:30px;height:30px;cursor:pointer;border-top:1px solid #ccc;"
+        btn.html = '<svg width="14" height="18" viewBox="0 0 30 40"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="currentColor"/><circle cx="15" cy="15" r="6" fill="var(--color-base-100)"/></svg>'
+        btn.style.cssText = "display:flex;align-items:center;justify-content:center;width:30px;height:30px;cursor:pointer;border-top:1px solid var(--color-ink-200);"
         self._pin_btn = btn
 
         hint = doc.getElementById("pin_hint_banner")
@@ -661,7 +661,7 @@ class Map:
         reset_btn.html = (
             '<i class="ph ph-arrow-counter-clockwise"></i> กลับสู่มุมมองเริ่มต้น'
         )
-        reset_btn.style.cssText = "background:white;color:var(--color-brand-600);border:1px solid var(--color-ink-200);border-radius:9999px;padding:6px 16px;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.15);display:flex;align-items:center;gap:6px;"
+        reset_btn.style.cssText = "background:var(--color-base-100);color:var(--color-brand-600);border:1px solid var(--color-ink-200);border-radius:9999px;padding:6px 16px;font-size:13px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.15);display:flex;align-items:center;gap:6px;"
         reset_div <= reset_btn
         map_container <= reset_div
         self._reset_btn_container = reset_div
@@ -929,7 +929,7 @@ class Map:
             )
 
             marker.bindTooltip(
-                f"<div class='font-sans text-xs p-0.5'><div class='font-bold text-slate-900'>{title}</div><div class='font-semibold text-[11px] mt-0.5' style='color:{color};'>● {status_label}</div></div>",
+                f"<div class='font-sans text-xs p-0.5'><div class='font-bold text-ink-900'>{title}</div><div class='font-semibold text-[11px] mt-0.5' style='color:{color};'>● {status_label}</div></div>",
                 {"direction": "top", "offset": [0, -32]},
             )
 

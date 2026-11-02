@@ -50,11 +50,11 @@ class BaseMap(Map):
     SECTION_USABLE_PX = 62
     SECTION_HEADROOM = 1.25
     SECTION_OVERFLOW_PX = 26
-    SECTION_RISK_TINTS = {
-        3: ("#9333ea", "#f3e8ff"),
-        2: ("#ef4444", "#fee2e2"),
-        1: ("#f97316", "#ffedd5"),
-        0: ("#16a34a", "#dcfce7"),
+    SECTION_RISK_COLORS = {
+        3: "#9333ea",
+        2: "#ef4444",
+        1: "#f97316",
+        0: "#16a34a",
     }
 
     def build_waterlevel_section(self, station, waterlevel_val, diff_val):
@@ -105,19 +105,19 @@ class BaseMap(Map):
         else:
             water_y = bank_y + gap * px_per_m
 
-        color, tint = self.SECTION_RISK_TINTS.get(station.get("risk"), (None, None))
+        color = self.SECTION_RISK_COLORS.get(station.get("risk"))
         if color is None:
             d = diff_val if diff_val is not None else None
             if d is None:
-                color, tint = "#64748b", "#f1f5f9"
+                color = "#64748b"
             elif d >= 0.5:
-                color, tint = self.SECTION_RISK_TINTS[3]
+                color = self.SECTION_RISK_COLORS[3]
             elif d >= 0:
-                color, tint = self.SECTION_RISK_TINTS[2]
+                color = self.SECTION_RISK_COLORS[2]
             elif d >= -0.5:
-                color, tint = self.SECTION_RISK_TINTS[1]
+                color = self.SECTION_RISK_COLORS[1]
             else:
-                color, tint = self.SECTION_RISK_TINTS[0]
+                color = self.SECTION_RISK_COLORS[0]
 
         if diff_val is None:
             headline = "ไม่มีค่าเทียบตลิ่ง"
@@ -154,20 +154,20 @@ class BaseMap(Map):
                     stroke="#f97316" stroke-width="1.4" stroke-dasharray="4 3"/>
             """
             warn_row = f"""
-            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:rgba(15,23,42,0.6);">
+            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:var(--color-ink-500);">
                 <span style="width:8px; height:2px; background:#f97316; flex:none;"></span>
                 <span>เฝ้าระวัง</span>
-                <b style="color:#0f172a; font-weight:600; margin-left:auto;">{warning:.2f}</b>
+                <b style="color:var(--color-ink-900); font-weight:600; margin-left:auto;">{warning:.2f}</b>
             </div>
             """
 
         crest_row = ""
         if crest is not None:
             crest_row = f"""
-            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:rgba(15,23,42,0.6);">
-                <span style="width:8px; height:2px; background:#475569; flex:none;"></span>
+            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:var(--color-ink-500);">
+                <span style="width:8px; height:2px; background:var(--color-ink-600); flex:none;"></span>
                 <span>ตลิ่ง</span>
-                <b style="color:#0f172a; font-weight:600; margin-left:auto;">{crest:.2f}</b>
+                <b style="color:var(--color-ink-900); font-weight:600; margin-left:auto;">{crest:.2f}</b>
             </div>
             """
 
@@ -180,15 +180,15 @@ class BaseMap(Map):
         <svg viewBox="0 0 {view_w} {view_h}" style="display:block; width:100%; height:auto;">
           <defs>
             <linearGradient id="wlg-{sid}" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" style="stop-color:var(--color-brand-400)"/>
-              <stop offset="100%" style="stop-color:var(--color-brand-700)"/>
+              <stop offset="0%" style="stop-color:var(--color-brand-500)"/>
+              <stop offset="100%" style="stop-color:var(--color-brand-300)"/>
             </linearGradient>
             <clipPath id="wlc-{sid}">
               <path d="M {ch_l} {bank_y} V {wall_y} C {ch_l} 132 {ch_r} 132 {ch_r} {wall_y} V {bank_y} Z"/>
               <rect x="0" y="0" width="{view_w}" height="{bank_y}"/>
             </clipPath>
           </defs>
-          <path d="M 0 {bank_y} H {channel} H {view_w} V {view_h} H 0 Z" fill="#eef2f7"/>
+          <path d="M 0 {bank_y} H {channel} H {view_w} V {view_h} H 0 Z" style="fill:var(--color-ink-100)"/>
           <g clip-path="url(#wlc-{sid})">
             <g transform="translate(0,{rise:.1f})">
               <animateTransform attributeName="transform" type="translate"
@@ -197,14 +197,14 @@ class BaseMap(Map):
               <rect x="0" y="{water_y:.1f}" width="{view_w}" height="{view_h}"
                     fill="url(#wlg-{sid})"/>
               <line x1="0" y1="{water_y:.1f}" x2="{view_w}" y2="{water_y:.1f}"
-                    style="stroke:var(--color-brand-100)" stroke-width="2"/>
+                    style="stroke:var(--color-brand-800)" stroke-width="2"/>
             </g>
           </g>
           <path d="M 0 {bank_y} H {channel} H {view_w}" fill="none"
-                stroke="#64748b" stroke-width="2.2" stroke-linejoin="round"/>
+                style="stroke:var(--color-ink-500)" stroke-width="2.2" stroke-linejoin="round"/>
           {warn_line}
           <line x1="{ch_l - 16}" y1="{bank_y}" x2="{ch_r + 16}" y2="{bank_y}"
-                stroke="#475569" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.85"/>
+                style="stroke:var(--color-ink-600)" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.85"/>
           {arrow_html}
         </svg>
         """
@@ -215,8 +215,8 @@ class BaseMap(Map):
                 <div style="flex:0 0 172px;">{svg}</div>
                 <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:10px;">
                     <div>
-                        <div style="font-size:10px; color:rgba(15,23,42,0.55); line-height:1; margin-bottom:4px;">ระดับน้ำ</div>
-                        <div style="font-size:21px; font-weight:800; color:var(--color-brand-700); line-height:1; letter-spacing:-0.02em;">{f"{waterlevel_val:.2f}" if waterlevel_val is not None else "—"}<span style="font-size:11px; font-weight:600; color:rgba(15,23,42,0.5); margin-left:2px;">ม.</span></div>
+                        <div style="font-size:10px; color:var(--color-ink-500); line-height:1; margin-bottom:4px;">ระดับน้ำ</div>
+                        <div style="font-size:21px; font-weight:800; color:var(--color-brand-700); line-height:1; letter-spacing:-0.02em;">{f"{waterlevel_val:.2f}" if waterlevel_val is not None else "—"}<span style="font-size:11px; font-weight:600; color:var(--color-ink-500); margin-left:2px;">ม.</span></div>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:4px;">
                         {crest_row}
@@ -224,7 +224,7 @@ class BaseMap(Map):
                     </div>
                 </div>
             </div>
-            <div style="margin-top:8px; text-align:center; font-size:12px; font-weight:700; border-radius:7px; padding:4px 0; color:{color}; background:{tint};">{headline}</div>
+            <div style="margin-top:8px; text-align:center; font-size:12px; font-weight:700; border-radius:7px; padding:4px 0; color:color-mix(in oklab, {color} 55%, white); background:color-mix(in oklab, {color} 24%, transparent);">{headline}</div>
         </div>
         """
 
@@ -454,9 +454,9 @@ class BaseMap(Map):
                         or "CCTV"
                     )
                     cctv_btn_html = f"""
-                    <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(0,0,0,0.12);">
+                    <div style="margin-top:6px; padding-top:6px; border-top:1px dashed var(--color-ink-200);">
                         <button type="button" onclick="if(window.open_cctv_detail)window.open_cctv_detail('{cctv_source}','{cctv_upstream_id}')"
-                            style="width:100%; background:var(--color-brand-600); color:white; font-size:11px; font-weight:600; padding:6px 10px; border-radius:6px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            style="width:100%; background:var(--color-primary); color:white; font-size:11px; font-weight:600; padding:6px 10px; border-radius:6px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:6px;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h10a2 2 0 0 1 2 2v2.5l4-2.5v12l-4-2.5V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
                             <span>ดูกล้อง CCTV ({cctv_title})</span>
                         </button>
@@ -800,16 +800,16 @@ class BaseMap(Map):
             shift = "0" if percent == 0 else ("-100%" if percent >= 99 else "-50%")
             ticks += (
                 f'<span style="position:absolute;white-space:nowrap;font-size:9px;'
-                f'color:#71717a;left:{percent}%;transform:translateX({shift});">'
+                f'color:var(--color-ink-500);left:{percent}%;transform:translateX({shift});">'
                 f'{tick["value"]:g}</span>'
             )
 
         container.html = f"""
-        <div class="bg-white/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
-            <div style="font-size:11px;font-weight:600;color:#3f3f46;line-height:1.2;">{legend.get("title", "")}</div>
-            <div style="display:flex;height:10px;margin-top:6px;border:1px solid #d4d4d8;border-radius:3px;overflow:hidden;">{chips}</div>
+        <div class="bg-base-100/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
+            <div style="font-size:11px;font-weight:600;color:var(--color-ink-700);line-height:1.2;">{legend.get("title", "")}</div>
+            <div style="display:flex;height:10px;margin-top:6px;border:1px solid var(--color-ink-300);border-radius:3px;overflow:hidden;">{chips}</div>
             <div style="position:relative;height:13px;margin-top:2px;">{ticks}</div>
-            <div style="font-size:9px;color:#a1a1aa;text-align:right;">{legend.get("unit", "")}</div>
+            <div style="font-size:9px;color:var(--color-ink-500);text-align:right;">{legend.get("unit", "")}</div>
         </div>
         """
 
@@ -890,7 +890,7 @@ class BaseMap(Map):
             subtitle_html = f'<div class="text-[9px] text-ink-400">{subtitle}</div>'
 
         container.html = f"""
-        <div class="bg-white/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
+        <div class="bg-base-100/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
             <div class="flex items-center gap-1.5 pb-1 mb-1.5 border-b border-ink-100">
                 <i class="ph ph-palette text-brand-600 text-sm"></i>
                 <div class="leading-tight">
