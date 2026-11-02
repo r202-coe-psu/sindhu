@@ -286,8 +286,92 @@ class ZoneStyleTests(unittest.TestCase):
             map_view.map.fits[0][0].names,
             ["zone-1", "zone-2", "zone-3", "zone-4", "reference"],
         )
-        self.assertEqual(map_view.map.fits[0][1], {"padding": [24, 24]})
+        self.assertEqual(map_view.map.fits[0][1], map_view.fit_bounds_options())
         self.assertEqual(map_view.map.invalidations, [{"pan": False}])
+
+
+class _Rect:
+    def __init__(self, left, top, width, height):
+        self.left, self.top, self.width, self.height = left, top, width, height
+
+
+class _Element:
+    def __init__(self, rect):
+        self._rect = rect
+
+    def getBoundingClientRect(self):
+        return self._rect
+
+
+class _ClassList:
+    def __init__(self, names):
+        self.names = set(names)
+
+    def contains(self, name):
+        return name in self.names
+
+
+class _Body:
+    def __init__(self, classes):
+        self.classList = _ClassList(classes)
+
+
+class _Document:
+    def __init__(self, panel=None, body_classes=()):
+        self.body = _Body(body_classes)
+        self._panel = panel
+
+    def getElementById(self, element_id):
+        return self._panel if element_id == "monitor_panel" else None
+
+
+class _Window:
+    def __init__(self, width, height):
+        self.innerWidth, self.innerHeight = width, height
+
+
+class MapFitPaddingTests(unittest.TestCase):
+    """fitBounds keeps zones out from under the floating cards (#67)."""
+
+    def fit(self, document, window):
+        import maps.map as map_module
+
+        browser = sys.modules["browser"]
+        saved = (browser.document, map_module.window)
+        browser.document, map_module.window = document, window
+        try:
+            return Map.__new__(Map).fit_bounds_options()
+        finally:
+            browser.document, map_module.window = saved
+
+    def test_desktop_pads_the_right_edge_by_the_panel(self):
+        panel = _Element(_Rect(left=1044, top=64, width=384, height=824))
+        options = self.fit(_Document(panel), _Window(1440, 900))
+        self.assertEqual(options["paddingTopLeft"], [24, 80])
+        self.assertEqual(options["paddingBottomRight"], [420, 24])
+
+    def test_folded_pill_adds_no_side_padding(self):
+        panel = _Element(_Rect(left=1100, top=64, width=328, height=46))
+        options = self.fit(_Document(panel), _Window(1440, 900))
+        self.assertEqual(options["paddingTopLeft"], [24, 80])
+        self.assertEqual(options["paddingBottomRight"], [24, 24])
+
+    def test_open_panel_covering_a_phone_is_ignored(self):
+        panel = _Element(_Rect(left=12, top=64, width=366, height=768))
+        options = self.fit(_Document(panel), _Window(390, 844))
+        self.assertEqual(options["paddingBottomRight"], [24, 24])
+
+    def test_focus_mode_uses_plain_padding(self):
+        panel = _Element(_Rect(left=1044, top=64, width=384, height=824))
+        document = _Document(panel, body_classes=["map-focus"])
+        options = self.fit(document, _Window(1440, 900))
+        self.assertEqual(options["paddingTopLeft"], [24, 24])
+        self.assertEqual(options["paddingBottomRight"], [24, 24])
+
+    def test_hidden_panel_adds_no_side_padding(self):
+        panel = _Element(_Rect(left=0, top=0, width=0, height=0))
+        options = self.fit(_Document(panel), _Window(1440, 900))
+        self.assertEqual(options["paddingBottomRight"], [24, 24])
 
 
 if __name__ == "__main__":

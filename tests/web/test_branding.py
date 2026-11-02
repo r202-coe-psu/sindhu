@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from sindhu import web
+from . import shared_app
 
 IMAGES = Path(__file__).resolve().parents[2] / "sindhu" / "web" / "static" / "images"
 
@@ -26,8 +26,7 @@ class LogoFileTests(unittest.TestCase):
 class BrandingTemplateTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = web.create_app()
-        cls.app.config["APP_TITLE"] = "เฝ้าดู (FoundDoo)"
+        cls.app = shared_app()
         cls.client = cls.app.test_client()
 
     def _html(self, path):
