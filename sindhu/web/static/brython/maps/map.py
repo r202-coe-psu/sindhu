@@ -59,15 +59,6 @@ class Map:
                 <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors""",
             },
         )
-        self.positron = self.leaflet.tileLayer(
-            "https://{s}.basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}.png",
-            {
-                "attribution": """&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors,
-                                &copy; <a href="http://cartodb.com/attributions">CartoDB</a>""",
-                "subdomains": "abcd",
-                "maxZoom": 19,
-            },
-        )
         self.world_imagery = self.leaflet.tileLayer(
             "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
             {
@@ -84,12 +75,38 @@ class Map:
                  Esri China (Hong Kong), and the GIS User Community"""
             },
         )
+        # Default basemap (#67): Windy-style neutral grey without labels, so
+        # the rivers, zones and markers are the only colour on the map.  Esri's
+        # Light Gray Canvas needs no API key (Carto's tiles now do, and show a
+        # watermark without one); the .basemap-gray filter in setup.css turns
+        # its land (#efefef) into ≈ #808080 with the sea a little darker.
+        esri_canvas = "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas"
+        self.gray = self.leaflet.tileLayer(
+            esri_canvas + "/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+            {
+                "attribution": "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+                "maxNativeZoom": 16,  # canvas tiles stop at 16; scale beyond
+                "maxZoom": 19,
+                "className": "basemap-gray",
+            },
+        )
+        # Place names to lay over the grey basemap when wanted.  Off by
+        # default: the zones carry their own labels.
+        self.place_labels = self.leaflet.tileLayer(
+            esri_canvas + "/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+            {
+                "maxNativeZoom": 16,  # canvas tiles stop at 16; scale beyond
+                "maxZoom": 19,
+                "pane": "placeLabels",
+            },
+        )
         self.base_maps = {
-            "<b><span style='color: grey'>Positron</span></b>": self.positron,
-            "<b><span style='color: blue'>OpenStreet Map</span></b>": self.openstreet,
-            "<b><span style='color: green'>World Map</span></b>": self.world_imagery,
-            "<b><span style='color: teal'>World Topo Map</span></b>": self.world_topo,
+            "เทา (ค่าเริ่มต้น)": self.gray,
+            "OpenStreetMap": self.openstreet,
+            "ภาพถ่ายดาวเทียม": self.world_imagery,
+            "ภูมิประเทศ": self.world_topo,
         }
+        self.overlay_maps = {"ชื่อสถานที่": self.place_labels}
 
         container = self.leaflet.DomUtil.get("mapid")
         if "leaflet" in container.className:
@@ -103,7 +120,7 @@ class Map:
                 "center": self.center,
                 "zoom": self.zoom,
                 "min_zoom": self.min_zoom,
-                "layers": self.openstreet,
+                "layers": self.gray,
                 "renderer": self.leaflet.canvas({"padding": 0.5}),
                 "scrollWheelZoom": False,  # disable original zoom function
                 "smoothWheelZoom": True,  # enable smooth zoom
@@ -118,7 +135,12 @@ class Map:
         #     navi, nonavi
         # )  # set user's current location on map(success, error)
 
-        self.leaflet.control.layers(self.base_maps).addTo(self.map)
+        # Above the zones and rivers, below the markers, and transparent to
+        # the mouse so everything underneath stays clickable.
+        label_pane = self.map.createPane("placeLabels")
+        label_pane.style.zIndex = "450"
+        label_pane.style.pointerEvents = "none"
+        self.leaflet.control.layers(self.base_maps, self.overlay_maps).addTo(self.map)
 
         self.zone_layer = None
         self.station_lines = []
@@ -134,7 +156,8 @@ class Map:
         self._selected_zone_id = None
         self._on_zone_select = None
         self._zone_renderer = None
-        self.zone_shading_mode = "outline"
+        self.zone_shading_mode = "shaded"
+        self.zone_legend_entries = []
         self.zones_visible = True
         self.reference_boundary_visible = True
         # Visual feeds are a separate overlay. Station/source/zone filtering
@@ -158,47 +181,69 @@ class Map:
     ===========================================================================
     """
 
-    # Deliberately heavier than the river lines: the basins cover most of the
-    # map, so a subtle outline disappears into them and the zone stops looking
-    # clickable.
-    # Boundary lines without shaded fill: keeps the underlying map and streets
-    # clearly visible while distinctly showing zone perimeters.
-    ZONE_STYLE = {
-        "fillColor": "transparent",
-        "fillOpacity": 0.0,
-        "color": "#4338ca",
-        "weight": 2.5,
-        "opacity": 0.95,
-        "dashArray": "",
-    }
-    ZONE_HOVER_STYLE = {
-        "fillColor": "#6366f1",
-        "fillOpacity": 0.08,
-        "color": "#3730a3",
-        "weight": 3.5,
-        "opacity": 1.0,
-        "dashArray": "",
-    }
-    ZONE_SELECTED_STYLE = {
-        "fillColor": "#2563eb",
-        "fillOpacity": 0.12,
-        "color": "#1d4ed8",
-        "weight": 4.0,
-        "opacity": 1.0,
-        "dashArray": "",
-    }
+    # A zone shows two things at once (#67): its outline says which zone it
+    # is, its fill says how risky it is.  The outline colours sit in hue gaps
+    # the risk legend leaves free (green/orange/red/purple/grey) and away from
+    # the light-cyan rivers; each zone also has its own dash pattern so the
+    # three stay apart for colour-blind users.  A dark casing under every
+    # outline keeps the lighter colours visible on the grey basemap.
+    ZONE_IDENTITIES = (
+        {"color": "#fef08a", "dash": ""},  # zone 1: pale lemon, solid
+        {"color": "#ff2bd6", "dash": "10 6"},  # zone 2: magenta, dashed
+        {"color": "#4f7cff", "dash": "2 6 10 6"},  # zone 3: vivid blue, dash-dot
+    )
+    ZONE_CASING_COLOR = "#141414"
+    ZONE_WEIGHT = 2.6
+    ZONE_RISK_FILL_OPACITY = 0.28
+
+    @staticmethod
+    def _is_reference_zone(zone, style=None):
+        style = style or zone.get("style") or zone.get("metadata") or {}
+        code = str(zone.get("code") or "").lower()
+        return (
+            zone.get("zone_kind") == "reference"
+            or style.get("role") == "reference_boundary"
+            or code in ("hatyai-boundary", "hatyai")
+            or ("hatyai" in code and "zone" not in code)
+            or zone.get("name") in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
+            or zone.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
+        )
+
+    @staticmethod
+    def _zone_order_key(zone):
+        """Sort zones by their number so zone 1 always gets the first colour."""
+        meta = zone.get("metadata") or {}
+        number = meta.get("zone_number")
+        if number is None:
+            digits = "".join(ch for ch in str(zone.get("code") or "") if ch.isdigit())
+            number = digits or None
+        try:
+            return (0, int(number), str(zone.get("code") or ""))
+        except (TypeError, ValueError):
+            return (1, 0, str(zone.get("code") or zone.get("name") or ""))
+
+    def zone_identity(self, zone, index):
+        """Outline colour and dash for one zone.
+
+        A colour an admin set on the zone (/zones) wins; otherwise the zone
+        takes the next colour of ZONE_IDENTITIES.
+        """
+        style = zone.get("style") or zone.get("metadata") or {}
+        preset = self.ZONE_IDENTITIES[index % len(self.ZONE_IDENTITIES)]
+        return {
+            "color": style.get("stroke") or preset["color"],
+            "dash": style.get("dashArray") or preset["dash"],
+        }
 
     def set_zone_risk(self, zone_id, level):
-        """Colour a zone by the worst risk among its stations."""
+        """Fill a zone with the worst risk among its stations."""
         entry = self.zone_layers_by_id.get(str(zone_id))
         if not entry:
             return False
 
         entry["risk"] = level
-        if self._selected_zone_id != str(zone_id):
-            entry["layer"].setStyle(self.zone_style(str(zone_id)))
-        else:
-            entry["layer"].setStyle(self.zone_style(str(zone_id), "selected"))
+        state = "selected" if self._selected_zone_id == str(zone_id) else "normal"
+        self._apply_zone_style(str(zone_id), state)
         return True
 
     def zone_style(self, zone_id, state="normal"):
@@ -208,37 +253,9 @@ class Map:
         zone = entry.get("zone") or {}
         custom_style = zone.get("style") or zone.get("metadata") or {}
 
-        fill = custom_style.get("fill", self.ZONE_STYLE["fillColor"])
-        stroke = custom_style.get("stroke") or fill or self.ZONE_STYLE["color"]
-        is_ref = (
-            zone.get("zone_kind") == "reference"
-            or custom_style.get("role") == "reference_boundary"
-            or zone.get("code") in ("hatyai-boundary", "hatyai")
-            or (
-                zone.get("code")
-                and "hatyai" in str(zone.get("code")).lower()
-                and "zone" not in str(zone.get("code")).lower()
-            )
-            or zone.get("name") in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
-            or zone.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
-        )
-        dash_array = custom_style.get("dashArray", "")
-        stroke_weight = max(float(custom_style.get("stroke-width", 2.5)), 2.5)
-
-        zone_shading = custom_style.get("shading_mode") or getattr(
-            self, "zone_shading_mode", "outline"
-        )
-        is_shaded = zone_shading == "shaded"
-        fill_opacity_normal = (
-            float(custom_style.get("fill-opacity", 0.28)) if is_shaded else 0.0
-        )
-        fill_color_normal = fill if is_shaded else "transparent"
-
-        risk_val = level.get("risk", -1) if level else -1
-
         # Reference boundaries are geographic context, not a risk zone.
-        # Keep them as a plain black outline without fill and never recolour them.
-        if is_ref:
+        # Keep them as a plain outline without fill and never recolour them.
+        if self._is_reference_zone(zone, custom_style):
             ref_color = (
                 custom_style.get("stroke")
                 or (
@@ -258,48 +275,71 @@ class Map:
                 "interactive": False,
             }
 
-        # Zone colours follow the same risk scale as their stations.  A zone
-        # gets the worst level among its member stations; no data is grey.
-        if not level:
-            level = {
-                "risk": -1,
-                "color": "#9ca3af",
-                "border": "#6b7280",
-                "fill_opacity": 0.1,
-            }
-        alert_color = level.get("border") or level.get("color")
-        if is_shaded:
-            alert_fill = level.get("color")
-            fill_opacity = min(level.get("fill_opacity", 0.28), 0.50)
-            if state == "hover":
-                fill_opacity = min(fill_opacity + 0.12, 0.65)
-            elif state == "selected":
-                fill_opacity = min(fill_opacity + 0.20, 0.70)
-        else:
-            alert_fill = "transparent" if state == "normal" else alert_color
-            fill_opacity = (
-                0.0 if state == "normal" else (0.08 if state == "hover" else 0.12)
-            )
-
-        return {
-            "fillColor": alert_fill,
-            "fillOpacity": fill_opacity,
-            "color": alert_color,
-            "weight": (
-                stroke_weight + 1.5
-                if state == "selected"
-                else (stroke_weight + 1.0 if state == "hover" else stroke_weight)
-            ),
-            "opacity": 1.0 if state != "normal" else 0.95,
-            "dashArray": dash_array,
+        identity = entry.get("identity") or self.zone_identity(zone, 0)
+        weight = self.ZONE_WEIGHT + {"hover": 1.0, "selected": 1.5}.get(state, 0.0)
+        style = {
+            "color": identity["color"],
+            "dashArray": identity["dash"],
+            "weight": weight,
+            "opacity": 1.0,
+            "fillColor": "transparent",
+            "fillOpacity": 0.0,
         }
 
+        # The fill carries the risk.  No data stays unfilled: grey on the
+        # grey basemap would say nothing, and the legend calls it "ไม่ทราบ".
+        risk = level.get("risk", -1) if level else -1
+        shaded = getattr(self, "zone_shading_mode", "shaded") != "outline"
+        if shaded and risk is not None and risk >= 0:
+            base = float(
+                custom_style.get("fill-opacity") or self.ZONE_RISK_FILL_OPACITY
+            )
+            style["fillColor"] = level.get("color")
+            style["fillOpacity"] = min(
+                base + {"hover": 0.10, "selected": 0.17}.get(state, 0.0), 0.6
+            )
+        elif state != "normal":
+            # Still show which zone is under the pointer or selected.
+            style["fillColor"] = identity["color"]
+            style["fillOpacity"] = 0.08 if state == "hover" else 0.12
+        return style
+
+    def zone_casing_style(self, zone_style):
+        """Dark line drawn under a zone outline so it reads on any basemap."""
+        return {
+            "color": self.ZONE_CASING_COLOR,
+            "weight": zone_style["weight"] + 2.5,
+            "opacity": 0.85,
+            "fill": False,
+            "dashArray": "",
+        }
+
+    def _apply_zone_style(self, zone_id, state="normal"):
+        entry = self.zone_layers_by_id.get(str(zone_id))
+        if not entry:
+            return
+        style = self.zone_style(str(zone_id), state)
+        entry["layer"].setStyle(style)
+        casing = entry.get("casing")
+        if casing:
+            casing.setStyle(self.zone_casing_style(style))
+
+    def _set_zone_entry_visible(self, entry, visible):
+        for key in ("casing", "layer"):
+            layer = entry.get(key)
+            if not layer:
+                continue
+            if visible and not self.map.hasLayer(layer):
+                layer.addTo(self.map)
+            elif not visible and self.map.hasLayer(layer):
+                self.map.removeLayer(layer)
+
     def set_zone_shading_mode(self, mode):
-        """Toggle zone fill between outline-only (transparent) and shaded (colored fill)."""
+        """Show the risk fill ("shaded", the default) or outlines only ("outline")."""
         self.zone_shading_mode = mode
-        for key, entry in self.zone_layers_by_id.items():
+        for key in self.zone_layers_by_id:
             state = "selected" if self._selected_zone_id == key else "normal"
-            entry["layer"].setStyle(self.zone_style(key, state))
+            self._apply_zone_style(key, state)
 
     def set_zone_visible(self, zone_identifier, visible):
         """Set visibility of an individual zone by id, code, or zone_number."""
@@ -319,26 +359,15 @@ class Map:
         if not entry:
             return False
 
-        layer = entry["layer"]
-        if visible:
-            if not self.map.hasLayer(layer):
-                layer.addTo(self.map)
-        else:
-            if self.map.hasLayer(layer):
-                self.map.removeLayer(layer)
+        self._set_zone_entry_visible(entry, visible)
         return True
 
     def set_zones_visible(self, visible):
         """Show or hide all zone polygon layers."""
         self.zones_visible = visible
         for entry in self.zone_layers_by_id.values():
-            layer = entry["layer"]
-            if visible:
-                if not self.map.hasLayer(layer):
-                    layer.addTo(self.map)
-            else:
-                if self.map.hasLayer(layer):
-                    self.map.removeLayer(layer)
+            self._set_zone_entry_visible(entry, visible)
+        self._refresh_zone_legend()
 
     def set_reference_boundary_visible(self, visible):
         """Show or hide the Hat Yai reference boundary layer."""
@@ -356,112 +385,108 @@ class Map:
         """Draw every zone boundary so users can click a zone directly.
 
         Zones live in their own pane below the overlay pane, which keeps the
-        river lines and the station markers clickable on top of them.
+        river lines and the station markers clickable on top of them.  Their
+        name labels sit in a pane above the rivers but below the markers.
         """
         self._on_zone_select = on_select
         self.clear_all_zones()
+        self.zone_legend_entries = []
 
         if not zones:
+            self._refresh_zone_legend()
             return
 
         pane = self.map.getPane("zones")
         if not pane:
             pane = self.map.createPane("zones")
             pane.style.zIndex = "350"
+        label_pane = self.map.getPane("zoneLabels")
+        if not label_pane:
+            label_pane = self.map.createPane("zoneLabels")
+            label_pane.style.zIndex = "450"
+            label_pane.style.pointerEvents = "none"
 
         if self._zone_renderer is None:
             self._zone_renderer = self.leaflet.svg({"pane": "zones"})
         zone_renderer = self._zone_renderer
 
+        flood_zones = []
         for zone in zones:
-            if zone.get("status") == "inactive":
+            if zone.get("status") == "inactive" or not zone.get("boundary"):
                 continue
-
-            boundary = zone.get("boundary")
-            if not boundary:
+            if not str(zone.get("id", "")) or self._is_reference_zone(zone):
                 continue
+            flood_zones.append(zone)
+        flood_zones.sort(key=self._zone_order_key)
 
-            zone_id = str(zone.get("id", ""))
-            if not zone_id:
-                continue
-
+        for index, zone in enumerate(flood_zones):
+            zone_id = str(zone.get("id"))
             name = zone.get("name_th") or zone.get("name") or ""
             style = zone.get("style") or zone.get("metadata") or {}
+            identity = self.zone_identity(zone, index)
             feature = {
                 "type": "Feature",
                 "properties": {"name": name},
-                "geometry": boundary,
+                "geometry": zone.get("boundary"),
             }
-
-            is_ref = (
-                zone.get("zone_kind") == "reference"
-                or style.get("role") == "reference_boundary"
-                or zone.get("code") in ("hatyai-boundary", "hatyai")
-                or (
-                    zone.get("code")
-                    and "hatyai" in str(zone.get("code")).lower()
-                    and "zone" not in str(zone.get("code")).lower()
-                )
-                or zone.get("name")
-                in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
-                or zone.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
-            )
-            if is_ref:
-                continue
-
-            stroke_color = (
-                style.get("stroke") or style.get("fill") or self.ZONE_STYLE["color"]
-            )
-            weight_val = max(float(style.get("stroke-width") or 2.5), 2.5)
-            dash_array = "8, 6" if is_ref else ""
-
-            zone_shading = style.get("shading_mode") or getattr(
-                self, "zone_shading_mode", "outline"
-            )
-            is_shaded = zone_shading == "shaded"
-            fill_color = (
-                style.get("fill") or stroke_color if is_shaded else "transparent"
-            )
-            fill_opacity = (
-                float(style.get("fill-opacity") or 0.28) if is_shaded else 0.0
-            )
-
-            feature_style = {
-                "fillColor": fill_color,
-                "fillOpacity": fill_opacity,
-                "color": stroke_color,
-                "weight": weight_val,
-                "opacity": 0.95,
-                "dashArray": dash_array,
+            entry = {
+                "zone": zone,
+                "risk": None,
+                "style": style,
+                "identity": identity,
             }
+            self.zone_layers_by_id[zone_id] = entry
+            initial = self.zone_style(zone_id)
 
+            entry["casing"] = self.leaflet.geoJson(
+                feature,
+                {
+                    "pane": "zones",
+                    "renderer": zone_renderer,
+                    "interactive": False,
+                    "style": self.zone_casing_style(initial),
+                },
+            )
             layer = self.leaflet.geoJson(
                 feature,
                 {
                     "pane": "zones",
                     "renderer": zone_renderer,
                     "interactive": True,
-                    "style": feature_style,
+                    "style": initial,
                 },
             )
+            entry["layer"] = layer
             if name:
                 layer.bindTooltip(
-                    name,
-                    {"sticky": True, "direction": "top", "className": "zone-label"},
+                    f'<span class="zone-chip" style="color:{identity["color"]};'
+                    f'border-color:{identity["color"]};">{name}</span>',
+                    {
+                        "permanent": True,
+                        "direction": "center",
+                        "className": "zone-label",
+                        "pane": "zoneLabels",
+                        "interactive": False,
+                    },
                 )
 
             layer.on("mouseover", self._make_zone_hover(zone_id, True))
             layer.on("mouseout", self._make_zone_hover(zone_id, False))
             layer.on("click", self._make_zone_click(zone_id, zone))
             if self.zones_visible:
-                layer.addTo(self.map)
+                self._set_zone_entry_visible(entry, True)
 
-            self.zone_layers_by_id[zone_id] = {
-                "layer": layer,
-                "zone": zone,
-                "risk": None,
-                "style": style,
-            }
+            self.zone_legend_entries.append(
+                {"name": name, "color": identity["color"], "dash": identity["dash"]}
+            )
+
+        self._refresh_zone_legend()
+
+    def _refresh_zone_legend(self):
+        """Let the legend (maps/base.py) list the zone outlines it now has."""
+        refresh = getattr(self, "refresh_legend", None)
+        if refresh:
+            refresh()
 
     def clear_reference_boundary(self):
         if self.reference_boundary_layer and self.map.hasLayer(
@@ -544,9 +569,7 @@ class Map:
             entry = self.zone_layers_by_id.get(zone_id)
             if not entry:
                 return
-            entry["layer"].setStyle(
-                self.zone_style(zone_id, "hover" if entering else "normal")
-            )
+            self._apply_zone_style(zone_id, "hover" if entering else "normal")
 
         return handler
 
@@ -576,10 +599,12 @@ class Map:
         # and clickable so a different zone can be picked straight away.
         for key, other in self.zone_layers_by_id.items():
             if key == zone_id:
-                other["layer"].setStyle(self.zone_style(key, "selected"))
+                self._apply_zone_style(key, "selected")
+                if other.get("casing"):
+                    other["casing"].bringToFront()
                 other["layer"].bringToFront()
             else:
-                other["layer"].setStyle(self.zone_style(key))
+                self._apply_zone_style(key)
 
         if fit_bounds:
             self.map.fitBounds(entry["layer"].getBounds(), self.fit_bounds_options())
@@ -589,14 +614,14 @@ class Map:
 
     def clear_zone_selection(self):
         self._selected_zone_id = None
-        for zone_id, entry in self.zone_layers_by_id.items():
-            entry["layer"].setStyle(self.zone_style(zone_id))
+        for zone_id in self.zone_layers_by_id:
+            self._apply_zone_style(zone_id)
 
     def clear_all_zones(self):
         # The permanent reference boundary is deliberately not part of this
         # collection. Clearing/selecting flood zones must leave it visible.
         for entry in self.zone_layers_by_id.values():
-            self.map.removeLayer(entry["layer"])
+            self._set_zone_entry_visible(entry, False)
         self.zone_layers_by_id = {}
         self._selected_zone_id = None
 
@@ -1348,6 +1373,42 @@ class Map:
         ):
             self.geojson.bringToFront()
 
+    # Waterways from songkhla_basins.geojson, styled by OSM fclass (#67).
+    # Light cyan reads on the grey basemap (river 3.2:1 against #808080).
+    # Streams and drains are the bulk of the 807 lines, so they only appear
+    # from zoom 11, where they no longer blur into a mesh.
+    RIVER_STYLES = {
+        "river": {"color": "#a5f3fc", "weight": 3.0, "opacity": 1.0, "dash": ""},
+        "canal": {"color": "#7dd3fc", "weight": 2.0, "opacity": 1.0, "dash": ""},
+        "stream": {"color": "#7dd3fc", "weight": 1.1, "opacity": 0.75, "dash": ""},
+        "drain": {"color": "#7dd3fc", "weight": 1.0, "opacity": 0.75, "dash": "3 3"},
+    }
+    RIVER_DETAIL_ZOOM = 11
+    RIVER_HIGHLIGHT = "#ecfeff"
+
+    def river_style(self, fclass, zoom):
+        """Leaflet style for one waterway at a zoom level."""
+        spec = self.RIVER_STYLES.get(fclass) or self.RIVER_STYLES["stream"]
+        minor = fclass not in ("river", "canal")
+        if minor and (zoom or 0) < self.RIVER_DETAIL_ZOOM:
+            # Weight 0 also removes the hit area, so hidden streams can't be
+            # clicked by accident.
+            return {
+                "weight": 0,
+                "opacity": 0,
+                "fillOpacity": 0,
+                "className": "river-line",
+            }
+        scale = 1.4 if (zoom or 0) >= 14 else (1.2 if (zoom or 0) >= 12 else 1.0)
+        return {
+            "color": spec["color"],
+            "weight": round(spec["weight"] * scale, 2),
+            "opacity": spec["opacity"],
+            "dashArray": spec["dash"],
+            "fillOpacity": 0,
+            "className": "river-line",
+        }
+
     def set_rivers_layer(self, data):
         """Dedicated method for rendering river/waterway GeoJSON with flow animation."""
         if not data or len(data) == 0:
@@ -1366,17 +1427,9 @@ class Map:
 
         def style(feature):
             properties = get_val(feature, "properties", {})
-            stroke_color = get_val(properties, "stroke", "#C6C6C6")
-            stroke_w = get_val(
-                properties, "stroke-width", get_val(properties, "stroke_w", 2)
+            return self.river_style(
+                get_val(properties, "fclass", None), self.map.getZoom()
             )
-            return {
-                "color": stroke_color,
-                "weight": stroke_w,
-                "opacity": 0.3,
-                "fillOpacity": 0,
-                "className": "river-line",
-            }
 
         def _clear_river_selection(self_ref):
             """Helper to reset the currently selected river layer."""
@@ -1404,8 +1457,9 @@ class Map:
                 target_layer = e.target
                 feature_obj = target_layer.feature
                 props = get_val(feature_obj, "properties", {})
-                color = get_val(props, "stroke", "#0984e3")
-                target_layer.setStyle({"weight": 5, "color": color, "opacity": 0.95})
+                target_layer.setStyle(
+                    {"weight": 5, "color": self.RIVER_HIGHLIGHT, "opacity": 1.0}
+                )
                 if hasattr(target_layer, "_path") and target_layer._path:
                     target_layer._path.classList.add("flowing-river")
 
@@ -1464,6 +1518,21 @@ class Map:
                 "renderer": self.leaflet.svg(),
             },
         ).addTo(self.map)
+
+        def on_zoom(_event=None):
+            rivers = self.shapes.get("rivers")
+            if not rivers:
+                return
+            rivers.setStyle(style)
+            selected = self._selected_river
+            if selected and rivers.hasLayer(selected):
+                selected.setStyle(
+                    {"weight": 5, "color": self.RIVER_HIGHLIGHT, "opacity": 1.0}
+                )
+
+        if not getattr(self, "_river_zoom_bound", False):
+            self.map.on("zoomend", on_zoom)
+            self._river_zoom_bound = True
 
     def set_shape_boundary(self, data):
         def style(feature):

@@ -858,8 +858,41 @@ class BaseMap(Map):
         )
         self.metric_legends[document_id] = True
 
+    def refresh_legend(self):
+        """Redraw the legend with its last levels, e.g. after zones load."""
+        args = getattr(self, "_legend_args", None)
+        if args:
+            self.render_legend(*args)
+
+    def zone_legend_html(self):
+        """Legend rows for the zone outlines, kept apart from the risk colours."""
+        entries = getattr(self, "zone_legend_entries", None) or []
+        if not entries or not getattr(self, "zones_visible", True):
+            return ""
+        rows = ""
+        for entry in entries:
+            dash = f' stroke-dasharray="{entry["dash"]}"' if entry["dash"] else ""
+            rows += f"""
+            <div class="flex items-center gap-2">
+                <svg width="22" height="8" viewBox="0 0 22 8" class="shrink-0" aria-hidden="true">
+                    <line x1="0" y1="4" x2="22" y2="4" stroke="#141414" stroke-width="5"/>
+                    <line x1="0" y1="4" x2="22" y2="4" stroke="{entry["color"]}" stroke-width="2.6"{dash}/>
+                </svg>
+                <span class="text-[11px] text-ink-700 leading-tight">{entry["name"]}</span>
+            </div>
+            """
+        return f"""
+            <div class="mt-1.5 pt-1.5 border-t border-ink-100">
+                <div class="text-[10px] font-semibold text-ink-600">ขอบเขตโซน</div>
+                <div class="text-[9px] text-ink-400 mb-1">สีพื้นในโซน = ระดับความเสี่ยงสูงสุดในโซน</div>
+                <div class="flex flex-col gap-1">{rows}</div>
+            </div>
+        """
+
     def render_legend(self, levels, title, subtitle=""):
         from browser import document as doc
+
+        self._legend_args = (levels, title, subtitle)
 
         rows = ""
         for level in levels:
@@ -901,6 +934,7 @@ class BaseMap(Map):
             <div class="flex flex-col gap-1">
                 {rows}
             </div>
+            {self.zone_legend_html()}
         </div>
         """
 

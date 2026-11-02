@@ -267,6 +267,23 @@ body.map-focus .map-focus-hint {
 }
 
 /*
+ * Map layers (#67).  The default basemap is Esri's Light Gray Canvas
+ * turned Windy grey: land #efefef → ≈ #808080, water a little darker.  The zone name
+ * labels are chips coloured with each zone's outline colour (maps/map.py).
+ */
+.basemap-gray { filter: grayscale(1) brightness(0.535); }
+.zone-chip {
+  display: inline-block;
+  padding: 0.125rem 0.625rem;
+  border: 1.5px solid;
+  border-radius: 9999px;
+  background: rgb(20 20 20 / 0.85);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/*
  * Leaflet's own controls, popups and tooltips in the dark theme.  Station
  * tooltips (.tooltip-marker) draw their own card and stay transparent.
  */
@@ -337,15 +354,11 @@ body.map-focus .map-focus-hint {
         --cctv-dur-short: 220ms;
         --cctv-dur-long: 300ms;
     }
-.zone-label {
-        background: rgba(37, 99, 235, 0.85) !important;
-        color: white !important;
+    .zone-label {
+        background: transparent !important;
         border: none !important;
-        border-radius: 6px !important;
-        padding: 4px 10px !important;
-        font-size: 13px !important;
-        font-weight: 600 !important;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+        box-shadow: none !important;
+        padding: 0 !important;
     }
 
     .zone-label::before {
@@ -929,14 +942,10 @@ body.map-focus .map-focus-hint {
 
 @layer utilities {
   .zone-label {
-    background: rgba(37, 99, 235, 0.85) !important;
-    color: white !important;
+    background: transparent !important;
     border: none !important;
-    border-radius: 6px !important;
-    padding: 4px 10px !important;
-    font-size: 13px !important;
-    font-weight: 600 !important;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+    box-shadow: none !important;
+    padding: 0 !important;
   }
 
   .zone-label::before {

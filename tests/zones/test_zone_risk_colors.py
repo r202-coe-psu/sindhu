@@ -191,61 +191,71 @@ class ZoneStyleTests(unittest.TestCase):
     def make_map(self, zone, risk):
         map_view = Map.__new__(Map)
         map_view.map = _BrowserStub()
-        map_view.zone_shading_mode = "outline"
+        map_view.zone_shading_mode = "shaded"
         map_view._selected_zone_id = None
         map_view.zone_layers_by_id = {
             "zone": {"zone": zone, "risk": risk, "layer": _Layer()}
         }
         return map_view
 
-    def test_normal_and_no_data_follow_risk_colours(self):
-        zone = {"metadata": {"fill": "#123456", "stroke": "#654321"}}
+    # #67: the outline says which zone it is; the fill says how risky it is.
 
-        expected = {0: ("#16a34a", "#22c55e"), -1: ("#6b7280", "#9ca3af")}
-        for risk, (border, fill) in expected.items():
-            with self.subTest(mode="outline", risk=risk):
+    def test_outline_keeps_the_zone_colour_at_every_risk(self):
+        zone = {"code": "songkhla-zone-1"}
+        for risk in (-1, 0, 1, 2, 3):
+            with self.subTest(risk=risk):
                 level = metric_infos.get_risk_level(risk)
                 style = self.make_map(zone, level).zone_style("zone")
-                self.assertEqual(style["color"], border)
-                self.assertEqual(style["fillColor"], "transparent")
-                self.assertEqual(style["fillOpacity"], 0.0)
+                self.assertEqual(style["color"], Map.ZONE_IDENTITIES[0]["color"])
+                self.assertEqual(style["dashArray"], Map.ZONE_IDENTITIES[0]["dash"])
 
-            with self.subTest(mode="shaded", risk=risk):
+    def test_fill_follows_the_risk_colour(self):
+        zone = {"code": "songkhla-zone-1"}
+        for risk in (0, 1, 2, 3):
+            with self.subTest(risk=risk):
                 level = metric_infos.get_risk_level(risk)
-                map_view = self.make_map(zone, level)
-                map_view.zone_shading_mode = "shaded"
-                style = map_view.zone_style("zone")
-                self.assertEqual(style["color"], border)
-                self.assertEqual(style["fillColor"], fill)
-                self.assertGreater(style["fillOpacity"], 0.0)
-
-    def test_alert_colours_match_warning_critical_and_evacuation(self):
-        zone = {"metadata": {"fill": "#123456", "stroke": "#654321"}}
-        expected_colours = {
-            1: ("#f97316", "#ea580c"),
-            2: ("#ef4444", "#dc2626"),
-            3: ("#9333ea", "#7e22ce"),
-        }
-
-        for risk in (1, 2, 3):
-            with self.subTest(mode="outline", risk=risk):
-                level = metric_infos.get_risk_level(risk)
-                self.assertEqual(
-                    (level["color"], level["border"]), expected_colours[risk]
-                )
                 style = self.make_map(zone, level).zone_style("zone")
-                self.assertEqual(style["color"], level["border"])
-                self.assertEqual(style["fillColor"], "transparent")
-                self.assertEqual(style["fillOpacity"], 0.0)
-
-            with self.subTest(mode="shaded", risk=risk):
-                level = metric_infos.get_risk_level(risk)
-                map_view = self.make_map(zone, level)
-                map_view.zone_shading_mode = "shaded"
-                style = map_view.zone_style("zone")
-                self.assertEqual(style["color"], level["border"])
                 self.assertEqual(style["fillColor"], level["color"])
-                self.assertGreater(style["fillOpacity"], 0.0)
+                self.assertAlmostEqual(style["fillOpacity"], Map.ZONE_RISK_FILL_OPACITY)
+
+    def test_zone_without_data_is_not_filled(self):
+        level = metric_infos.get_risk_level(-1)
+        style = self.make_map({"code": "songkhla-zone-1"}, level).zone_style("zone")
+        self.assertEqual(style["fillColor"], "transparent")
+        self.assertEqual(style["fillOpacity"], 0.0)
+
+    def test_colour_set_on_the_zone_page_wins_over_the_preset(self):
+        zone = {"metadata": {"fill": "#123456", "stroke": "#654321"}}
+        level = metric_infos.get_risk_level(2)
+        style = self.make_map(zone, level).zone_style("zone")
+        self.assertEqual(style["color"], "#654321")
+        self.assertEqual(style["fillColor"], level["color"])
+
+    def test_zones_take_preset_colours_in_number_order(self):
+        zones = [
+            {"code": "songkhla-zone-3"},
+            {"code": "songkhla-zone-1"},
+            {"code": "songkhla-zone-2"},
+        ]
+        ordered = sorted(zones, key=Map._zone_order_key)
+        map_view = Map.__new__(Map)
+        map_view.map = _BrowserStub()
+        colours = [
+            map_view.zone_identity(zone, index)["color"]
+            for index, zone in enumerate(ordered)
+        ]
+        self.assertEqual([z["code"][-1] for z in ordered], ["1", "2", "3"])
+        self.assertEqual(colours, [i["color"] for i in Map.ZONE_IDENTITIES])
+        self.assertEqual(len(set(i["dash"] for i in Map.ZONE_IDENTITIES)), 3)
+
+    def test_casing_is_a_wider_dark_line_without_fill(self):
+        level = metric_infos.get_risk_level(1)
+        map_view = self.make_map({"code": "songkhla-zone-1"}, level)
+        style = map_view.zone_style("zone", "selected")
+        casing = map_view.zone_casing_style(style)
+        self.assertEqual(casing["color"], Map.ZONE_CASING_COLOR)
+        self.assertGreater(casing["weight"], style["weight"])
+        self.assertFalse(casing["fill"])
 
     def test_reference_boundary_keeps_its_colour_during_alert(self):
         zone = {
@@ -259,16 +269,15 @@ class ZoneStyleTests(unittest.TestCase):
         self.assertEqual(style["color"], "#222222")
         self.assertEqual(style["fillColor"], "transparent")
 
-    def test_switching_shading_mode_restyles_existing_zone(self):
-        zone = {"metadata": {"fill": "#123456", "stroke": "#654321"}}
+    def test_outline_only_mode_drops_the_risk_fill(self):
         level = metric_infos.get_risk_level(2)
-        map_view = self.make_map(zone, level)
+        map_view = self.make_map({"code": "songkhla-zone-1"}, level)
         layer = map_view.zone_layers_by_id["zone"]["layer"]
 
-        map_view.set_zone_shading_mode("shaded")
+        map_view.set_zone_shading_mode("outline")
 
-        self.assertEqual(layer.styles[-1]["fillColor"], level["color"])
-        self.assertGreater(layer.styles[-1]["fillOpacity"], 0.0)
+        self.assertEqual(layer.styles[-1]["fillColor"], "transparent")
+        self.assertEqual(layer.styles[-1]["color"], Map.ZONE_IDENTITIES[0]["color"])
 
     def test_initial_viewport_includes_every_zone_and_reference_boundary(self):
         map_view = Map.__new__(Map)
@@ -288,6 +297,36 @@ class ZoneStyleTests(unittest.TestCase):
         )
         self.assertEqual(map_view.map.fits[0][1], map_view.fit_bounds_options())
         self.assertEqual(map_view.map.invalidations, [{"pan": False}])
+
+
+class RiverStyleTests(unittest.TestCase):
+    def style(self, fclass, zoom):
+        map_view = Map.__new__(Map)
+        map_view.map = _BrowserStub()
+        return map_view.river_style(fclass, zoom)
+
+    def test_main_waterways_show_at_every_zoom(self):
+        for fclass in ("river", "canal"):
+            with self.subTest(fclass=fclass):
+                self.assertGreater(self.style(fclass, 8)["weight"], 0)
+
+    def test_streams_and_drains_wait_for_detail_zoom(self):
+        for fclass in ("stream", "drain"):
+            with self.subTest(fclass=fclass):
+                self.assertEqual(
+                    self.style(fclass, Map.RIVER_DETAIL_ZOOM - 1)["weight"], 0
+                )
+                self.assertGreater(
+                    self.style(fclass, Map.RIVER_DETAIL_ZOOM)["weight"], 0
+                )
+
+    def test_rivers_are_drawn_heavier_than_canals_and_streams(self):
+        zoom = 13
+        weights = [self.style(f, zoom)["weight"] for f in ("river", "canal", "stream")]
+        self.assertEqual(weights, sorted(weights, reverse=True))
+
+    def test_unknown_class_is_drawn_like_a_stream(self):
+        self.assertEqual(self.style(None, 13), self.style("stream", 13))
 
 
 class _Rect:
@@ -340,7 +379,9 @@ class MapFitPaddingTests(unittest.TestCase):
         saved = (browser.document, map_module.window)
         browser.document, map_module.window = document, window
         try:
-            return Map.__new__(Map).fit_bounds_options()
+            map_view = Map.__new__(Map)
+            map_view.map = _BrowserStub()
+            return map_view.fit_bounds_options()
         finally:
             browser.document, map_module.window = saved
 

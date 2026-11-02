@@ -89,7 +89,8 @@ class BaseMonitor:
                 )
                 self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
                 self.map.add_focus_control()
-                self.map.load_river_basins(self.api_url)
+                # Rivers come from songkhla_basins.geojson (load_rivers below);
+                # /v1/basins holds the same 807 lines, so it is not drawn twice.
 
             await self.load_zones()
             await self.load_rivers()
