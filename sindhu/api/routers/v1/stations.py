@@ -215,6 +215,28 @@ async def update_visibility(
     return schemas.stations.StationList(stations=stations)
 
 
+@router.put("/{station_id}/bank-level")
+async def update_bank_level(
+    station_id: PydanticObjectId,
+    form: schemas.stations.UpdateStationBankLevel,
+    current_user: models.User = Depends(deps.get_current_active_superuser),
+) -> schemas.stations.Station:
+    station = await models.Station.get(station_id)
+    if not station:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Not found station",
+        )
+
+    station.bank_level = form.bank_level
+    station.updated_date = datetime.datetime.now()
+    await station.save()
+
+    await FastAPICache.clear(namespace=STATION_METRICS_CACHE_NAMESPACE)
+
+    return station
+
+
 @router.get("/metrics/{metric_type}/latest")
 @cache(expire=1800, namespace=STATION_METRICS_CACHE_NAMESPACE)
 async def get_latest_metrics_by_metric_type(

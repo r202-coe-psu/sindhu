@@ -110,6 +110,7 @@ def _station(code, source, water_level, warning=1.0, critical=2.0, evacuation=3.
     return {
         "code": code,
         "source": source,
+        "bank_level": critical,
         "metadata": {
             "water_level_warning": warning,
             "water_level_critical": critical,
@@ -150,6 +151,15 @@ class ZoneRiskAggregationTests(unittest.TestCase):
         monitor = self.make_monitor([_station("stale", "rid", None)])
 
         level = monitor.zone_risk_level({"stations": [{"code": "stale"}]})
+
+        self.assertEqual(level["risk"], -1)
+
+    def test_station_without_bank_level_does_not_recolour_zone(self):
+        station = _station("no-bank", "rid", 3.5)
+        station["bank_level"] = None
+        monitor = self.make_monitor([station])
+
+        level = monitor.zone_risk_level({"stations": [{"code": "no-bank"}]})
 
         self.assertEqual(level["risk"], -1)
 

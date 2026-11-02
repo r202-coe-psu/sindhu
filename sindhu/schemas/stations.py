@@ -1,5 +1,5 @@
 import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 from beanie import PydanticObjectId
 
@@ -42,6 +42,10 @@ class Station(bases.BaseSchema, BaseStation):
     # pipelines use to find stations, so hiding a station never stops ingest.
     # Kept off CreateUpdateStation so a generic update cannot reset it.
     is_visible: bool = True
+    # Bank height in metres above MSL, entered by an admin. Lives outside
+    # `metadata` because the ETL rewrites that on every run, and off
+    # CreateUpdateStation for the same reason as `is_visible`.
+    bank_level: Optional[float] = None
 
 
 class StationList(BaseModel):
@@ -59,3 +63,8 @@ class StationWithMetricsList(BaseModel):
 class UpdateStationVisibility(BaseModel):
     station_ids: List[PydanticObjectId] = Field(min_length=1)
     is_visible: bool
+
+
+class UpdateStationBankLevel(BaseModel):
+    # Required, so clearing the value has to be an explicit null
+    bank_level: Optional[float] = Field(..., allow_inf_nan=False)
