@@ -27,7 +27,10 @@
   {% include "base/google_analytic.html" %}
   {% block additional_head %}{% endblock %}
   
-  <title>{% block title %}{% endblock %} | {{ config.get('APP_TITLE') }}</title>
+  <link rel="icon" href="{{ 'images/favicon.ico' | static_url }}" sizes="16x16 32x32 48x48">
+
+  {% set page_title %}{% block title %}{% endblock %}{% endset %}
+  <title>{% if page_title | trim %}{{ page_title | trim }} | {% endif %}{{ config.get('APP_TITLE') }}</title>
 </head>
 
 <body>
