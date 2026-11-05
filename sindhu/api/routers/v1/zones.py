@@ -24,14 +24,39 @@ async def get_all(
 
 
 @router.get("/{zone_id}")
-async def get(zone_id: PydanticObjectId) -> schemas.zones.ZoneWithStations:
+async def get(zone_id: PydanticObjectId) -> schemas.zones.ZoneWithUpstream:
     zone = await models.Zone.find_one(models.Zone.id == zone_id, fetch_links=True)
     if not zone:
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found zone",
         )
-    return zone
+    upstream_zones = await models.Zone.find(
+        {"_id": {"$in": zone.upstream_zone_ids}, "status": {"$ne": "delete"}}
+    ).to_list()
+    result = schemas.zones.ZoneWithUpstream.model_validate(zone, from_attributes=True)
+    result.upstream_zones = [
+        schemas.zones.ZoneSummary.model_validate(z, from_attributes=True)
+        for z in upstream_zones
+    ]
+    return result
+
+
+async def _upstream_ids_or_422(
+    zone_form: schemas.zones.CreateUpdateZone, zone_id: PydanticObjectId | None
+) -> list[PydanticObjectId]:
+    if zone_form.zone_kind == "reference":
+        return []
+    upstream_ids = list(dict.fromkeys(zone_form.upstream_zone_ids))
+    message = await services.zones.check_upstream(
+        str(zone_id) if zone_id else None, [str(u) for u in upstream_ids]
+    )
+    if message:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=message,
+        )
+    return upstream_ids
 
 
 @router.get("/{zone_id}/stations")
@@ -81,8 +106,12 @@ async def create(
             detail="This zone already exists",
         )
     station_ids = [] if zone_form.zone_kind == "reference" else zone_form.station_ids
+    upstream_ids = await _upstream_ids_or_422(zone_form, None)
     db_stations = await models.Station.find({"_id": {"$in": station_ids}}).to_list()
-    zone = models.Zone(**zone_form.model_dump(exclude={"station_ids"}))
+    zone = models.Zone(
+        **zone_form.model_dump(exclude={"station_ids", "upstream_zone_ids"}),
+        upstream_zone_ids=upstream_ids,
+    )
     zone.stations = db_stations
     await zone.insert()
     return zone
@@ -101,9 +130,13 @@ async def update(
             detail="Not found zone",
         )
     station_ids = [] if zone_form.zone_kind == "reference" else zone_form.station_ids
+    upstream_ids = await _upstream_ids_or_422(zone_form, zone_id)
     db_stations = await models.Station.find({"_id": {"$in": station_ids}}).to_list()
-    for key, value in zone_form.model_dump(exclude={"station_ids"}).items():
+    for key, value in zone_form.model_dump(
+        exclude={"station_ids", "upstream_zone_ids"}
+    ).items():
         setattr(db_zone, key, value)
+    db_zone.upstream_zone_ids = upstream_ids
     db_zone.stations = db_stations
     db_zone.updated_date = datetime.datetime.now()
     await db_zone.save()
