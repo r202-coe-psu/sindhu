@@ -168,6 +168,14 @@
                     </div>
                     <div id="station-chips" class="flex flex-wrap gap-1 mt-2"></div>
                 </div>
+                <div id="upstream-group">
+                    <label class="label text-xs font-semibold text-ink-600 py-0.5">ลุ่มน้ำต้นน้ำ (น้ำไหลมาจาก)</label>
+                    <div class="relative">
+                        <input id="upstream-search" type="text" autocomplete="off" class="input input-bordered input-sm w-full" placeholder="ค้นหาลุ่มน้ำต้นน้ำ..." />
+                        <div id="upstream-dropdown" class="hidden absolute z-[1100] mt-1 w-full max-h-48 overflow-y-auto bg-white border border-ink-200 rounded-lg shadow-lg custom-scrollbar"></div>
+                    </div>
+                    <div id="upstream-chips" class="flex flex-wrap gap-1 mt-2"></div>
+                </div>
                 <div>
                     <label class="label text-xs font-semibold text-ink-600 py-0.5">ขอบเขต (GeoJSON) — วาดบนแผนที่ หรือวาง/แก้พิกัด</label>
                     <textarea id="zone-boundary" rows="4" class="textarea textarea-bordered textarea-sm w-full font-mono text-xs leading-tight" placeholder='{"type":"Polygon","coordinates":[[[100.5,7.0],[100.6,7.0],[100.6,7.1],[100.5,7.0]]]}'></textarea>
@@ -194,7 +202,7 @@ const API_URL = "{{ api_url }}";
 const TOKEN_URL = "{{ url_for('accounts.get_token') }}";
 const HATYAI_BOUNDARY_URL = "{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}";
 let map, drawnItems, drawControl, editingZoneId = null, allZoneLayers = {}, referenceBoundaryLayer = null;
-let allStations = [], selectedStationIds = [];
+let allStations = [], selectedStationIds = [], selectedUpstreamIds = [];
 
 async function fetchStations() {
     try {
@@ -252,6 +260,65 @@ function addStation(id) {
 function removeStation(id) {
     selectedStationIds = selectedStationIds.filter(x => x !== id);
     renderStationChips();
+}
+
+function zoneLabel(z) {
+    return z.name_th || z.name || z.code || "";
+}
+
+function upstreamCandidates() {
+    return zonesCache.filter(z => z.zone_kind !== "reference" && z.id !== editingZoneId);
+}
+
+function renderUpstreamChips() {
+    const el = document.getElementById("upstream-chips");
+    el.innerHTML = selectedUpstreamIds.map(id => {
+        const z = zonesCache.find(x => x.id === id);
+        return `<span class="badge badge-sm badge-info text-white gap-1 py-2">
+            ${z ? zoneLabel(z) : id}
+            <button type="button" class="hover:text-red-200" onclick="removeUpstream('${id}')">&times;</button>
+        </span>`;
+    }).join("");
+}
+
+function renderUpstreamDropdown(query) {
+    const el = document.getElementById("upstream-dropdown");
+    const q = (query || "").trim().toLowerCase();
+    const matches = upstreamCandidates()
+        .filter(z => !selectedUpstreamIds.includes(z.id))
+        .filter(z => !q || [z.name, z.name_th, z.code].some(v => (v || "").toLowerCase().includes(q)));
+    if (!matches.length) {
+        el.innerHTML = '<div class="px-3 py-2 text-sm text-ink-400">ไม่พบลุ่มน้ำ</div>';
+    } else {
+        el.innerHTML = matches.map(z => `
+            <div class="px-3 py-2 text-sm hover:bg-brand-50 cursor-pointer" onmousedown="event.preventDefault();addUpstream('${z.id}')">
+                ${zoneLabel(z)} <span class="font-mono text-xs text-ink-400">${z.code}</span>
+            </div>
+        `).join("");
+    }
+    el.classList.remove("hidden");
+}
+
+function addUpstream(id) {
+    if (!selectedUpstreamIds.includes(id)) selectedUpstreamIds.push(id);
+    const search = document.getElementById("upstream-search");
+    search.value = "";
+    renderUpstreamChips();
+    renderUpstreamDropdown("");
+    search.focus();
+}
+
+function removeUpstream(id) {
+    selectedUpstreamIds = selectedUpstreamIds.filter(x => x !== id);
+    renderUpstreamChips();
+}
+
+function syncUpstreamGroup() {
+    const isRef = document.getElementById("zone-kind").value === "reference";
+    document.getElementById("upstream-group").classList.toggle("hidden", isRef);
+    document.getElementById("upstream-search").value = "";
+    document.getElementById("upstream-dropdown").classList.add("hidden");
+    renderUpstreamChips();
 }
 
 async function authHeaders() {
@@ -359,7 +426,7 @@ async function saveZone(body, zoneId) {
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "บันทึกไม่สำเร็จ");
+        throw new Error((err.errors && err.errors[0]) || err.detail || "บันทึกไม่สำเร็จ");
     }
     return res.json();
 }
@@ -480,6 +547,7 @@ async function quickToggleZoneStatus(id) {
         zone_kind: z.zone_kind || "flood",
         boundary: z.boundary,
         station_ids: stationIds,
+        upstream_zone_ids: z.upstream_zone_ids || [],
         metadata: z.metadata || {},
         status: newStatus,
     };
@@ -508,6 +576,7 @@ async function quickToggleShadingMode(id) {
         zone_kind: z.zone_kind || "flood",
         boundary: z.boundary,
         station_ids: stationIds,
+        upstream_zone_ids: z.upstream_zone_ids || [],
         metadata: updatedMeta,
         status: z.status || "active",
     };
@@ -540,6 +609,13 @@ function renderZoneList(zones) {
             || z.name === "Hat Yai"
             || z.name_th === "หาดใหญ่";
         const stationCount = (z.stations || []).length;
+        const upstreamNames = isRef ? [] : (z.upstream_zone_ids || [])
+            .map(id => zonesCache.find(x => x.id === id))
+            .filter(Boolean)
+            .map(zoneLabel);
+        const upstreamText = upstreamNames.length
+            ? `<div class="text-xs text-sky-700 mt-0.5 break-words">ต้นน้ำ: ${upstreamNames.join(', ')}</div>`
+            : '';
 
         /* Quick toggle button for status */
         const statusBtn = isActive
@@ -582,6 +658,7 @@ function renderZoneList(zones) {
                             <span>•</span>
                             <span>${stationCount} สถานี</span>
                         </div>
+                        ${upstreamText}
                         <div class="flex items-center gap-1.5 mt-2">
                             ${statusBtn}
                             ${shadingBtn}
@@ -808,6 +885,8 @@ function editZone(id) {
     document.getElementById("station-search").value = "";
     document.getElementById("station-dropdown").classList.add("hidden");
     renderStationChips();
+    selectedUpstreamIds = (z.upstream_zone_ids || []).slice();
+    syncUpstreamGroup();
     setBoundaryText(z.boundary);
     showJsonError(null);
     document.getElementById("form-title").textContent = "แก้ไขลุ่มน้ำ: " + (z.name_th || z.name);
@@ -859,6 +938,8 @@ function resetForm() {
     selectedStationIds = [];
     renderStationChips();
     document.getElementById("station-dropdown").classList.add("hidden");
+    selectedUpstreamIds = [];
+    syncUpstreamGroup();
     document.getElementById("form-title").textContent = "สร้างลุ่มน้ำใหม่";
     document.getElementById("btn-cancel").classList.add("hidden");
     document.getElementById("boundary-status").classList.add("hidden");
@@ -905,6 +986,13 @@ document.addEventListener("DOMContentLoaded", function() {
         setTimeout(() => document.getElementById("station-dropdown").classList.add("hidden"), 150);
     });
 
+    const upstreamSearch = document.getElementById("upstream-search");
+    upstreamSearch.addEventListener("focus", () => renderUpstreamDropdown(upstreamSearch.value));
+    upstreamSearch.addEventListener("input", () => renderUpstreamDropdown(upstreamSearch.value));
+    upstreamSearch.addEventListener("blur", () => {
+        setTimeout(() => document.getElementById("upstream-dropdown").classList.add("hidden"), 150);
+    });
+
     document.getElementById("zone-form").addEventListener("submit", async function(e) {
         e.preventDefault();
         const boundaryRaw = document.getElementById("zone-boundary").value.trim();
@@ -940,6 +1028,7 @@ document.addEventListener("DOMContentLoaded", function() {
             zone_kind: document.getElementById("zone-kind").value || "flood",
             boundary: boundaryGeom,
             station_ids: selectedStationIds,
+            upstream_zone_ids: document.getElementById("zone-kind").value === "reference" ? [] : selectedUpstreamIds,
             metadata: updatedMeta,
             status: status,
         };
