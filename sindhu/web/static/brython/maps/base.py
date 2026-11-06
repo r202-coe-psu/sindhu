@@ -584,7 +584,7 @@ class BaseMap(Map):
                     metric_color = station["risk_color"]
 
                 if style == "donut":
-                    html_content = f'<div style="width: 24px; height: 24px; border-radius: 50%; background: conic-gradient({metric_color} {percent}%, #e5e7eb 0); border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>'
+                    html_content = f'<div style="width: 24px; height: 24px; border-radius: 50%; background: conic-gradient({metric_color} {percent}%, var(--color-ink-200) 0); border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>'
                     metric_marker = self.leaflet.divIcon(
                         {
                             "className": "custom-div-icon",
@@ -604,7 +604,7 @@ class BaseMap(Map):
                         }
                     )
                 elif style == "tank":
-                    html_content = f'<div style="width: 14px; height: 28px; border-radius: 6px; border: 2px solid #cbd5e1; background: white; position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"><div style="position: absolute; bottom: 0; left: 0; width: 100%; height: {percent}%; background-color: {metric_color}; transition: height 0.3s ease;"></div></div>'
+                    html_content = f'<div style="width: 14px; height: 28px; border-radius: 6px; border: 2px solid white; background: var(--color-base-100); position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"><div style="position: absolute; bottom: 0; left: 0; width: 100%; height: {percent}%; background-color: {metric_color}; transition: height 0.3s ease;"></div></div>'
                     metric_marker = self.leaflet.divIcon(
                         {
                             "className": "custom-div-icon",

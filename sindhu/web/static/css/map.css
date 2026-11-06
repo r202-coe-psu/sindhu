@@ -1,0 +1,221 @@
+/* Override Leaflet default tooltip styling for our custom class */
+.leaflet-tooltip.tooltip-marker {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.leaflet-tooltip-left.tooltip-marker::before,
+.leaflet-tooltip-right.tooltip-marker::before,
+.leaflet-tooltip-top.tooltip-marker::before,
+.leaflet-tooltip-bottom.tooltip-marker::before {
+  display: none !important; /* Hide default leaflet arrow */
+}
+
+/*
+ * Full-window map pages (templates/base/map_page.html).
+ * The map fills the window and every other piece of UI is a card floating on
+ * it.  `.map-ui` cards hide while <body> has `map-focus` (the ⛶ control).
+ */
+.map-page {
+  --map-gap: 0.75rem;
+  --map-top: 4rem;            /* first row under the brand / user cards */
+  --map-panel-w: 24rem;       /* data panel width on desktop */
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.map-card {
+  position: fixed;
+  z-index: 1100;
+  background: color-mix(in oklab, var(--color-base-100) 94%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--color-ink-200);
+  border-radius: 1rem;
+  box-shadow: 0 6px 20px rgb(15 23 42 / 0.14);
+}
+
+.map-brand-card {
+  top: var(--map-gap);
+  left: var(--map-gap);
+  max-width: calc(100vw - 6.5rem);
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.875rem 0.375rem 0.375rem;
+}
+
+.map-menu-card {
+  top: var(--map-top);
+  left: var(--map-gap);
+  z-index: 1150;
+  width: 16rem;
+  max-height: calc(100dvh - var(--map-top) - var(--map-gap));
+  overflow-y: auto;
+  padding-block: 0.75rem;
+  /* Opaque: it opens over the locate card, which would show through. */
+  background: var(--color-base-100);
+}
+
+.map-user-card {
+  top: var(--map-gap);
+  right: var(--map-gap);
+  padding: 0.25rem;
+  border-radius: 9999px;
+}
+
+.map-locate-card { top: var(--map-top); left: var(--map-gap); }
+
+/* The data panel hangs on the right at every width: a column on the right
+   when open, a pill under the user card when folded. */
+.monitor-panel {
+  position: fixed;
+  z-index: 1100;
+  top: var(--map-top);
+  right: var(--map-gap);
+  bottom: var(--map-gap);
+  width: min(var(--map-panel-w), calc(100vw - 2 * var(--map-gap)));
+}
+.monitor-panel.is-collapsed .monitor-panel-body { display: none; }
+/* Open, the caret points up: folding pulls the panel up into its header. */
+.monitor-panel:not(.is-collapsed) .monitor-panel-caret { transform: rotate(180deg); }
+
+.monitor-panel.is-collapsed {
+  bottom: auto;
+  width: auto;
+  /* Leave room for the locate card on the same row. */
+  max-width: min(var(--map-panel-w), calc(100vw - 5rem));
+  border-radius: 9999px;
+}
+.monitor-panel.is-collapsed .monitor-panel-header {
+  align-items: center;
+  padding: 0.375rem 0.375rem 0.375rem 1rem;
+}
+.monitor-panel.is-collapsed .monitor-panel-header::after,
+.monitor-panel.is-collapsed #panel_header_subtitle { display: none; }
+.monitor-panel.is-collapsed #panel_header_title { font-size: 0.9375rem; min-width: 0; }
+.monitor-panel.is-collapsed #panel_header_title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.monitor-panel.is-collapsed #monitor_panel_toggle { width: 2rem; height: 2rem; }
+
+/* Leaflet's right-hand controls sit below the folded pill. */
+.map-page .leaflet-top.leaflet-right { top: calc(var(--map-top) + 3.5rem - 10px); }
+
+.map-legend {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 1000;
+  max-width: 220px;
+}
+.map-scale-legend {
+  position: absolute;
+  bottom: 28px;
+  right: 12px;
+  z-index: 1000;
+  width: 250px;
+}
+
+@media (min-width: 640px) {
+  /* Wide screens: with the panel open, the controls and legend move beside
+     it instead of hiding underneath. */
+  body:not(.monitor-panel-collapsed) .map-page .leaflet-top.leaflet-right {
+    top: calc(var(--map-top) - 10px);
+    right: calc(var(--map-panel-w) + var(--map-gap));
+  }
+  body:not(.monitor-panel-collapsed) .map-page .leaflet-bottom.leaflet-right {
+    right: calc(var(--map-panel-w) + var(--map-gap));
+  }
+  body:not(.monitor-panel-collapsed) .map-page .map-scale-legend {
+    right: calc(var(--map-panel-w) + 2 * var(--map-gap));
+  }
+}
+
+/* Focus mode: only the map, the zoom bar and the ⛶ button remain. */
+body.map-focus .map-ui,
+body.map-focus .map-page .leaflet-control-layers { display: none !important; }
+body.map-focus .map-page .leaflet-top.leaflet-right { top: 0; right: 0; }
+body.map-focus .map-page .leaflet-bottom.leaflet-right { right: 0; }
+body.map-focus .map-page .leaflet-bottom { bottom: 0; }
+body.map-focus .map-page .map-reset { bottom: 12px !important; }
+
+.map-focus-btn {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.125rem;
+  border-top: 1px solid var(--color-ink-200);
+}
+.map-focus-btn[aria-pressed="true"] { background: var(--color-brand-100); color: var(--color-brand-700); }
+
+.map-focus-hint {
+  display: none;
+  position: fixed;
+  bottom: 2.5rem;
+  left: 50%;
+  z-index: 1100;
+  transform: translateX(-50%);
+  padding: 0.375rem 1rem;
+  border-radius: 9999px;
+  background: rgb(15 23 42 / 0.8);
+  color: white;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+  pointer-events: none;
+}
+body.map-focus .map-focus-hint {
+  display: block;
+  animation: map-focus-hint-out 4s ease forwards;
+}
+@keyframes map-focus-hint-out {
+  0%, 75% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.map-focus .map-focus-hint { animation-timing-function: steps(1, end); }
+}
+
+/*
+ * Leaflet's own controls, popups and tooltips in the dark theme.  Station
+ * tooltips (.tooltip-marker) draw their own card and stay transparent.
+ */
+.leaflet-container { background: var(--color-base-200); font-family: inherit; }
+.leaflet-bar,
+.leaflet-touch .leaflet-bar,
+.leaflet-touch .leaflet-control-layers { border-color: var(--color-ink-200); }
+.leaflet-bar a,
+.leaflet-bar a:hover,
+.leaflet-bar a:focus {
+  background-color: var(--color-base-100);
+  color: var(--color-ink-800);
+  border-bottom-color: var(--color-ink-200);
+}
+.leaflet-bar a:hover { background-color: var(--color-ink-100); }
+.leaflet-bar a.leaflet-disabled { background-color: var(--color-ink-50); color: var(--color-ink-300); }
+.leaflet-control-layers { background: var(--color-base-100); color: var(--color-ink-800); }
+.leaflet-control-layers-toggle { filter: invert(0.9); }
+.leaflet-control-layers-separator { border-top-color: var(--color-ink-200); }
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip { background: var(--color-base-100); color: var(--color-ink-900); }
+.leaflet-container a.leaflet-popup-close-button { color: var(--color-ink-500); }
+.leaflet-container a.leaflet-popup-close-button:hover { color: var(--color-ink-900); }
+.leaflet-tooltip:not(.tooltip-marker) {
+  background: var(--color-base-100);
+  border-color: var(--color-ink-200);
+  color: var(--color-ink-900);
+}
+.leaflet-tooltip-top:not(.tooltip-marker)::before { border-top-color: var(--color-base-100); }
+.leaflet-tooltip-bottom:not(.tooltip-marker)::before { border-bottom-color: var(--color-base-100); }
+.leaflet-tooltip-left:not(.tooltip-marker)::before { border-left-color: var(--color-base-100); }
+.leaflet-tooltip-right:not(.tooltip-marker)::before { border-right-color: var(--color-base-100); }
+.leaflet-container .leaflet-control-attribution {
+  background: color-mix(in oklab, var(--color-base-100) 80%, transparent);
+  color: var(--color-ink-500);
+}
+.leaflet-control-attribution a { color: var(--color-brand-600); }
