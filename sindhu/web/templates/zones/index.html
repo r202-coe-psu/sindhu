@@ -76,12 +76,77 @@
             </div>
         </div>
 
+        {# Tambon import Card #}
+        <div id="tambon-import-card" class="bg-white rounded-2xl shadow-lg border border-ink-100 p-5">
+            <h3 class="text-base font-bold text-ink-800 mb-1 flex items-center gap-1.5">
+                <i class="ph ph-upload-simple text-brand-600"></i> นำเข้าขอบเขตตำบล (GeoJSON)
+            </h3>
+            <p class="text-xs text-ink-500 mb-3">อัปโหลดไฟล์ GeoJSON ขอบเขตตำบล (เลือกได้หลายไฟล์ รองรับ FeatureCollection, Feature และ Polygon เปล่า) ระบบจะจัดตำบลเข้าโซนที่ทับซ้อนกันให้อัตโนมัติ</p>
+            <div class="space-y-3">
+                <input id="tambon-file" type="file" multiple accept=".json,.geojson,application/geo+json,application/json" class="file-input file-input-bordered file-input-sm w-full" onchange="onTambonFileChange(this)" />
+                <div id="tambon-file-error" class="text-xs text-red-600 hidden"></div>
+                <div id="tambon-file-summary" class="text-xs text-ink-500 hidden"></div>
+                <div id="tambon-props" class="hidden space-y-2">
+                    <div>
+                        <label class="label text-xs font-semibold text-ink-600 py-0.5">รหัสตำบล</label>
+                        <div class="flex gap-2">
+                            <select id="tambon-code-src" class="select select-bordered select-sm w-36" onchange="onTambonSettingChange()">
+                                <option value="property">จากฟิลด์</option>
+                                <option value="filename">จากชื่อไฟล์</option>
+                            </select>
+                            <select id="tambon-code-prop" class="select select-bordered select-sm flex-1 min-w-0" onchange="onTambonSettingChange()"></select>
+                            <label id="tambon-code-part-wrap" class="hidden items-center gap-1 text-xs text-ink-600">ส่วนที่
+                                <input id="tambon-code-part" type="number" min="1" value="1" class="input input-bordered input-sm w-16" oninput="onTambonSettingChange()" />
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="label text-xs font-semibold text-ink-600 py-0.5">ชื่อตำบล</label>
+                        <div class="flex gap-2">
+                            <select id="tambon-name-src" class="select select-bordered select-sm w-36" onchange="onTambonSettingChange()">
+                                <option value="property">จากฟิลด์</option>
+                                <option value="filename">จากชื่อไฟล์</option>
+                            </select>
+                            <select id="tambon-name-prop" class="select select-bordered select-sm flex-1 min-w-0" onchange="onTambonSettingChange()"></select>
+                            <label id="tambon-name-part-wrap" class="hidden items-center gap-1 text-xs text-ink-600">ตั้งแต่ส่วนที่
+                                <input id="tambon-name-part" type="number" min="1" value="2" class="input input-bordered input-sm w-16" oninput="onTambonSettingChange()" />
+                            </label>
+                        </div>
+                    </div>
+                    <div id="tambon-sep-wrap" class="hidden">
+                        <label class="label text-xs font-semibold text-ink-600 py-0.5">ตัวคั่นในชื่อไฟล์ (ชื่อไฟล์ไม่รวมนามสกุล)</label>
+                        <input id="tambon-sep" type="text" value="_" class="input input-bordered input-sm w-24" oninput="onTambonSettingChange()" />
+                        <span id="tambon-filename-example" class="text-[11px] text-ink-500 ml-2"></span>
+                    </div>
+                    <div>
+                        <label class="label text-xs font-semibold text-ink-600 py-0.5">ฟิลด์ชื่ออำเภอ (ไม่บังคับ)</label>
+                        <select id="tambon-amphoe-prop" class="select select-bordered select-sm w-full" onchange="onTambonSettingChange()"></select>
+                    </div>
+                    <div id="tambon-import-confirm" class="hidden">
+                        <button type="button" id="btn-tambon-confirm" class="btn btn-warning btn-sm w-full" onclick="runTambonImport(false)">
+                            <i class="ph ph-check"></i> ยืนยันนำเข้า
+                        </button>
+                    </div>
+                    <button type="button" id="btn-tambon-import" class="btn btn-primary btn-sm w-full" onclick="runTambonImport(true)">
+                        <i class="ph ph-magnifying-glass"></i> ตรวจสอบก่อนนำเข้า
+                    </button>
+                </div>
+                <div id="tambon-import-result" class="hidden text-xs text-ink-700 space-y-1"></div>
+            </div>
+        </div>
+
         {# Form Card #}
         <div id="zone-form-card" class="bg-white rounded-2xl shadow-lg border border-ink-100 p-5">
             <h3 class="text-base font-bold text-ink-800 mb-3" id="form-title">สร้างลุ่มน้ำใหม่</h3>
             <form id="zone-form" class="space-y-3">
                 <input type="hidden" id="zone-id" />
-                <input type="hidden" id="zone-kind" value="flood" />
+                <div>
+                    <label class="label text-xs font-semibold text-ink-600 py-0.5">ประเภทโซน</label>
+                    <select id="zone-kind" class="select select-bordered select-sm w-full">
+                        <option value="flood">โซนน้ำท่วม (flood)</option>
+                        <option value="reference">กรอบอ้างอิง (reference) — ไม่นับเป็นโซนเฝ้าระวัง</option>
+                    </select>
+                </div>
 
                 {# Status Switch #}
                 <div class="p-3 bg-ink-50 border border-ink-200 rounded-xl flex items-center justify-between">
@@ -169,6 +234,12 @@
                     <div id="station-chips" class="flex flex-wrap gap-1 mt-2"></div>
                 </div>
                 <div>
+                    <label class="label text-xs font-semibold text-ink-600 py-0.5">ตำบลในโซน</label>
+                    <input id="tambon-input" type="text" autocomplete="off" class="input input-bordered input-sm w-full" placeholder="พิมพ์ รหัส:ชื่อตำบล (เช่น 900101:คอหงส์) แล้วกด Enter..." />
+                    <div id="tambon-input-error" class="text-xs text-red-600 hidden mt-1"></div>
+                    <div id="tambon-chips" class="flex flex-wrap gap-1 mt-2"></div>
+                </div>
+                <div>
                     <label class="label text-xs font-semibold text-ink-600 py-0.5">ขอบเขต (GeoJSON) — วาดบนแผนที่ หรือวาง/แก้พิกัด</label>
                     <textarea id="zone-boundary" rows="4" class="textarea textarea-bordered textarea-sm w-full font-mono text-xs leading-tight" placeholder='{"type":"Polygon","coordinates":[[[100.5,7.0],[100.6,7.0],[100.6,7.1],[100.5,7.0]]]}'></textarea>
                     <div id="boundary-json-error" class="text-xs text-red-600 hidden mt-1"></div>
@@ -194,7 +265,7 @@ const API_URL = "{{ api_url }}";
 const TOKEN_URL = "{{ url_for('accounts.get_token') }}";
 const HATYAI_BOUNDARY_URL = "{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}";
 let map, drawnItems, drawControl, editingZoneId = null, allZoneLayers = {}, referenceBoundaryLayer = null;
-let allStations = [], selectedStationIds = [];
+let allStations = [], selectedStationIds = [], selectedTambons = [];
 
 async function fetchStations() {
     try {
@@ -252,6 +323,303 @@ function addStation(id) {
 function removeStation(id) {
     selectedStationIds = selectedStationIds.filter(x => x !== id);
     renderStationChips();
+}
+
+function escapeHtml(v) {
+    return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function tambonLabel(t) {
+    return "ต." + t.name_th + (t.amphoe_th ? " (" + t.amphoe_th + ")" : "");
+}
+
+function normalizeTambons(list) {
+    return (list || []).map(t => typeof t === "string"
+        ? {code: t, name_th: t, amphoe_th: null}
+        : {code: String(t.code), name_th: t.name_th, amphoe_th: t.amphoe_th || null});
+}
+
+function renderTambonChips() {
+    const el = document.getElementById("tambon-chips");
+    el.innerHTML = selectedTambons.map((t, i) => `<span class="badge badge-sm badge-primary gap-1 py-2" title="${escapeHtml(t.code)}">
+            ${escapeHtml(tambonLabel(t))}
+            <button type="button" class="hover:text-red-200" onclick="removeTambon(${i})">&times;</button>
+        </span>`).join("");
+}
+
+function showTambonInputError(msg) {
+    const el = document.getElementById("tambon-input-error");
+    if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
+    el.textContent = msg;
+    el.classList.remove("hidden");
+}
+
+/* Accepts "code:name" or "code:name:amphoe". */
+function addTambon(text) {
+    const parts = (text || "").split(":").map(x => x.trim());
+    if (parts.length < 2 || !parts[0] || !parts[1]) {
+        showTambonInputError("รูปแบบต้องเป็น รหัส:ชื่อตำบล (เช่น 900101:คอหงส์)");
+        return;
+    }
+    showTambonInputError(null);
+    if (!selectedTambons.some(t => t.code === parts[0])) {
+        selectedTambons.push({code: parts[0], name_th: parts[1], amphoe_th: parts[2] || null});
+    }
+    renderTambonChips();
+}
+
+function removeTambon(i) {
+    selectedTambons.splice(i, 1);
+    renderTambonChips();
+}
+
+/* ---- Tambon GeoJSON import ---- */
+/* {fingerprint, request} of the last preview; confirm resends exactly this. */
+let tambonPreview = null;
+
+function tambonFingerprint() {
+    return JSON.stringify([tambonFileMeta, tambonConfig()]);
+}
+
+/* tambon-pure:start */
+function stripExtension(name) {
+    return name.replace(/\.[^./]+$/, "");
+}
+
+/* entries: [{name, text}] -> {features, errors: [{file, message}]} */
+function mergeTambonFiles(entries) {
+    const features = [], errors = [];
+    entries.forEach(entry => {
+        const base = stripExtension(entry.name);
+        let data;
+        try { data = JSON.parse(entry.text); }
+        catch(e) { errors.push({file: entry.name, message: "JSON ไม่ถูกต้อง: " + e.message}); return; }
+        let found = [];
+        if (data && data.type === "FeatureCollection" && Array.isArray(data.features)) {
+            found = data.features;
+        } else if (data && data.type === "Feature") {
+            found = [data];
+        } else if (data && (data.type === "Polygon" || data.type === "MultiPolygon")) {
+            found = [{type: "Feature", properties: {}, geometry: data}];
+        } else {
+            errors.push({file: entry.name, message: "ชนิดข้อมูลไม่รองรับ: " + (data && data.type ? data.type : "ไม่ระบุ")});
+            return;
+        }
+        found.forEach(f => {
+            features.push({
+                type: "Feature",
+                geometry: (f && f.geometry) || null,
+                properties: {...((f && f.properties) || {}), __filename: base},
+            });
+        });
+    });
+    return {features, errors};
+}
+
+/* cfg: {code, name} each {source: "property"|"filename", key, sep, part}.
+   code uses one filename part; name joins every part from `part` onwards. */
+function deriveTambonField(props, field, mode) {
+    if (field.source !== "filename") {
+        const v = props[field.key];
+        return v === undefined || v === null ? "" : String(v);
+    }
+    const base = props.__filename || "";
+    const parts = field.sep ? base.split(field.sep) : [base];
+    const from = Math.max(1, parseInt(field.part, 10) || 1) - 1;
+    if (mode === "rest") return parts.slice(from).join(field.sep || "").trim();
+    return (parts[from] || "").trim();
+}
+
+function deriveTambonFeatures(features, cfg) {
+    return features.map(f => ({
+        ...f,
+        properties: {
+            ...f.properties,
+            __code: deriveTambonField(f.properties, cfg.code, "part"),
+            __name: deriveTambonField(f.properties, cfg.name, "rest"),
+        },
+    }));
+}
+/* tambon-pure:end */
+
+let tambonFeatures = [];
+let tambonFileMeta = [];
+
+function tambonConfig() {
+    const sep = document.getElementById("tambon-sep").value;
+    return {
+        code: {
+            source: document.getElementById("tambon-code-src").value,
+            key: document.getElementById("tambon-code-prop").value,
+            sep, part: document.getElementById("tambon-code-part").value,
+        },
+        name: {
+            source: document.getElementById("tambon-name-src").value,
+            key: document.getElementById("tambon-name-prop").value,
+            sep, part: document.getElementById("tambon-name-part").value,
+        },
+        amphoe: document.getElementById("tambon-amphoe-prop").value || null,
+    };
+}
+
+function onTambonSettingChange() {
+    const cfg = tambonConfig();
+    const fromFile = cfg.code.source === "filename" || cfg.name.source === "filename";
+    const toggle = (id, show, display) => {
+        const el = document.getElementById(id);
+        el.classList.toggle("hidden", !show);
+        if (display) el.classList.toggle(display, show);
+    };
+    toggle("tambon-code-prop", cfg.code.source === "property");
+    toggle("tambon-code-part-wrap", cfg.code.source === "filename", "flex");
+    toggle("tambon-name-prop", cfg.name.source === "property");
+    toggle("tambon-name-part-wrap", cfg.name.source === "filename", "flex");
+    toggle("tambon-sep-wrap", fromFile);
+    if (fromFile && tambonFeatures.length) {
+        const sample = deriveTambonFeatures(tambonFeatures.slice(0, 1), {code: cfg.code, name: cfg.name}).pop().properties;
+        document.getElementById("tambon-filename-example").textContent =
+            "ตัวอย่าง: " + sample.__filename + " → รหัส=" + (sample.__code || "?") + ", ชื่อ=" + (sample.__name || "?");
+    }
+    hideTambonConfirm();
+}
+
+async function onTambonFileChange(input) {
+    const errEl = document.getElementById("tambon-file-error");
+    const sumEl = document.getElementById("tambon-file-summary");
+    const propsEl = document.getElementById("tambon-props");
+    errEl.classList.add("hidden");
+    sumEl.classList.add("hidden");
+    propsEl.classList.add("hidden");
+    hideTambonConfirm();
+    document.getElementById("tambon-import-result").classList.add("hidden");
+    tambonFeatures = [];
+    tambonFileMeta = [];
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+
+    const entries = [];
+    const readErrors = [];
+    for (const f of files) {
+        try { entries.push({name: f.name, text: await f.text()}); }
+        catch(e) { readErrors.push({file: f.name, message: "อ่านไฟล์ไม่สำเร็จ"}); }
+    }
+    const merged = mergeTambonFiles(entries);
+    const errors = [...readErrors, ...merged.errors];
+    if (errors.length) {
+        errEl.innerHTML = '<ul class="list-disc pl-4">' + errors.map(e =>
+            `<li>${escapeHtml(e.file)}: ${escapeHtml(e.message)}</li>`).join("") + "</ul>";
+        errEl.classList.remove("hidden");
+    }
+    if (!merged.features.length) return;
+
+    tambonFeatures = merged.features;
+    tambonFileMeta = files.map(f => [f.name, f.size, f.lastModified]);
+    sumEl.textContent = `อ่านได้ ${merged.features.length} ฟีเจอร์จาก ${files.length - errors.length} ไฟล์`;
+    sumEl.classList.remove("hidden");
+
+    const keys = [];
+    tambonFeatures.forEach(f => Object.keys(f.properties).forEach(k => {
+        if (!keys.includes(k)) keys.push(k);
+    }));
+    const realKeys = keys.filter(k => k !== "__filename");
+    const codeGuess = realKeys.find(k => /code|pcode|รหัส/i.test(k) && /tam|adm3|tambon|ตำบล/i.test(k))
+        || realKeys.find(k => /code|pcode|รหัส/i.test(k));
+    const nameGuess = realKeys.find(k => /tam|tambon|ตำบล|adm3/i.test(k) && !/amphoe|amp_|district|code/i.test(k));
+    const amphoeGuess = realKeys.find(k => /amp|amphoe|อำเภอ|adm2/i.test(k));
+    const opts = keys.map(k => `<option value="${escapeHtml(k)}">${escapeHtml(k)}</option>`).join("");
+    document.getElementById("tambon-code-prop").innerHTML = opts;
+    document.getElementById("tambon-name-prop").innerHTML = opts;
+    document.getElementById("tambon-amphoe-prop").innerHTML = '<option value="">— ไม่ระบุ —</option>' + opts;
+    if (codeGuess) document.getElementById("tambon-code-prop").value = codeGuess;
+    if (nameGuess) document.getElementById("tambon-name-prop").value = nameGuess;
+    if (amphoeGuess) document.getElementById("tambon-amphoe-prop").value = amphoeGuess;
+    /* No usable property: default both fields to the file name. */
+    document.getElementById("tambon-code-src").value = codeGuess ? "property" : "filename";
+    document.getElementById("tambon-name-src").value = nameGuess ? "property" : "filename";
+    propsEl.classList.remove("hidden");
+    onTambonSettingChange();
+}
+
+function hideTambonConfirm() {
+    tambonPreview = null;
+    document.getElementById("tambon-import-confirm").classList.add("hidden");
+    document.getElementById("btn-tambon-import").classList.remove("hidden");
+}
+
+function renderRefList(refs, cls, sign) {
+    return refs.map(r => `<li class="${cls}">${sign} ${escapeHtml(tambonLabel(r))} <span class="font-mono">${escapeHtml(r.code)}</span></li>`).join("");
+}
+
+async function runTambonImport(dryRun) {
+    const resultEl = document.getElementById("tambon-import-result");
+    const importBtn = document.getElementById("btn-tambon-import");
+    const confirmBtn = document.getElementById("btn-tambon-confirm");
+    if (!tambonFeatures.length) return;
+    if (!dryRun && (!tambonPreview || tambonPreview.fingerprint !== tambonFingerprint())) {
+        hideTambonConfirm();
+        resultEl.classList.remove("hidden");
+        resultEl.innerHTML = '<span class="text-red-600">ไฟล์หรือฟิลด์มีการเปลี่ยนแปลง กรุณาตรวจสอบก่อนนำเข้าอีกครั้ง</span>';
+        return;
+    }
+    importBtn.disabled = true;
+    confirmBtn.disabled = true;
+    resultEl.classList.remove("hidden");
+    resultEl.innerHTML = '<span class="text-ink-500">กำลังประมวลผล...</span>';
+    try {
+        let body;
+        if (dryRun) {
+            const cfg = tambonConfig();
+            body = {
+                feature_collection: {
+                    type: "FeatureCollection",
+                    features: deriveTambonFeatures(tambonFeatures, cfg),
+                },
+                code_property: "__code",
+                name_property: "__name",
+                amphoe_property: cfg.amphoe,
+                dry_run: true,
+            };
+        } else {
+            body = {...tambonPreview.request, dry_run: false};
+        }
+        const res = await fetch(API_URL + "/v1/tambons/import", {
+            method: "POST",
+            headers: {"Content-Type": "application/json", ...(await authHeaders())},
+            body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(typeof err.detail === "string" ? err.detail : "นำเข้าไม่สำเร็จ");
+        }
+        const r = await res.json();
+        const changeEntries = Object.entries(r.changes || {});
+        const hasRemoved = changeEntries.some(([, c]) => c.removed.length);
+        const diffHtml = changeEntries.length ? changeEntries.map(([id, c]) => `
+            <div class="mt-1"><span class="font-semibold">${escapeHtml(c.zone_name)}</span>
+                <ul class="pl-3">${renderRefList(c.added, "text-emerald-700", "+")}${renderRefList(c.removed, "text-red-600", "−")}</ul>
+            </div>`).join("") : '<div class="text-ink-500">ไม่มีการเปลี่ยนแปลงในโซน</div>';
+        const warnLines = (r.warnings || []).slice(0, 20).map(w => `<li>${escapeHtml(w)}</li>`).join("");
+        const head = r.dry_run
+            ? `<div class="text-brand-700 font-semibold"><i class="ph ph-eye"></i> ตัวอย่าง (ยังไม่บันทึก): ${r.imported} ตำบล, ข้าม ${r.skipped}, นอกพื้นที่หาดใหญ่ ${r.clipped_out}</div>`
+            : `<div class="text-emerald-700 font-semibold"><i class="ph ph-check-circle"></i> นำเข้าแล้ว ${r.imported} ตำบล, ข้าม ${r.skipped}, นอกพื้นที่หาดใหญ่ ${r.clipped_out}</div>`;
+        const note = (r.dry_run && hasRemoved)
+            ? '<div class="text-red-600 mt-1"><i class="ph ph-warning"></i> รายการสีแดง (−) จะถูกลบ รวมถึงตำบลที่แก้ไขด้วยมือ</div>' : "";
+        resultEl.innerHTML = head + diffHtml + note
+            + (warnLines ? `<div class="text-amber-700 font-semibold mt-1">คำเตือน (${r.warnings.length})</div><ul class="list-disc pl-4 text-amber-700">${warnLines}</ul>` : "");
+        if (r.dry_run) {
+            tambonPreview = {fingerprint: tambonFingerprint(), request: body};
+            importBtn.classList.add("hidden");
+            document.getElementById("tambon-import-confirm").classList.remove("hidden");
+        } else {
+            hideTambonConfirm();
+            await loadZones();
+        }
+    } catch(e) {
+        resultEl.innerHTML = `<span class="text-red-600">${escapeHtml(e.message)}</span>`;
+    } finally {
+        importBtn.disabled = false;
+        confirmBtn.disabled = false;
+    }
 }
 
 async function authHeaders() {
@@ -480,6 +848,7 @@ async function quickToggleZoneStatus(id) {
         zone_kind: z.zone_kind || "flood",
         boundary: z.boundary,
         station_ids: stationIds,
+        tambons: normalizeTambons(z.tambons),
         metadata: z.metadata || {},
         status: newStatus,
     };
@@ -508,6 +877,7 @@ async function quickToggleShadingMode(id) {
         zone_kind: z.zone_kind || "flood",
         boundary: z.boundary,
         station_ids: stationIds,
+        tambons: normalizeTambons(z.tambons),
         metadata: updatedMeta,
         status: z.status || "active",
     };
@@ -540,6 +910,7 @@ function renderZoneList(zones) {
             || z.name === "Hat Yai"
             || z.name_th === "หาดใหญ่";
         const stationCount = (z.stations || []).length;
+        const tambonNames = normalizeTambons(z.tambons).map(tambonLabel);
 
         /* Quick toggle button for status */
         const statusBtn = isActive
@@ -581,6 +952,7 @@ function renderZoneList(zones) {
                             <span class="font-mono">${z.code}</span>
                             <span>•</span>
                             <span>${stationCount} สถานี</span>
+                            ${isRef ? '' : `<span>•</span><span title="${escapeHtml(tambonNames.join(', '))}">${tambonNames.length} ตำบล</span>`}
                         </div>
                         <div class="flex items-center gap-1.5 mt-2">
                             ${statusBtn}
@@ -808,6 +1180,9 @@ function editZone(id) {
     document.getElementById("station-search").value = "";
     document.getElementById("station-dropdown").classList.add("hidden");
     renderStationChips();
+    selectedTambons = normalizeTambons(z.tambons);
+    document.getElementById("tambon-input").value = "";
+    renderTambonChips();
     setBoundaryText(z.boundary);
     showJsonError(null);
     document.getElementById("form-title").textContent = "แก้ไขลุ่มน้ำ: " + (z.name_th || z.name);
@@ -858,6 +1233,9 @@ function resetForm() {
     document.getElementById("zone-boundary").value = "";
     selectedStationIds = [];
     renderStationChips();
+    selectedTambons = [];
+    document.getElementById("tambon-input").value = "";
+    renderTambonChips();
     document.getElementById("station-dropdown").classList.add("hidden");
     document.getElementById("form-title").textContent = "สร้างลุ่มน้ำใหม่";
     document.getElementById("btn-cancel").classList.add("hidden");
@@ -905,6 +1283,18 @@ document.addEventListener("DOMContentLoaded", function() {
         setTimeout(() => document.getElementById("station-dropdown").classList.add("hidden"), 150);
     });
 
+    const tambonInput = document.getElementById("tambon-input");
+    tambonInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            addTambon(tambonInput.value);
+            tambonInput.value = "";
+        }
+    });
+    tambonInput.addEventListener("blur", () => {
+        if (tambonInput.value.trim()) { addTambon(tambonInput.value); tambonInput.value = ""; }
+    });
+
     document.getElementById("zone-form").addEventListener("submit", async function(e) {
         e.preventDefault();
         const boundaryRaw = document.getElementById("zone-boundary").value.trim();
@@ -940,6 +1330,7 @@ document.addEventListener("DOMContentLoaded", function() {
             zone_kind: document.getElementById("zone-kind").value || "flood",
             boundary: boundaryGeom,
             station_ids: selectedStationIds,
+            tambons: selectedTambons,
             metadata: updatedMeta,
             status: status,
         };
