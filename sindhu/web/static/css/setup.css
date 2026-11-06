@@ -207,7 +207,22 @@
 /* Leaflet's right-hand controls sit below the folded pill. */
 .map-page .leaflet-top.leaflet-right { top: calc(var(--map-top) + 3.5rem - 10px); }
 
-@media (min-width: 1024px) {
+.map-legend {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 1000;
+  max-width: 220px;
+}
+.map-scale-legend {
+  position: absolute;
+  bottom: 28px;
+  right: 12px;
+  z-index: 1000;
+  width: 250px;
+}
+
+@media (min-width: 640px) {
   /* Wide screens: with the panel open, the controls and legend move beside
      it instead of hiding underneath. */
   body:not(.monitor-panel-collapsed) .map-page .leaflet-top.leaflet-right {
@@ -218,7 +233,7 @@
     right: calc(var(--map-panel-w) + var(--map-gap));
   }
   body:not(.monitor-panel-collapsed) .map-page .map-scale-legend {
-    right: calc(var(--map-panel-w) + 2 * var(--map-gap)) !important;
+    right: calc(var(--map-panel-w) + 2 * var(--map-gap));
   }
 }
 

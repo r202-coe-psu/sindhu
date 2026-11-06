@@ -289,13 +289,24 @@ class ZoneStyleTests(unittest.TestCase):
         }
         map_view.reference_boundary_layer = _BoundedLayer("reference")
 
-        map_view.fit_to_hatyai_bounds()
+        import maps.map as map_module
+
+        browser = sys.modules["browser"]
+        saved = (browser.document, map_module.window)
+        browser.document, map_module.window = _Document(), _Window(1440, 900)
+        try:
+            map_view.fit_to_hatyai_bounds()
+        finally:
+            browser.document, map_module.window = saved
 
         self.assertEqual(
             map_view.map.fits[0][0].names,
             ["zone-1", "zone-2", "zone-3", "zone-4", "reference"],
         )
-        self.assertEqual(map_view.map.fits[0][1], map_view.fit_bounds_options())
+        self.assertEqual(
+            map_view.map.fits[0][1],
+            {"paddingTopLeft": [24, 80], "paddingBottomRight": [24, 24]},
+        )
         self.assertEqual(map_view.map.invalidations, [{"pan": False}])
 
 
@@ -396,6 +407,61 @@ class RiverStyleTests(unittest.TestCase):
 
     def test_unknown_class_is_drawn_like_a_stream(self):
         self.assertEqual(self.style(None, 13), self.style("stream", 13))
+
+
+class _MutableClassList:
+    def __init__(self):
+        self.names = set()
+
+    def add(self, name):
+        self.names.add(name)
+
+    def remove(self, name):
+        self.names.discard(name)
+
+    def contains(self, name):
+        return name in self.names
+
+
+class _FocusDocument:
+    def __init__(self):
+        self.body = types.SimpleNamespace(classList=_MutableClassList())
+
+
+class FocusModeTests(unittest.TestCase):
+    def make_map(self, reset_display):
+        map_view = Map.__new__(Map)
+        map_view.map = _BrowserStub()
+        map_view._reset_btn_container = types.SimpleNamespace(
+            style=types.SimpleNamespace(display=reset_display)
+        )
+        map_view.lifts = 0
+
+        def lift():
+            map_view.lifts += 1
+
+        map_view._lift_reset_button_over_legends = lift
+        return map_view
+
+    def toggle(self, map_view, *states):
+        browser = sys.modules["browser"]
+        saved = browser.document
+        browser.document = _FocusDocument()
+        try:
+            for state in states:
+                map_view.set_focus_mode(state)
+        finally:
+            browser.document = saved
+
+    def test_leaving_focus_mode_restacks_a_visible_reset_button(self):
+        map_view = self.make_map("block")
+        self.toggle(map_view, True, False)
+        self.assertEqual(map_view.lifts, 1)
+
+    def test_hidden_reset_button_is_left_alone(self):
+        map_view = self.make_map("none")
+        self.toggle(map_view, True, False)
+        self.assertEqual(map_view.lifts, 0)
 
 
 class _Rect:
