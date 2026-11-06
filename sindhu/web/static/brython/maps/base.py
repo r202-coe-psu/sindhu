@@ -772,9 +772,6 @@ class BaseMap(Map):
             container = doc.createElement("div")
             # map-ui: hidden with the other floating cards in map focus mode
             container.className = "map-ui map-scale-legend"
-            container.style.cssText = (
-                "position:absolute;bottom:28px;right:12px;z-index:1000;width:250px;"
-            )
             self.map.getContainer() <= container
             self._interpolation_legend_container = container
             self.leaflet.DomEvent.disableClickPropagation(container)
@@ -876,9 +873,6 @@ class BaseMap(Map):
             container = doc.createElement("div")
             # map-ui: hidden with the other floating cards in map focus mode
             container.className = "map-ui map-legend"
-            container.style.cssText = (
-                "position:absolute;bottom:12px;left:12px;z-index:1000;max-width:220px;"
-            )
             self.map.getContainer() <= container
             self._metric_legend_container = container
             # Keep clicks and wheel events on the legend out of the map
@@ -953,6 +947,34 @@ class BaseMap(Map):
     def reset_all(self):
         self.close_all_tooltips()
         super().reset_all()
+
+    RESET_BUTTON_GAP = 12
+
+    def show_reset_button(self, visible=True):
+        super().show_reset_button(visible)
+        if visible:
+            self._lift_reset_button_over_legends()
+
+    def _lift_reset_button_over_legends(self):
+        """On a narrow map the centred reset button and the corner legends
+        share the bottom edge, so stack the button above any it would hit."""
+        reset = self._reset_btn_container
+        if reset is None:
+            return
+        reset.style.bottom = f"{self.RESET_BUTTON_GAP}px"
+        button = reset.getBoundingClientRect()
+        map_bottom = self.map.getContainer().getBoundingClientRect().bottom
+        bottom = self.RESET_BUTTON_GAP
+        for legend in (
+            self._metric_legend_container,
+            self._interpolation_legend_container,
+        ):
+            if legend is None or not legend.offsetHeight:
+                continue
+            box = legend.getBoundingClientRect()
+            if box.left < button.right and box.right > button.left:
+                bottom = max(bottom, map_bottom - box.top + self.RESET_BUTTON_GAP)
+        reset.style.bottom = f"{bottom}px"
 
     def fly_to_station(self, station_code, source=None, zoom=13):
         """Centre the map on a station marker and reveal its tooltip."""

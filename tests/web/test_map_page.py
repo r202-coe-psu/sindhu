@@ -46,6 +46,20 @@ class MapPageLayoutTests(unittest.TestCase):
             tag = re.search(rf'<[a-z]+ id="{element_id}"[^>]*>', html).group(0)
             self.assertIn("map-ui", tag, element_id)
 
+    def test_page_starts_in_standards_mode(self):
+        self.assertTrue(
+            self._html("/th/monitor").lstrip().startswith("<!DOCTYPE html>")
+        )
+
+    def test_panel_is_folded_in_the_markup(self):
+        html = self._html("/th/monitor")
+        panel = re.search(r'<section id="monitor_panel"[^>]*>', html).group(0)
+        toggle = re.search(
+            r'<button id="monitor_panel_toggle"[^>]*>', html, re.S
+        ).group(0)
+        self.assertIn("is-collapsed", panel)
+        self.assertIn('aria-expanded="false"', toggle)
+
     def test_monitor_title_names_the_page(self):
         self.assertIn(
             f"<title>ติดตามสถานการณ์ | {self.app.config['APP_TITLE']}</title>",

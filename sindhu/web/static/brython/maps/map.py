@@ -699,7 +699,10 @@ class Map:
         zoom_bar = self.map.getContainer().querySelector(
             ".leaflet-top.leaflet-right .leaflet-control-zoom"
         )
-        if not zoom_bar or getattr(self, "_focus_btn", None):
+        if getattr(self, "_focus_btn", None):
+            return
+        if not zoom_bar:
+            print("[Map] focus control not added: zoom bar not found")
             return
 
         btn = doc.createElement("a")
@@ -715,8 +718,11 @@ class Map:
             self.set_focus_mode(not self.is_focus_mode())
 
         def on_key(ev):
-            if ev.key == "Escape" and self.is_focus_mode():
-                self.set_focus_mode(False)
+            if ev.key != "Escape" or not self.is_focus_mode():
+                return
+            if ev.defaultPrevented or doc.querySelector("dialog[open]"):
+                return
+            self.set_focus_mode(False)
 
         btn.bind("click", on_click)
         doc.bind("keydown", on_key)
@@ -734,6 +740,10 @@ class Map:
         else:
             doc.body.classList.remove(self.FOCUS_BODY_CLASS)
         self._sync_focus_button(active)
+        reset = getattr(self, "_reset_btn_container", None)
+        lift = getattr(self, "_lift_reset_button_over_legends", None)
+        if not active and lift and reset and reset.style.display != "none":
+            lift()
 
     def _sync_focus_button(self, active):
         btn = getattr(self, "_focus_btn", None)
