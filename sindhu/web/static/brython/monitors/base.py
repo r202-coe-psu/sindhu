@@ -88,6 +88,7 @@ class BaseMonitor:
                     [center[1], center[0]], zoom, min_zoom, self.lang_code
                 )
                 self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
+                self.map.add_focus_control()
                 self.map.load_river_basins(self.api_url)
 
             await self.load_zones()

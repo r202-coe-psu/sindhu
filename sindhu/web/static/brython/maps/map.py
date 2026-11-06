@@ -533,7 +533,7 @@ class Map:
 
             if has_bounds and bounds.isValid():
                 self.map.invalidateSize({"pan": False})
-                self.map.fitBounds(bounds, {"padding": [24, 24]})
+                self.map.fitBounds(bounds, self.fit_bounds_options())
         except Exception as e:
             print(f"fit_to_hatyai_bounds error: {e}")
 
@@ -582,7 +582,7 @@ class Map:
                 other["layer"].setStyle(self.zone_style(key))
 
         if fit_bounds:
-            self.map.fitBounds(entry["layer"].getBounds(), {"padding": [24, 24]})
+            self.map.fitBounds(entry["layer"].getBounds(), self.fit_bounds_options())
 
         self.show_reset_button()
         return True
@@ -654,6 +654,7 @@ class Map:
 
         map_container = self.map.getContainer()
         reset_div = doc.createElement("div")
+        reset_div.className = "map-reset"
         reset_div.style.cssText = "display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:1000;"
         reset_btn = doc.createElement("button")
         # The button now restores the whole starting view, not just the markers
@@ -675,6 +676,111 @@ class Map:
         reset_btn.bind("click", on_reset)
 
         self.map.on("click", self._handle_map_click)
+
+    """
+    ===========================================================================
+    Map focus mode
+    ===========================================================================
+    """
+
+    FOCUS_BODY_CLASS = "map-focus"
+
+    def add_focus_control(self):
+        """Add the ⛶ button that hides every card floating on the map.
+
+        The map already fills the window, so focus mode only toggles a class
+        on <body>; CSS hides the `.map-ui` cards, the legends and the basemap
+        picker.  Nothing changes size, so Leaflet needs no invalidateSize().
+        """
+        from browser import document as doc
+
+        # Join the zoom bar (+ − and the pin) so ⛶ matches their size and
+        # stays put when focus mode hides the basemap picker below it.
+        zoom_bar = self.map.getContainer().querySelector(
+            ".leaflet-top.leaflet-right .leaflet-control-zoom"
+        )
+        if getattr(self, "_focus_btn", None):
+            return
+        if not zoom_bar:
+            print("[Map] focus control not added: zoom bar not found")
+            return
+
+        btn = doc.createElement("a")
+        btn.href = "#"
+        btn.className = "map-focus-btn"
+        btn.attrs["role"] = "button"
+        zoom_bar <= btn
+        self._focus_btn = btn
+        self._sync_focus_button(False)
+
+        def on_click(ev):
+            ev.preventDefault()
+            self.set_focus_mode(not self.is_focus_mode())
+
+        def on_key(ev):
+            if ev.key != "Escape" or not self.is_focus_mode():
+                return
+            if ev.defaultPrevented or doc.querySelector("dialog[open]"):
+                return
+            self.set_focus_mode(False)
+
+        btn.bind("click", on_click)
+        doc.bind("keydown", on_key)
+
+    def is_focus_mode(self):
+        from browser import document as doc
+
+        return doc.body.classList.contains(self.FOCUS_BODY_CLASS)
+
+    def set_focus_mode(self, active):
+        from browser import document as doc
+
+        if active:
+            doc.body.classList.add(self.FOCUS_BODY_CLASS)
+        else:
+            doc.body.classList.remove(self.FOCUS_BODY_CLASS)
+        self._sync_focus_button(active)
+        reset = getattr(self, "_reset_btn_container", None)
+        lift = getattr(self, "_lift_reset_button_over_legends", None)
+        if not active and lift and reset and reset.style.display != "none":
+            lift()
+
+    def _sync_focus_button(self, active):
+        btn = getattr(self, "_focus_btn", None)
+        if not btn:
+            return
+        label = "แสดงเมนูกลับมา" if active else "ซ่อนเมนู ดูแผนที่เต็มจอ"
+        icon = "ph-corners-in" if active else "ph-corners-out"
+        btn.title = label
+        btn.attrs["aria-label"] = label
+        btn.attrs["aria-pressed"] = "true" if active else "false"
+        btn.html = f'<i class="ph {icon}" aria-hidden="true"></i>'
+
+    def fit_bounds_options(self, margin=24):
+        """fitBounds padding that keeps the target clear of the floating cards.
+
+        The brand and user cards sit along the top.  The open data panel is a
+        column on the right, so the right edge is padded by its width; a
+        folded panel is only a pill under the user card, which the top
+        padding already clears.  On a phone the open panel covers most of the
+        map, so it is ignored rather than squeezing the target into a sliver.
+        """
+        from browser import document as doc
+
+        top, right = margin, margin
+        if not self.is_focus_mode():
+            top = margin + 56
+            panel = doc.getElementById("monitor_panel")
+            if panel:
+                rect = panel.getBoundingClientRect()
+                is_column = rect.height > window.innerHeight / 2
+                on_right_side = rect.left > window.innerWidth / 2
+                if rect.width > 0 and is_column and on_right_side:
+                    right = max(margin, window.innerWidth - rect.left + margin)
+        return {
+            "paddingTopLeft": [margin, top],
+            "paddingBottomRight": [right, margin],
+        }
 
     def show_reset_button(self, visible=True):
         if self._reset_btn_container:
