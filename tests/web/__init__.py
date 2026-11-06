@@ -12,5 +12,4 @@ def shared_app():
     global _app
     if _app is None:
         _app = web.create_app()
-        _app.config["APP_TITLE"] = "เฝ้าดู (FoundDoo)"
     return _app
