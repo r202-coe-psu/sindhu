@@ -39,24 +39,30 @@ def _load_ui_module():
     browser.aio = types.SimpleNamespace()
     browser.document = _DummyDocument()
     browser.window = _DummyWindow()
-    with patch.dict("sys.modules", {"browser": browser}):
-        path = (
-            Path(__file__).parents[2]
-            / "sindhu"
-            / "web"
-            / "static"
-            / "brython"
-            / "visual_feeds"
-            / "__init__.py"
-        )
-        # Load as a package so its relative imports (labels, map_popup) resolve.
-        spec = importlib.util.spec_from_file_location(
-            "visual_feeds_ui", path, submodule_search_locations=[str(path.parent)]
-        )
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = module
-        spec.loader.exec_module(module)
-        return module
+    path = (
+        Path(__file__).parents[2]
+        / "sindhu"
+        / "web"
+        / "static"
+        / "brython"
+        / "visual_feeds"
+        / "__init__.py"
+    )
+    # Brython serves the brython/ folder as the import root (maps.cctv_pairing)
+    brython_path = str(path.parents[1])
+    sys.path.insert(0, brython_path)
+    try:
+        with patch.dict("sys.modules", {"browser": browser}):
+            # Load as a package so its relative imports (labels, map_popup) resolve.
+            spec = importlib.util.spec_from_file_location(
+                "visual_feeds_ui", path, submodule_search_locations=[str(path.parent)]
+            )
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
+            spec.loader.exec_module(module)
+            return module
+    finally:
+        sys.path.remove(brython_path)
 
 
 def _load_map_module(browser=None):
