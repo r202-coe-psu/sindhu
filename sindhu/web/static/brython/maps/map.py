@@ -1,4 +1,6 @@
-from browser import alert, window, ajax
+from browser import alert, window
+from html import escape as escape_html
+import re
 import json
 import math
 
@@ -95,6 +97,7 @@ class Map:
         self.place_labels = self.leaflet.tileLayer(
             esri_canvas + "/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
             {
+                "attribution": "Labels &copy; Esri &mdash; Esri, HERE, Garmin",
                 "maxNativeZoom": 16,  # canvas tiles stop at 16; scale beyond
                 "maxZoom": 19,
                 "pane": "placeLabels",
@@ -156,8 +159,6 @@ class Map:
         self._selected_zone_id = None
         self._on_zone_select = None
         self._zone_renderer = None
-        self.zone_shading_mode = "shaded"
-        self.zone_legend_entries = []
         self.zones_visible = True
         self.reference_boundary_visible = True
         # Visual feeds are a separate overlay. Station/source/zone filtering
@@ -195,6 +196,8 @@ class Map:
     ZONE_CASING_COLOR = "#141414"
     ZONE_WEIGHT = 2.6
     ZONE_RISK_FILL_OPACITY = 0.28
+    HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+    DASH_PATTERN = re.compile(r"^[0-9][0-9 ,.]*$")
 
     @staticmethod
     def _is_reference_zone(zone, style=None):
@@ -210,29 +213,35 @@ class Map:
         )
 
     @staticmethod
-    def _zone_order_key(zone):
-        """Sort zones by their number so zone 1 always gets the first colour."""
+    def zone_number(zone):
         meta = zone.get("metadata") or {}
         number = meta.get("zone_number")
         if number is None:
             digits = "".join(ch for ch in str(zone.get("code") or "") if ch.isdigit())
             number = digits or None
         try:
-            return (0, int(number), str(zone.get("code") or ""))
+            number = int(number)
         except (TypeError, ValueError):
-            return (1, 0, str(zone.get("code") or zone.get("name") or ""))
+            return None
+        return number if number > 0 else None
 
-    def zone_identity(self, zone, index):
-        """Outline colour and dash for one zone.
+    @classmethod
+    def _zone_order_key(cls, zone):
+        number = cls.zone_number(zone)
+        if number is not None:
+            return (0, number, str(zone.get("code") or ""))
+        return (1, 0, str(zone.get("code") or zone.get("name") or ""))
 
-        A colour an admin set on the zone (/zones) wins; otherwise the zone
-        takes the next colour of ZONE_IDENTITIES.
-        """
+    def zone_identity(self, zone, fallback_index=0):
         style = zone.get("style") or zone.get("metadata") or {}
+        number = self.zone_number(zone)
+        index = number - 1 if number is not None else fallback_index
         preset = self.ZONE_IDENTITIES[index % len(self.ZONE_IDENTITIES)]
+        color = str(style.get("stroke") or "")
+        dash = str(style.get("dashArray") or "")
         return {
-            "color": style.get("stroke") or preset["color"],
-            "dash": style.get("dashArray") or preset["dash"],
+            "color": color if self.HEX_COLOR.match(color) else preset["color"],
+            "dash": dash if self.DASH_PATTERN.match(dash) else preset["dash"],
         }
 
     def set_zone_risk(self, zone_id, level):
@@ -289,11 +298,13 @@ class Map:
         # The fill carries the risk.  No data stays unfilled: grey on the
         # grey basemap would say nothing, and the legend calls it "ไม่ทราบ".
         risk = level.get("risk", -1) if level else -1
-        shaded = getattr(self, "zone_shading_mode", "shaded") != "outline"
-        if shaded and risk is not None and risk >= 0:
-            base = float(
-                custom_style.get("fill-opacity") or self.ZONE_RISK_FILL_OPACITY
-            )
+        if risk is not None and risk >= 0:
+            base = self.ZONE_RISK_FILL_OPACITY
+            try:
+                if custom_style.get("fill-opacity") is not None:
+                    base = min(max(float(custom_style["fill-opacity"]), 0.0), 1.0)
+            except (TypeError, ValueError):
+                pass
             style["fillColor"] = level.get("color")
             style["fillOpacity"] = min(
                 base + {"hover": 0.10, "selected": 0.17}.get(state, 0.0), 0.6
@@ -334,13 +345,6 @@ class Map:
             elif not visible and self.map.hasLayer(layer):
                 self.map.removeLayer(layer)
 
-    def set_zone_shading_mode(self, mode):
-        """Show the risk fill ("shaded", the default) or outlines only ("outline")."""
-        self.zone_shading_mode = mode
-        for key in self.zone_layers_by_id:
-            state = "selected" if self._selected_zone_id == key else "normal"
-            self._apply_zone_style(key, state)
-
     def set_zone_visible(self, zone_identifier, visible):
         """Set visibility of an individual zone by id, code, or zone_number."""
         ident = str(zone_identifier).strip().lower()
@@ -360,6 +364,7 @@ class Map:
             return False
 
         self._set_zone_entry_visible(entry, visible)
+        self._refresh_zone_legend()
         return True
 
     def set_zones_visible(self, visible):
@@ -390,7 +395,6 @@ class Map:
         """
         self._on_zone_select = on_select
         self.clear_all_zones()
-        self.zone_legend_entries = []
 
         if not zones:
             self._refresh_zone_legend()
@@ -406,8 +410,15 @@ class Map:
             label_pane.style.zIndex = "450"
             label_pane.style.pointerEvents = "none"
 
+        casing_pane = self.map.getPane("zoneCasings")
+        if not casing_pane:
+            casing_pane = self.map.createPane("zoneCasings")
+            casing_pane.style.zIndex = "349"
+            casing_pane.style.pointerEvents = "none"
+
         if self._zone_renderer is None:
             self._zone_renderer = self.leaflet.svg({"pane": "zones"})
+            self._zone_casing_renderer = self.leaflet.svg({"pane": "zoneCasings"})
         zone_renderer = self._zone_renderer
 
         flood_zones = []
@@ -441,8 +452,8 @@ class Map:
             entry["casing"] = self.leaflet.geoJson(
                 feature,
                 {
-                    "pane": "zones",
-                    "renderer": zone_renderer,
+                    "pane": "zoneCasings",
+                    "renderer": self._zone_casing_renderer,
                     "interactive": False,
                     "style": self.zone_casing_style(initial),
                 },
@@ -460,7 +471,7 @@ class Map:
             if name:
                 layer.bindTooltip(
                     f'<span class="zone-chip" style="color:{identity["color"]};'
-                    f'border-color:{identity["color"]};">{name}</span>',
+                    f'border-color:{identity["color"]};">{escape_html(name)}</span>',
                     {
                         "permanent": True,
                         "direction": "center",
@@ -476,14 +487,28 @@ class Map:
             if self.zones_visible:
                 self._set_zone_entry_visible(entry, True)
 
-            self.zone_legend_entries.append(
-                {"name": name, "color": identity["color"], "dash": identity["dash"]}
-            )
-
         self._refresh_zone_legend()
 
+    def visible_zone_legend_entries(self):
+        if not getattr(self, "zones_visible", True):
+            return []
+        entries = []
+        for entry in getattr(self, "zone_layers_by_id", {}).values():
+            layer = entry.get("layer")
+            if layer is None or not self.map.hasLayer(layer):
+                continue
+            zone = entry.get("zone") or {}
+            entries.append(
+                {
+                    "name": zone.get("name_th") or zone.get("name") or "",
+                    "color": entry["identity"]["color"],
+                    "dash": entry["identity"]["dash"],
+                }
+            )
+        return entries
+
     def _refresh_zone_legend(self):
-        """Let the legend (maps/base.py) list the zone outlines it now has."""
+        """Let the legend (maps/legend.py) list the zone outlines it now has."""
         refresh = getattr(self, "refresh_legend", None)
         if refresh:
             refresh()
@@ -1569,46 +1594,3 @@ class Map:
 
     def get_shape(self):
         return self.geojson
-
-    def load_river_basins(self, api_url):
-        """ฟังก์ชันสำหรับดึงข้อมูล GeoJSON ลุ่มน้ำจาก API และวาดลงแผนที่"""
-
-        def on_complete(req):
-            if req.status == 200 or req.status == 0:
-                geojson_data = json.loads(req.text)
-
-                # กำหนดสไตล์เส้นแม่น้ำ
-                river_style = {
-                    "color": "#3388ff",  # สีฟ้า
-                    "weight": 2,  # ความหนาของเส้น
-                    "opacity": 0.8,  # ความโปร่งใส
-                }
-
-                # ใช้ self.leaflet.geoJson วาดเส้น และเก็บไว้ใน self.shapes
-
-                # Own canvas renderer, kept transparent to the mouse: a shared
-                # canvas covers the whole overlay pane and would otherwise
-                # swallow every click meant for the zone polygons underneath.
-                basin_renderer = self.leaflet.canvas({"padding": 0.5})
-                self.shapes["river_basins"] = self.leaflet.geoJson(
-                    geojson_data,
-                    {
-                        "style": river_style,
-                        "interactive": False,
-                        "renderer": basin_renderer,
-                    },
-                ).addTo(self.map)
-
-                basin_canvas = getattr(basin_renderer, "_container", None)
-                if basin_canvas:
-                    basin_canvas.style.pointerEvents = "none"
-
-                print("[Map] River basins loaded successfully")
-            else:
-                print(f"[Map] Failed to load river basins (status: {req.status})")
-
-        print("[Map] Fetching river basins from API...")
-        req = ajax.Ajax()
-        req.bind("complete", on_complete)
-        req.open("GET", f"{api_url}/v1/basins", True)
-        req.send()

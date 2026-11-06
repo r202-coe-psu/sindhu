@@ -191,7 +191,6 @@ class ZoneStyleTests(unittest.TestCase):
     def make_map(self, zone, risk):
         map_view = Map.__new__(Map)
         map_view.map = _BrowserStub()
-        map_view.zone_shading_mode = "shaded"
         map_view._selected_zone_id = None
         map_view.zone_layers_by_id = {
             "zone": {"zone": zone, "risk": risk, "layer": _Layer()}
@@ -269,15 +268,39 @@ class ZoneStyleTests(unittest.TestCase):
         self.assertEqual(style["color"], "#222222")
         self.assertEqual(style["fillColor"], "transparent")
 
-    def test_outline_only_mode_drops_the_risk_fill(self):
-        level = metric_infos.get_risk_level(2)
-        map_view = self.make_map({"code": "songkhla-zone-1"}, level)
-        layer = map_view.zone_layers_by_id["zone"]["layer"]
+    def test_zone_keeps_its_numbered_colour_when_an_earlier_zone_is_hidden(self):
+        map_view = Map.__new__(Map)
+        map_view.map = _BrowserStub()
+        identity = map_view.zone_identity({"code": "songkhla-zone-3"}, 1)
+        self.assertEqual(identity, dict(Map.ZONE_IDENTITIES[2]))
 
-        map_view.set_zone_shading_mode("outline")
+    def test_metadata_zone_number_wins_over_the_code(self):
+        zone = {"code": "zone-9", "metadata": {"zone_number": 2}}
+        self.assertEqual(Map.zone_number(zone), 2)
 
-        self.assertEqual(layer.styles[-1]["fillColor"], "transparent")
-        self.assertEqual(layer.styles[-1]["color"], Map.ZONE_IDENTITIES[0]["color"])
+    def test_unnumbered_zone_falls_back_to_its_draw_order(self):
+        map_view = Map.__new__(Map)
+        map_view.map = _BrowserStub()
+        identity = map_view.zone_identity({"code": "east"}, 1)
+        self.assertEqual(identity, dict(Map.ZONE_IDENTITIES[1]))
+
+    def test_unsafe_stroke_and_dash_fall_back_to_the_preset(self):
+        map_view = Map.__new__(Map)
+        map_view.map = _BrowserStub()
+        zone = {
+            "code": "songkhla-zone-1",
+            "metadata": {
+                "stroke": 'red;background:url("x")',
+                "dashArray": "4 4;stroke:red",
+            },
+        }
+        self.assertEqual(map_view.zone_identity(zone), dict(Map.ZONE_IDENTITIES[0]))
+
+    def test_valid_custom_dash_is_kept(self):
+        map_view = Map.__new__(Map)
+        map_view.map = _BrowserStub()
+        zone = {"code": "songkhla-zone-1", "metadata": {"dashArray": "4, 4"}}
+        self.assertEqual(map_view.zone_identity(zone)["dash"], "4, 4")
 
     def test_initial_viewport_includes_every_zone_and_reference_boundary(self):
         map_view = Map.__new__(Map)
@@ -345,18 +368,18 @@ class LegendTests(unittest.TestCase):
 
         map_view = BaseMap.__new__(BaseMap)
         map_view.map = _BrowserStub()
-        map_view.zone_legend_entries = []
+        map_view.zone_layers_by_id = {}
         return map_view
 
     def starts_collapsed(self, saved, wide):
-        import maps.base as base_module
+        import maps.legend as legend_module
 
-        saved_window = base_module.window
-        base_module.window = _LegendWindow(saved, wide)
+        saved_window = legend_module.window
+        legend_module.window = _LegendWindow(saved, wide)
         try:
             return self.make_map().legend_starts_collapsed()
         finally:
-            base_module.window = saved_window
+            legend_module.window = saved_window
 
     def test_folded_chip_shows_only_the_colours(self):
         html = self.make_map().legend_html(self.LEVELS, "ระดับน้ำ", collapsed=True)
@@ -377,6 +400,215 @@ class LegendTests(unittest.TestCase):
     def test_the_viewer_choice_wins_over_screen_width(self):
         self.assertFalse(self.starts_collapsed(saved="0", wide=False))
         self.assertTrue(self.starts_collapsed(saved="1", wide=True))
+
+    def test_zone_names_are_escaped_in_the_legend(self):
+        map_view = self.make_map()
+        map_view.map = _ShownLayers()
+        layer = object()
+        map_view.map.shown.add(layer)
+        map_view.zone_layers_by_id = {
+            "z": {
+                "zone": {"name": "<img src=x onerror=alert(1)>"},
+                "layer": layer,
+                "identity": dict(Map.ZONE_IDENTITIES[0]),
+            }
+        }
+        html = map_view.zone_legend_html()
+        self.assertNotIn("<img", html)
+        self.assertIn("&lt;img", html)
+
+    def test_hidden_zones_drop_out_of_the_legend(self):
+        map_view = self.make_map()
+        map_view.map = _ShownLayers()
+        shown, hidden = object(), object()
+        map_view.map.shown.add(shown)
+        map_view.zone_layers_by_id = {
+            "a": {
+                "zone": {"name": "โซน 1"},
+                "layer": shown,
+                "identity": dict(Map.ZONE_IDENTITIES[0]),
+            },
+            "b": {
+                "zone": {"name": "โซน 2"},
+                "layer": hidden,
+                "identity": dict(Map.ZONE_IDENTITIES[1]),
+            },
+        }
+        names = [e["name"] for e in map_view.visible_zone_legend_entries()]
+        self.assertEqual(names, ["โซน 1"])
+        map_view.zones_visible = False
+        self.assertEqual(map_view.visible_zone_legend_entries(), [])
+
+    def test_failed_river_load_is_reported_in_the_legend(self):
+        map_view = self.make_map()
+        self.assertEqual(map_view.rivers_status_html(), "")
+        map_view.rivers_unavailable = True
+        self.assertIn("โหลดเส้นแม่น้ำไม่สำเร็จ", map_view.rivers_status_html())
+
+
+class _ShownLayers:
+    def __init__(self):
+        self.shown = set()
+
+    def hasLayer(self, layer):
+        return layer in self.shown
+
+    def addLayer(self, layer):
+        self.shown.add(layer)
+
+    def removeLayer(self, layer):
+        self.shown.discard(layer)
+
+    def remove(self):
+        pass
+
+
+class _Pane:
+    def __init__(self):
+        self.style = types.SimpleNamespace()
+
+
+class _PaneMap(_ShownLayers):
+    def __init__(self):
+        super().__init__()
+        self.panes = {}
+
+    def getPane(self, name):
+        return self.panes.get(name)
+
+    def createPane(self, name):
+        self.panes[name] = _Pane()
+        return self.panes[name]
+
+
+class _GeoJson:
+    def __init__(self, feature, options):
+        self.feature = feature
+        self.options = options
+        self.tooltips = []
+
+    def bindTooltip(self, html, options):
+        self.tooltips.append(html)
+
+    def on(self, event, handler):
+        pass
+
+    def addTo(self, map_view):
+        map_view.addLayer(self)
+
+
+class _ZoneLeaflet:
+    def svg(self, options):
+        return options
+
+    def geoJson(self, feature, options):
+        return _GeoJson(feature, options)
+
+
+class ShowAllZonesTests(unittest.TestCase):
+    def draw(self, zones):
+        map_view = Map.__new__(Map)
+        map_view.map = _PaneMap()
+        map_view.leaflet = _ZoneLeaflet()
+        map_view.zone_layers_by_id = {}
+        map_view._selected_zone_id = None
+        map_view._zone_renderer = None
+        map_view.zones_visible = True
+        map_view.show_all_zones(zones)
+        return map_view
+
+    def zone(self, number, status="active", name=None):
+        return {
+            "id": f"z{number}",
+            "code": f"songkhla-zone-{number}",
+            "name": name or f"Zone {number}",
+            "status": status,
+            "boundary": {"type": "Polygon", "coordinates": []},
+        }
+
+    def test_inactive_zone_does_not_shift_the_colours_of_later_zones(self):
+        map_view = self.draw([self.zone(1), self.zone(2, "inactive"), self.zone(3)])
+        self.assertNotIn("z2", map_view.zone_layers_by_id)
+        self.assertEqual(
+            map_view.zone_layers_by_id["z3"]["identity"],
+            dict(Map.ZONE_IDENTITIES[2]),
+        )
+
+    def test_zone_name_is_escaped_in_the_map_label(self):
+        map_view = self.draw([self.zone(1, name="<b>x</b>")])
+        tooltip = map_view.zone_layers_by_id["z1"]["layer"].tooltips[0]
+        self.assertNotIn("<b>", tooltip)
+        self.assertIn("&lt;b&gt;x&lt;/b&gt;", tooltip)
+
+    def test_casings_sit_in_their_own_pane_below_the_zones(self):
+        map_view = self.draw([self.zone(1)])
+        casing = map_view.zone_layers_by_id["z1"]["casing"]
+        self.assertEqual(casing.options["pane"], "zoneCasings")
+        self.assertFalse(casing.options["interactive"])
+        self.assertLess(
+            int(map_view.map.panes["zoneCasings"].style.zIndex),
+            int(map_view.map.panes["zones"].style.zIndex),
+        )
+
+
+def _relative_luminance(hex_color):
+    channels = []
+    for i in (1, 3, 5):
+        c = int(hex_color[i : i + 2], 16) / 255
+        channels.append(c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4)
+    r, g, b = channels
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast(a, b):
+    la, lb = sorted((_relative_luminance(a), _relative_luminance(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+class ZoneContrastTests(unittest.TestCase):
+    MID_GRAY_BASEMAP = "#808080"
+
+    def test_every_zone_colour_stands_out_from_its_dark_casing(self):
+        for identity in Map.ZONE_IDENTITIES:
+            with self.subTest(color=identity["color"]):
+                self.assertGreaterEqual(
+                    _contrast(identity["color"], Map.ZONE_CASING_COLOR), 3.0
+                )
+
+    def test_casing_stands_out_from_a_mid_gray_basemap(self):
+        self.assertGreaterEqual(
+            _contrast(Map.ZONE_CASING_COLOR, self.MID_GRAY_BASEMAP), 3.0
+        )
+
+
+class ZoneAdminTemplateTests(unittest.TestCase):
+    TEMPLATE = (
+        Path(__file__).resolve().parents[2]
+        / "sindhu"
+        / "web"
+        / "templates"
+        / "zones"
+        / "index.html"
+    )
+
+    def test_admin_preview_uses_the_same_zone_identities_as_the_map(self):
+        import re
+
+        source = self.TEMPLATE.read_text(encoding="utf-8")
+        block = re.search(r"const ZONE_IDENTITIES = \[(.*?)\];", source, re.S)
+        self.assertIsNotNone(block)
+        presets = re.findall(
+            r'\{ color: "(#[0-9a-fA-F]{6})", dash: "([^"]*)" \}', block.group(1)
+        )
+        self.assertEqual(
+            presets, [(i["color"], i["dash"]) for i in Map.ZONE_IDENTITIES]
+        )
+
+    def test_admin_form_no_longer_writes_fill_or_shading_mode(self):
+        source = self.TEMPLATE.read_text(encoding="utf-8")
+        self.assertNotIn("form-shading-mode", source)
+        self.assertNotIn("shading_mode: shadingMode", source)
+        self.assertNotIn("fill: color", source)
 
 
 class RiverStyleTests(unittest.TestCase):

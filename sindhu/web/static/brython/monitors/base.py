@@ -119,13 +119,19 @@ class BaseMonitor:
         if not self.rivers_url:
             return
 
+        loaded = False
         try:
             response = await aio.get(self.rivers_url, cache=True)
             if response.status == 200 or response.status == 0:
                 rivers_data = json.loads(response.data)
                 self.map.set_rivers_layer(rivers_data)
+                loaded = True
+            else:
+                print(f"[Monitor] Rivers returned HTTP {response.status}")
         except Exception as e:
             print(f"[Monitor] Failed to load rivers: {e}")
+        self.map.rivers_unavailable = not loaded
+        self.map.refresh_legend()
 
     async def load_zones(self):
         """Draw active API flood zones from database."""

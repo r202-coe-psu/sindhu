@@ -364,41 +364,6 @@ class WaterMonitor(BaseMonitor):
             self.map.marker_style = style
             aio.run(self._update_and_filter())
 
-    def update_zone_shading_buttons(self, mode):
-        return self.sync_zone_shading_mode_ui(mode)
-
-    def sync_zone_shading_mode_ui(self, mode):
-        """Update toggle buttons styling based on current mode."""
-        if "zone_style_outline" in document and "zone_style_shaded" in document:
-            btn_outline = document["zone_style_outline"]
-            btn_shaded = document["zone_style_shaded"]
-            if mode == "outline":
-                btn_outline.classList.add(
-                    "bg-base-100", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_outline.classList.remove("text-ink-600")
-                btn_shaded.classList.remove(
-                    "bg-base-100", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_shaded.classList.add("text-ink-600")
-            else:
-                btn_shaded.classList.add(
-                    "bg-base-100", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_shaded.classList.remove("text-ink-600")
-                btn_outline.classList.remove(
-                    "bg-base-100", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_outline.classList.add("text-ink-600")
-
-    def on_zone_shading_mode_click(self, mode):
-        self.map.set_zone_shading_mode(mode)
-        self.update_zone_shading_buttons(mode)
-        try:
-            window.localStorage.setItem("sindhu_zone_shading_mode", mode)
-        except Exception:
-            pass
-
     def on_toggle_zones_layer(self, ev):
         checked = bool(ev.target.checked)
         self.map.set_zones_visible(checked)

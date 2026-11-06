@@ -369,16 +369,6 @@ body.map-focus .map-focus-hint {
         --cctv-dur-short: 220ms;
         --cctv-dur-long: 300ms;
     }
-    .zone-label {
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-        padding: 0 !important;
-    }
-
-    .zone-label::before {
-        display: none !important;
-    }
 
     /* Visual Feed & Camera styles */
     .visual-feed-card {
