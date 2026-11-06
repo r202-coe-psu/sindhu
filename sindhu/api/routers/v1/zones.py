@@ -62,10 +62,14 @@ async def locate(
     zone_stations = await services.zones.find_stations_by_zone(
         zone, body.longitude, body.latitude
     )
+    tambon = await services.tambons.find_tambon_by_location(
+        body.longitude, body.latitude
+    )
     return schemas.zones.LocateResponse(
         zone=zone,
         nearby_stations=zone_stations,
         user_location=[body.longitude, body.latitude],
+        tambon=tambon,
     )
 
 
@@ -80,7 +84,9 @@ async def create(
             status_code=http_status.HTTP_409_CONFLICT,
             detail="This zone already exists",
         )
-    station_ids = [] if zone_form.zone_kind == "reference" else zone_form.station_ids
+    station_ids = (
+        [] if services.tambons.is_reference_zone(zone_form) else zone_form.station_ids
+    )
     db_stations = await models.Station.find({"_id": {"$in": station_ids}}).to_list()
     zone = models.Zone(**zone_form.model_dump(exclude={"station_ids"}))
     zone.stations = db_stations
@@ -100,13 +106,26 @@ async def update(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found zone",
         )
-    station_ids = [] if zone_form.zone_kind == "reference" else zone_form.station_ids
-    db_stations = await models.Station.find({"_id": {"$in": station_ids}}).to_list()
-    for key, value in zone_form.model_dump(exclude={"station_ids"}).items():
+    tambons_before = list(db_zone.tambons)
+    update_data = zone_form.model_dump(exclude_unset=True, exclude={"station_ids"})
+    # exclude_unset: a field missing from the request keeps its stored value
+    # instead of being reset to the schema default (e.g. tambons).
+    for key, value in update_data.items():
+        if key == "tambons":
+            value = [schemas.tambons.TambonRef(**t) for t in value]
         setattr(db_zone, key, value)
-    db_zone.stations = db_stations
+    if services.tambons.is_reference_zone(db_zone):
+        db_zone.stations = []
+    elif "station_ids" in zone_form.model_fields_set:
+        db_zone.stations = await models.Station.find(
+            {"_id": {"$in": zone_form.station_ids}}
+        ).to_list()
     db_zone.updated_date = datetime.datetime.now()
     await db_zone.save()
+    if "tambons" in update_data:
+        await services.tambons.sync_tambon_zone_links(
+            db_zone.id, tambons_before, db_zone.tambons
+        )
     return db_zone
 
 
