@@ -48,7 +48,7 @@ class MapPageLayoutTests(unittest.TestCase):
 
     def test_monitor_title_names_the_page(self):
         self.assertIn(
-            "<title>ติดตามสถานการณ์ | เฝ้าดู (FoundDoo)</title>",
+            f"<title>ติดตามสถานการณ์ | {self.app.config['APP_TITLE']}</title>",
             self._html("/th/monitor"),
         )
 

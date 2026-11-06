@@ -1,6 +1,6 @@
 import os
 
-APP_TITLE = os.getenv("APP_TITLE", os.getenv("PROJECT_NAME", "เฝ้าดู (FoundDoo)"))
+APP_TITLE = os.getenv("APP_TITLE", os.getenv("PROJECT_NAME", "เฝ้าดู"))
 SECRET_KEY = "sindhu-default-secret-key"
 MONGODB_DB = "sindhudb"
 SINDHU_API_BASE_URL = "http://localhost:8000"
