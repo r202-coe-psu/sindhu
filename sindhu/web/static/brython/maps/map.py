@@ -1,28 +1,13 @@
 from browser import alert, window, ajax
 import json
 
-from maps.marker_sizes import (
-    CCTV_ANCHOR,
-    CCTV_HIT_BOX,
-    CCTV_PAIRED_SHIFT,
-    CCTV_PIN,
-    CCTV_POPUP_OFFSET_Y,
-    MY_LOCATION_ANCHOR,
-    MY_LOCATION_HIT_BOX,
-    MY_LOCATION_PX,
-    MY_LOCATION_POPUP_OFFSET_Y,
-    USER_ANCHOR,
-    USER_HIT_BOX,
-    USER_PIN,
-    USER_POPUP_OFFSET_Y,
-    haversine_distance,
-    hit_box_html,
-    is_far_zoom,
-    is_paired_with_station,
-)
+from maps.cctv_pairing import find_match, geo_coords, pin_shift
+from maps.marker_sizes import CCTV, MY_LOCATION, USER, hit_box_html, is_far_zoom
 
 
-_haversine_distance = haversine_distance
+def visual_feed_key(source, upstream_id):
+    """Key of a camera in ``visual_feed_markers_by_id``."""
+    return f"{source}_{upstream_id}"
 
 
 VISUAL_FEED_POPUP_OPTIONS = {"minWidth": 240, "maxWidth": 280, "autoPanPadding": [24, 24]}
@@ -120,7 +105,8 @@ class Map:
 
         # Markers shrink at far zoom through CSS (.map-zoom-far), so the
         # icons never need rebuilding when the zoom changes
-        self.map.on("zoomend", lambda e: self.update_zoom_class())
+        # Pixel distances change with zoom, so camera pins are re-placed too
+        self.map.on("zoomend", lambda e: self._on_zoomend())
         self.update_zoom_class()
 
         # window.navigator.geolocation.getCurrentPosition(
@@ -152,6 +138,8 @@ class Map:
         self.visual_feed_layer = None
         self.visual_feed_markers = []
         self.visual_feed_markers_by_id = {}
+        # key -> (dx, dy) px a camera pin is moved off its station
+        self.visual_feed_shift = {}
         self.visual_feed_layer_visible = True
         self.visual_feeds = []
         self.latest_stations = []
@@ -742,53 +730,40 @@ class Map:
         else:
             container.classList.remove("map-zoom-far")
 
-    def get_station_coords(self):
-        """GeoJSON [lng, lat] of every station marker currently on the map."""
-        coords = []
-        for marker in (getattr(self, "metric_markers", None) or {}).values():
-            latlng = marker.getLatLng()
-            coords.append([latlng.lng, latlng.lat])
-        return coords
+    def _on_zoomend(self):
+        self.update_zoom_class()
+        self.refresh_cctv_pins()
+
+    def visible_stations(self):
+        """Stations currently drawn on the map, as dicts with code/coordinates.
+
+        The base Map draws no stations; BaseMap overrides this.
+        """
+        return []
 
     def find_matching_cctv(self, station):
-        """Find the nearest co-located CCTV camera for a given water station."""
-        if not hasattr(self, "visual_feeds") or not self.visual_feeds:
-            return None
-        st_code = str(station.get("code") or "").strip().lower()
-        scoord_obj = station.get("coordinates")
-        s_coords = (
-            scoord_obj.get("coordinates") if isinstance(scoord_obj, dict) else None
-        )
+        """The CCTV camera linked to a water station (see cctv_pairing)."""
+        return find_match(station, getattr(self, "visual_feeds", None))
 
-        best = None
-        min_dist = float("inf")
-        for feed in self.visual_feeds:
-            c_code = str(feed.get("code") or "").strip().lower()
-            if st_code and c_code and st_code == c_code:
-                return feed
-            ccoord_obj = feed.get("coordinates")
-            c_coords = (
-                ccoord_obj.get("coordinates") if isinstance(ccoord_obj, dict) else None
-            )
-            if s_coords and c_coords and len(s_coords) >= 2 and len(c_coords) >= 2:
-                dist = _haversine_distance(s_coords, c_coords)
-                if dist <= 300 and dist < min_dist:
-                    min_dist = dist
-                    best = feed
-        return best
-
-    def _build_cctv_icon(self, feed, paired):
-        """divIcon for a camera pin; paired cameras are shifted off the station."""
+    @staticmethod
+    def _feed_status(feed):
+        """(is_fresh, pin color, Thai status label) of a camera."""
         is_fresh = str(feed.get("image_freshness", "stale")).lower() == "fresh"
         color = "#0284c7" if is_fresh else "#9ca3af"
+        label = "ออนไลน์" if is_fresh else "ขาดการเชื่อมต่อ"
+        return is_fresh, color, label
+
+    def _build_cctv_icon(self, feed, shift=(0, 0)):
+        """divIcon for a camera pin, moved by ``shift`` px off its station."""
+        is_fresh, color, _label = self._feed_status(feed)
         # Modern CCTV camera pin icon with status color
         pulse_ring = (
             f'<div class="cctv-live-glow absolute w-2 h-2 top-[5px] left-[6px] rounded-full pointer-events-none"></div>'
             if is_fresh
             else ""
         )
-        pin_w, pin_h = CCTV_PIN
-        pin_html = f"""<div class="cctv-marker-pin relative cursor-pointer [filter:drop-shadow(0_2px_5px_rgba(0,0,0,0.32))]" style="transform-origin: bottom center;">
+        pin_w, pin_h = CCTV.pin
+        pin_html = f"""<div class="cctv-marker-pin relative cursor-pointer [filter:drop-shadow(0_2px_5px_rgba(0,0,0,0.32))]">
   {pulse_ring}
   <svg class="block" width="{pin_w}" height="{pin_h}" viewBox="0 0 34 42" preserveAspectRatio="xMidYMax meet" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M17 0C7.6 0 0 7.6 0 17C0 28.5 15.2 40.8 15.8 41.3C16.5 41.9 17.5 41.9 18.2 41.3C18.8 40.8 34 28.5 34 17C34 7.6 26.4 0 17 0Z" fill="{color}"/>
@@ -800,47 +775,57 @@ class Map:
     </g>
   </svg>
 </div>"""
-        icon_html = hit_box_html(pin_html, *CCTV_HIT_BOX, align="bottom")
+        return self._pin_icon(CCTV, pin_html, "custom-cctv-pin", shift)
 
-        # A camera next to a station would sit right on its dot, so move
-        # the pin to the upper right of the dot. iconAnchor is the icon
-        # pixel that lands on the point: moving it down-left moves the
-        # icon up-right.
-        anchor_x, anchor_y = CCTV_ANCHOR
-        if paired:
-            anchor_x -= CCTV_PAIRED_SHIFT[0]
-            anchor_y += CCTV_PAIRED_SHIFT[1]
+    def _pin_icon(self, spec, pin_html, class_name="", shift=(0, 0)):
+        """divIcon for a pin (a PinSpec) whose tip marks the point.
 
-        pin_icon = self.leaflet.divIcon(
+        ``shift`` moves the pin that many px off the point.
+        """
+        # iconAnchor is the icon pixel that lands on the point, so moving
+        # the pin by (sx, sy) means subtracting it from the anchor. Popup
+        # and tooltip anchors are relative to that point, so they move by
+        # (sx, sy) to stay on the pin.
+        sx, sy = shift
+        anchor_x, anchor_y = spec.anchor
+        return self.leaflet.divIcon(
             {
-                "className": "custom-cctv-pin",
-                "html": icon_html,
-                "iconSize": list(CCTV_HIT_BOX),
-                "iconAnchor": [anchor_x, anchor_y],
-                "popupAnchor": [0, CCTV_POPUP_OFFSET_Y],
+                "className": class_name,
+                "html": hit_box_html(pin_html, *spec.hit_box, align="bottom"),
+                "iconSize": list(spec.hit_box),
+                "iconAnchor": [anchor_x - sx, anchor_y - sy],
+                "popupAnchor": [sx, sy + spec.popup_offset_y],
+                "tooltipAnchor": [sx, sy],
             }
         )
-        return pin_icon
 
-    def refresh_cctv_pairing(self):
-        """Re-offset camera pins when stations load after the cameras (or vice versa).
+    def refresh_cctv_pins(self):
+        """Move each camera pin off the station it is linked to, if they overlap.
 
-        setIcon closes an open popup/tooltip, so only markers whose paired
-        state changed are touched.
+        Call whenever stations load, are filtered, or the zoom changes. Only
+        pins whose shift changed get a new icon.
         """
-        if not getattr(self, "visual_feeds", None):
+        feeds = getattr(self, "visual_feeds", None)
+        if not feeds or not self.visual_feed_markers_by_id:
             return
-        station_coords = self.get_station_coords()
-        for feed in self.visual_feeds:
-            key = f"{feed.get('source', '')}_{feed.get('upstream_id', '')}"
+        stations = self.visible_stations()
+        for feed in feeds:
+            if not isinstance(feed, dict):
+                continue
+            key = visual_feed_key(feed.get("source", ""), feed.get("upstream_id", ""))
             marker = self.visual_feed_markers_by_id.get(key)
             if marker is None:
                 continue
-            c = (feed.get("coordinates") or {}).get("coordinates")
-            paired = is_paired_with_station(c, station_coords)
-            if self.visual_feed_paired.get(key) != paired:
-                self.visual_feed_paired[key] = paired
-                marker.setIcon(self._build_cctv_icon(feed, paired))
+            shift = (0, 0)
+            station = find_match(feed, stations)
+            if station is not None:
+                s_lng, s_lat = geo_coords(station)[:2]
+                s_pt = self.map.latLngToLayerPoint([s_lat, s_lng])
+                c_pt = self.map.latLngToLayerPoint(marker.getLatLng())
+                shift = pin_shift(c_pt.x - s_pt.x, c_pt.y - s_pt.y)
+            if self.visual_feed_shift.get(key, (0, 0)) != shift:
+                self.visual_feed_shift[key] = shift
+                marker.setIcon(self._build_cctv_icon(feed, shift))
 
     def show_visual_feeds(self, feeds, on_feed_click=None):
         """Create and display CCTV markers on the visual_feed_layer."""
@@ -849,14 +834,14 @@ class Map:
         if not feeds:
             self.visual_feeds = []
             self.visual_feed_markers_by_id = {}
+            self.visual_feed_shift = {}
             self.set_visual_feed_layer([])
             return
 
         self.visual_feeds = feeds
-        station_coords = self.get_station_coords()
         markers = []
         self.visual_feed_markers_by_id = {}
-        self.visual_feed_paired = {}
+        self.visual_feed_shift = {}
         for feed in feeds:
             if not isinstance(feed, dict):
                 continue
@@ -871,10 +856,7 @@ class Map:
             if lat is None or lng is None:
                 continue
 
-            image_freshness = str(feed.get("image_freshness", "stale")).lower()
-            is_fresh = image_freshness == "fresh"
-            color = "#0284c7" if is_fresh else "#9ca3af"
-            status_label = "ออนไลน์" if is_fresh else "ขาดการเชื่อมต่อ"
+            _is_fresh, color, status_label = self._feed_status(feed)
 
             title = (
                 feed.get("title_th")
@@ -885,8 +867,7 @@ class Map:
             source = str(feed.get("source", ""))
             upstream_id = str(feed.get("upstream_id", ""))
 
-            paired = is_paired_with_station([lng, lat], station_coords)
-            pin_icon = self._build_cctv_icon(feed, paired)
+            pin_icon = self._build_cctv_icon(feed)
 
             marker = self.leaflet.marker(
                 [lat, lng],
@@ -899,7 +880,7 @@ class Map:
 
             marker.bindTooltip(
                 f"<div class='font-sans text-xs p-0.5'><div class='font-bold text-slate-900'>{title}</div><div class='font-semibold text-[11px] mt-0.5' style='color:{color};'>● {status_label}</div></div>",
-                {"direction": "top", "offset": [0, CCTV_POPUP_OFFSET_Y]},
+                {"direction": "top", "offset": [0, CCTV.popup_offset_y]},
             )
 
             if on_feed_click:
@@ -909,15 +890,16 @@ class Map:
                 )
 
             markers.append(marker)
-            key = f"{source}_{upstream_id}"
+            key = visual_feed_key(source, upstream_id)
             self.visual_feed_markers_by_id[key] = marker
-            self.visual_feed_paired[key] = paired
 
         self.set_visual_feed_layer(markers)
+        # stations may have loaded before these cameras
+        self.refresh_cctv_pins()
 
     def fly_to_visual_feed(self, source, upstream_id, zoom=17):
         """Fly the map to the specified camera without opening a second UI."""
-        key = f"{source}_{upstream_id}"
+        key = visual_feed_key(source, upstream_id)
         marker = self.visual_feed_markers_by_id.get(key)
         if marker:
             latlng = marker.getLatLng()
@@ -929,7 +911,7 @@ class Map:
         Returns False when the pin is not on the map, so the caller can fall
         back to its own viewer.
         """
-        key = f"{source}_{upstream_id}"
+        key = visual_feed_key(source, upstream_id)
         marker = self.visual_feed_markers_by_id.get(key)
         if not marker or not self.visual_feed_layer_visible:
             return False
@@ -988,18 +970,10 @@ class Map:
 
     def place_pin(self, lat, lng):
         self.user_coord = (lat, lng)
-        pin_icon = self.leaflet.divIcon(
-            {
-                "className": "",
-                "html": hit_box_html(
-                    f'<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><svg style="display: block;" width="{USER_PIN[0]}" height="{USER_PIN[1]}" viewBox="0 0 30 40" preserveAspectRatio="xMidYMax meet"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="#dc2626"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg></div>',
-                    *USER_HIT_BOX,
-                    align="bottom",
-                ),
-                "iconSize": list(USER_HIT_BOX),
-                "iconAnchor": list(USER_ANCHOR),
-                "popupAnchor": [0, USER_POPUP_OFFSET_Y],
-            }
+        pin_w, pin_h = USER.pin
+        pin_icon = self._pin_icon(
+            USER,
+            f'<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><svg style="display: block;" width="{pin_w}" height="{pin_h}" viewBox="0 0 30 40" preserveAspectRatio="xMidYMax meet"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="#dc2626"/><circle cx="15" cy="15" r="6" fill="#fff"/></svg></div>',
         )
         if (
             hasattr(self, "user_mark")
@@ -1129,18 +1103,9 @@ class Map:
 
             self.map.flyTo(self.user_coord, 16)
 
-            my_location_icon = self.leaflet.divIcon(
-                {
-                    "className": "",
-                    "html": hit_box_html(
-                        f'<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><i class="ph-fill ph-map-pin text-brand-600 block" style="font-size: {MY_LOCATION_PX}px; line-height: 1;"></i></div>',
-                        *MY_LOCATION_HIT_BOX,
-                        align="bottom",
-                    ),
-                    "iconSize": list(MY_LOCATION_HIT_BOX),
-                    "iconAnchor": list(MY_LOCATION_ANCHOR),
-                    "popupAnchor": [0, MY_LOCATION_POPUP_OFFSET_Y],
-                }
+            my_location_icon = self._pin_icon(
+                MY_LOCATION,
+                f'<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><i class="ph-fill ph-map-pin text-brand-600 block" style="font-size: {MY_LOCATION.pin[1]}px; line-height: 1;"></i></div>',
             )
 
             if (
