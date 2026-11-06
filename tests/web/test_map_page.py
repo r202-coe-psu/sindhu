@@ -51,6 +51,10 @@ class MapPageLayoutTests(unittest.TestCase):
             self._html("/th/monitor").lstrip().startswith("<!DOCTYPE html>")
         )
 
+    def test_site_stylesheet_loads_after_leaflet(self):
+        html = self._html("/th/monitor")
+        self.assertLess(html.index("leaflet.css"), html.index("css/app.css"))
+
     def test_panel_is_folded_in_the_markup(self):
         html = self._html("/th/monitor")
         panel = re.search(r'<section id="monitor_panel"[^>]*>', html).group(0)
