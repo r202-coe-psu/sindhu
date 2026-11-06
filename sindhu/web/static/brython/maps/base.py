@@ -5,7 +5,7 @@ from browser import ajax, document, html, window, aio
 import javascript as js
 
 from .map import Map
-from stations import metric_infos
+from stations import bank_status, metric_infos
 from stations.metric_colors import get_metric_color as _get_metric_color
 
 DATA_MARKER_Z_OFFSET = 1000
@@ -50,14 +50,19 @@ class BaseMap(Map):
     SECTION_USABLE_PX = 62
     SECTION_HEADROOM = 1.25
     SECTION_OVERFLOW_PX = 26
-    SECTION_RISK_TINTS = {
-        3: ("#9333ea", "#f3e8ff"),
-        2: ("#ef4444", "#fee2e2"),
-        1: ("#f97316", "#ffedd5"),
-        0: ("#16a34a", "#dcfce7"),
-    }
 
-    def build_waterlevel_section(self, station, waterlevel_val, diff_val):
+    def build_waterlevel_section(self, station):
+        comparison = bank_status.compare_station(station)
+        color = comparison["color"]
+        tint = comparison["tint"]
+        diff_val = comparison["diff"]
+
+        # Without a comparison a drawn water line would imply a reading we lack
+        if diff_val is None:
+            return f"""
+            <div style="margin-top:8px; text-align:center; font-size:12px; font-weight:700; border-radius:7px; padding:6px 8px; color:{color}; background:{tint};">{comparison["summary"]}</div>
+            """
+
         sid = station["id"]
         view_w = self.SECTION_VIEW_W
         view_h = self.SECTION_VIEW_H
@@ -67,83 +72,31 @@ class BaseMap(Map):
         ch_r = self.SECTION_CH_R
         ax = self.SECTION_ARROW_X
 
-        metadata = station.get("metadata") or {}
-        try:
-            crest = metadata.get("water_level_critical")
-            crest = float(crest) if crest is not None else None
-        except (TypeError, ValueError):
-            crest = None
-        try:
-            warning = metadata.get("water_level_warning")
-            warning = float(warning) if warning is not None else None
-        except (TypeError, ValueError):
-            warning = None
-
-        if diff_val is None and waterlevel_val is not None and crest is not None:
-            try:
-                diff_val = float(waterlevel_val) - float(crest)
-            except (TypeError, ValueError):
-                pass
-        if waterlevel_val is None and diff_val is not None and crest is not None:
-            try:
-                waterlevel_val = float(crest) + float(diff_val)
-            except (TypeError, ValueError):
-                pass
-
-        gap = abs(diff_val) if diff_val is not None else 0.0
-        warn_drop = None
-        if crest is not None and warning is not None and crest > warning:
-            warn_drop = crest - warning
+        gap = abs(diff_val)
+        warn_drop = bank_status.NEAR_BANK_BAND_M
 
         span = max(gap, warn_drop or 0.0, 0.2) * self.SECTION_HEADROOM
         px_per_m = self.SECTION_USABLE_PX / span
 
-        if diff_val is None:
-            water_y = bank_y + self.SECTION_USABLE_PX * 0.6
-        elif diff_val > 0:
+        if diff_val > 0:
             water_y = bank_y - min(diff_val * px_per_m, self.SECTION_OVERFLOW_PX)
         else:
             water_y = bank_y + gap * px_per_m
 
-        color, tint = self.SECTION_RISK_TINTS.get(station.get("risk"), (None, None))
-        if color is None:
-            d = diff_val if diff_val is not None else None
-            if d is None:
-                color, tint = "#64748b", "#f1f5f9"
-            elif d >= 0.5:
-                color, tint = self.SECTION_RISK_TINTS[3]
-            elif d >= 0:
-                color, tint = self.SECTION_RISK_TINTS[2]
-            elif d >= -0.5:
-                color, tint = self.SECTION_RISK_TINTS[1]
-            else:
-                color, tint = self.SECTION_RISK_TINTS[0]
-
-        if diff_val is None:
-            headline = "ไม่มีค่าเทียบตลิ่ง"
-        elif diff_val > 0:
-            headline = f"ล้นตลิ่ง {diff_val:.2f} ม."
-        elif diff_val < 0:
-            headline = f"ต่ำกว่าตลิ่ง {gap:.2f} ม."
-        else:
-            headline = "เสมอระดับตลิ่งพอดี"
-
         a_top = min(water_y, bank_y)
         a_bot = max(water_y, bank_y)
-        arrow_html = ""
-        if diff_val is not None:
-            if a_bot - a_top >= 12:
-                arrow_html = f"""
-                  <line x1="{ax}" y1="{a_top:.1f}" x2="{ax}" y2="{a_bot:.1f}"
-                        stroke="{color}" stroke-width="1.8"/>
-                  <path d="M {ax} {a_top:.1f} l -3.4 5 h 6.8 Z" fill="{color}"/>
-                  <path d="M {ax} {a_bot:.1f} l -3.4 -5 h 6.8 Z" fill="{color}"/>
-                """
-            else:
-                arrow_html = f"""
-                  <line x1="{ax - 5}" y1="{a_top:.1f}" x2="{ax + 5}" y2="{a_top:.1f}"
-                        stroke="{color}" stroke-width="2.2"/>
-                """
+        if a_bot - a_top >= 12:
+            arrow_html = f"""
+              <line x1="{ax}" y1="{a_top:.1f}" x2="{ax}" y2="{a_bot:.1f}"
+                    stroke="{color}" stroke-width="1.8"/>
+              <path d="M {ax} {a_top:.1f} l -3.4 5 h 6.8 Z" fill="{color}"/>
+              <path d="M {ax} {a_bot:.1f} l -3.4 -5 h 6.8 Z" fill="{color}"/>
+            """
+        else:
+            arrow_html = f"""
+              <line x1="{ax - 5}" y1="{a_top:.1f}" x2="{ax + 5}" y2="{a_top:.1f}"
+                    stroke="{color}" stroke-width="2.2"/>
+            """
 
         warn_line = ""
         warn_row = ""
@@ -157,17 +110,7 @@ class BaseMap(Map):
             <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:rgba(15,23,42,0.6);">
                 <span style="width:8px; height:2px; background:#f97316; flex:none;"></span>
                 <span>เฝ้าระวัง</span>
-                <b style="color:#0f172a; font-weight:600; margin-left:auto;">{warning:.2f}</b>
-            </div>
-            """
-
-        crest_row = ""
-        if crest is not None:
-            crest_row = f"""
-            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:rgba(15,23,42,0.6);">
-                <span style="width:8px; height:2px; background:#475569; flex:none;"></span>
-                <span>ตลิ่ง</span>
-                <b style="color:#0f172a; font-weight:600; margin-left:auto;">{crest:.2f}</b>
+                <b style="color:#0f172a; font-weight:600; margin-left:auto;">-{warn_drop:.2f} ม.</b>
             </div>
             """
 
@@ -215,16 +158,13 @@ class BaseMap(Map):
                 <div style="flex:0 0 172px;">{svg}</div>
                 <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:10px;">
                     <div>
-                        <div style="font-size:10px; color:rgba(15,23,42,0.55); line-height:1; margin-bottom:4px;">ระดับน้ำ</div>
-                        <div style="font-size:21px; font-weight:800; color:var(--color-brand-700); line-height:1; letter-spacing:-0.02em;">{f"{waterlevel_val:.2f}" if waterlevel_val is not None else "—"}<span style="font-size:11px; font-weight:600; color:rgba(15,23,42,0.5); margin-left:2px;">ม.</span></div>
+                        <div style="font-size:10px; color:rgba(15,23,42,0.55); line-height:1; margin-bottom:4px;">{comparison["side"]}</div>
+                        <div style="font-size:21px; font-weight:800; color:var(--color-brand-700); line-height:1; letter-spacing:-0.02em;">{gap:.2f}<span style="font-size:11px; font-weight:600; color:rgba(15,23,42,0.5); margin-left:2px;">ม.</span></div>
                     </div>
-                    <div style="display:flex; flex-direction:column; gap:4px;">
-                        {crest_row}
-                        {warn_row}
-                    </div>
+                    {warn_row}
                 </div>
             </div>
-            <div style="margin-top:8px; text-align:center; font-size:12px; font-weight:700; border-radius:7px; padding:4px 0; color:{color}; background:{tint};">{headline}</div>
+            <div style="margin-top:8px; text-align:center; font-size:12px; font-weight:700; border-radius:7px; padding:4px 0; color:{color}; background:{tint};">{comparison["summary"]}</div>
         </div>
         """
 
@@ -365,6 +305,13 @@ class BaseMap(Map):
                     if not sensor:
                         continue
 
+                    # Capture one timestamp for display
+                    if not timestamp and sensor.get("timestamp"):
+                        timestamp = datetime.fromisoformat(sensor["timestamp"])
+
+                    if metric_type in bank_status.RAW_WATER_LEVEL_METRICS:
+                        continue
+
                     value = sensor.get("value")
                     value_str = (
                         f"{value:.2f}" if isinstance(value, float) else str(value)
@@ -395,10 +342,6 @@ class BaseMap(Map):
                             </div>
                             """)
 
-                    # Capture one timestamp for display
-                    if not timestamp and sensor.get("timestamp"):
-                        timestamp = datetime.fromisoformat(sensor["timestamp"])
-
                 # Format timestamps
                 timestamp_html = ""
                 footer_html = ""
@@ -420,27 +363,10 @@ class BaseMap(Map):
                     </div>
                     """
 
-                waterlevel_sensor = (
-                    metrics_dict.get("waterlevel")
-                    or metrics_dict.get("waterlevel_msl")
-                    or metrics_dict.get("water_level")
-                    or metrics_dict.get("waterlevel_m")
+                has_waterlevel = "diff_wl_bank" in metrics_dict or any(
+                    metric_type in metrics_dict
+                    for metric_type in bank_status.RAW_WATER_LEVEL_METRICS
                 )
-                diff_sensor = metrics_dict.get("diff_wl_bank")
-                diff_val = diff_sensor.get("value") if diff_sensor else None
-                waterlevel_val = (
-                    waterlevel_sensor.get("value") if waterlevel_sensor else None
-                )
-
-                if waterlevel_val is None and diff_val is not None:
-                    crest = (station.get("metadata") or {}).get("water_level_critical")
-                    if crest is not None:
-                        try:
-                            waterlevel_val = float(crest) + float(diff_val)
-                        except (TypeError, ValueError):
-                            pass
-
-                has_waterlevel = waterlevel_val is not None or diff_val is not None
 
                 matched_cctv = self.find_matching_cctv(station)
                 cctv_btn_html = ""
@@ -464,9 +390,7 @@ class BaseMap(Map):
                     """
 
                 if has_waterlevel:
-                    section_html = self.build_waterlevel_section(
-                        station, waterlevel_val, diff_val
-                    )
+                    section_html = self.build_waterlevel_section(station)
                     tooltip_detail = f"""
                     <div class="card card-compact w-72 bg-base-100 shadow-xl border border-base-content/10 text-base-content overflow-hidden">
                         <div class="card-body p-3 gap-1.5">

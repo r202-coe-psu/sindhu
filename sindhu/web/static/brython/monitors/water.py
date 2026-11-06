@@ -3,7 +3,7 @@ import javascript as js
 import datetime
 
 from .base import BaseMonitor
-from stations import metric_infos
+from stations import bank_status, metric_infos
 from maps.map import _haversine_distance
 import json
 
@@ -62,68 +62,9 @@ class WaterMonitor(BaseMonitor):
         if not station or not isinstance(station, dict):
             return -1, None, None
 
-        metadata = station.get("metadata") or {}
-        if not isinstance(metadata, dict):
-            metadata = {}
-
-        wl_crit = metadata.get("water_level_critical")
-        wl_warn = metadata.get("water_level_warning")
-        wl_evac = metadata.get("water_level_evacuation")
-        if wl_evac is None and wl_crit is not None:
-            try:
-                wl_evac = float(wl_crit) + 0.5
-            except:
-                pass
-
-        waterlevel = None
-        diff_wl_bank = None
-        for m in station.get("metrics") or []:
-            if not m or not isinstance(m, dict):
-                continue
-            m_type = (m.get("metric_type") or "").lower()
-            val = m.get("value")
-            if val is not None:
-                try:
-                    if m_type in [
-                        "water_level",
-                        "waterlevel",
-                        "waterlevel_msl",
-                        "waterlevel_m",
-                    ]:
-                        waterlevel = float(val)
-                    elif m_type == "diff_wl_bank":
-                        diff_wl_bank = float(val)
-                except (ValueError, TypeError):
-                    pass
-
-        risk = -1
-        if waterlevel is not None and wl_crit is not None and wl_warn is not None:
-            try:
-                wl = float(waterlevel)
-                crit = float(wl_crit)
-                warn = float(wl_warn)
-                evac = float(wl_evac) if wl_evac is not None else crit + 0.5
-                if wl >= evac:
-                    risk = 3
-                elif wl >= crit:
-                    risk = 2
-                elif wl >= warn:
-                    risk = 1
-                else:
-                    risk = 0
-            except:
-                pass
-        elif diff_wl_bank is not None:
-            if diff_wl_bank >= 0.5:
-                risk = 3
-            elif diff_wl_bank >= 0:
-                risk = 2
-            elif diff_wl_bank >= -0.5:
-                risk = 1
-            else:
-                risk = 0
-
-        return risk, waterlevel, diff_wl_bank
+        comparison = bank_status.compare_station(station)
+        waterlevel = bank_status.to_number(bank_status.raw_water_level(station))
+        return comparison["risk"], waterlevel, comparison["diff"]
 
     """
     ===========================================================================
@@ -283,7 +224,7 @@ class WaterMonitor(BaseMonitor):
             # legend has to describe the risk levels instead
             self.map.set_legend(
                 metric_infos.RISK_LEVELS,
-                "ระดับน้ำเทียบเกณฑ์เตือนภัย",
+                "ระดับน้ำเทียบตลิ่ง",
                 metric_infos.RISK_LEVEL_TITLE,
             )
 
@@ -699,48 +640,13 @@ class WaterMonitor(BaseMonitor):
             name = station.get("name_th") or station.get("name")
             location = self.format_location(station)
 
-            # format other metrics
-            other_html = ""
-            for om in metrics:
-                m_name = om.get("metric_type")
-                if not m_name:
-                    continue
-                val = om.get("value")
-                if val is None:
-                    continue
-
-                # Label from the shared metric names so the card and the map
-                # tooltip call the same reading by the same name
-                m_label = metric_infos.HTML_METRIC_NAMES.get(m_name, m_name)
-
-                if m_name == "waterlevel_msl":
-                    display_text = f'{m_label}: <span class="font-medium text-ink-700">{val} ม.รทก.</span>'
-                elif m_name == "diff_wl_bank":
-                    try:
-                        v = float(val)
-                        if v < 0:
-                            display_text = f'{m_label}: <span class="font-medium text-ink-700">ต่ำกว่าตลิ่ง {abs(v):.2f} ม.</span>'
-                        elif v > 0:
-                            display_text = f'{m_label}: <span class="font-medium text-red-600">ล้นตลิ่ง {v:.2f} ม.</span>'
-                        else:
-                            display_text = f'{m_label}: <span class="font-medium text-yellow-600">เสมอระดับตลิ่งพอดี</span>'
-                    except:
-                        display_text = f'{m_label}: <span class="font-medium text-ink-700">{val} ม.</span>'
-                else:
-                    unit = metric_infos.HTML_METRIC_UNITS.get(m_name, "")
-                    try:
-                        value_text = f"{float(val):.2f} {unit}".strip()
-                    except (TypeError, ValueError):
-                        value_text = f"{val} {unit}".strip()
-                    display_text = f'{m_label}: <span class="font-medium text-ink-700">{value_text}</span>'
-
-                other_html += f'<div class="text-xs text-ink-500 bg-ink-50 px-2 py-1 rounded">{display_text}</div>'
+            other_html = self.build_metric_chips(station, metrics)
 
             if waterlevel is None and diff_wl_bank is None:
-                other_html = f"""
+                other_html = """
                 <div class="flex items-center gap-1.5 rounded-lg bg-ink-50 px-2.5 py-2 text-xs text-ink-500">
                     <i class="ph ph-clock-counter-clockwise text-sm" aria-hidden="true"></i>
-                    <span>{level["range"]}</span>
+                    <span>ไม่มีข้อมูลระดับน้ำใน 24 ชม.</span>
                 </div>
                 """
 
@@ -792,6 +698,40 @@ class WaterMonitor(BaseMonitor):
 
         document["reservoir_data_list"].html = html_content
         self.bind_station_cards()
+
+    def build_metric_chips(self, station, metrics):
+        comparison = bank_status.compare_station(station)
+        bank_label = metric_infos.HTML_METRIC_NAMES["diff_wl_bank"]
+        chips = f"""<div class="text-xs px-2 py-1 rounded" style="color: {comparison["color"]}; background-color: {comparison["tint"]};">{bank_label}: <span class="font-semibold">{comparison["summary"]}</span></div>"""
+
+        for om in metrics:
+            m_name = om.get("metric_type")
+            if not m_name:
+                continue
+            val = om.get("value")
+            if val is None:
+                continue
+            # The bank comparison above replaces these for the public
+            if (
+                m_name.lower() in bank_status.RAW_WATER_LEVEL_METRICS
+                or m_name.lower() == "diff_wl_bank"
+            ):
+                continue
+
+            # Label from the shared metric names so the card and the map
+            # tooltip call the same reading by the same name
+            m_label = metric_infos.HTML_METRIC_NAMES.get(m_name, m_name)
+            unit = metric_infos.HTML_METRIC_UNITS.get(m_name, "")
+            try:
+                value_text = f"{float(val):.2f} {unit}".strip()
+            except (TypeError, ValueError):
+                value_text = f"{val} {unit}".strip()
+            display_text = (
+                f'{m_label}: <span class="font-medium text-ink-700">{value_text}</span>'
+            )
+            chips += f'<div class="text-xs text-ink-500 bg-ink-50 px-2 py-1 rounded">{display_text}</div>'
+
+        return chips
 
     def format_location(self, station):
         """Province comes from the ETL inside `metadata`, not on the station."""
