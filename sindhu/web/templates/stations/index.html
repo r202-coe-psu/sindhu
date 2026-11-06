@@ -157,9 +157,24 @@ async function apiPut(path, body) {
     }
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(typeof err.detail === "string" ? err.detail : "HTTP " + res.status);
+        throw new Error(describeApiError(err.detail, res.status));
     }
     return res;
+}
+
+const BANK_LEVEL_MIN = -20;
+const BANK_LEVEL_MAX = 3000;
+const BANK_RANGE_MESSAGE = `ระดับตลิ่งต้องอยู่ระหว่าง ${BANK_LEVEL_MIN} ถึง ${BANK_LEVEL_MAX.toLocaleString()} ม.รทก.`;
+
+function describeApiError(detail, status) {
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail.length) {
+        const first = detail[0] || {};
+        if (["greater_than_equal", "less_than_equal"].includes(first.type)) return BANK_RANGE_MESSAGE;
+        if (first.type === "float_parsing" || first.type === "finite_number") return "ระดับตลิ่งต้องเป็นตัวเลข";
+        if (typeof first.msg === "string") return first.msg.replace(/^Value error, /, "");
+    }
+    return "ระบบตอบกลับผิดพลาด (HTTP " + status + ")";
 }
 
 function metricMap(station) {
@@ -266,7 +281,7 @@ function renderRow(s) {
         </td>
         <td><span class="badge badge-sm badge-ghost whitespace-nowrap">${escapeHtml(SOURCE_LABELS[s.source] || s.source)}</span></td>
         <td>${levelHtml}</td>
-        <td><input type="number" step="0.01" class="input input-bordered input-xs w-24" value="${escapeHtml(bankValue)}" aria-label="ระดับตลิ่งของ ${escapeHtml(s.name_th || s.name || s.code)}" onbeforeinput="blockNonNumeric(event)" onchange="saveBankLevel('${s.id}', this)" /></td>
+        <td><input type="number" step="0.01" min="${BANK_LEVEL_MIN}" max="${BANK_LEVEL_MAX}" class="input input-bordered input-xs w-24" value="${escapeHtml(bankValue)}" aria-label="ระดับตลิ่งของ ${escapeHtml(s.name_th || s.name || s.code)}" onbeforeinput="blockNonNumeric(event)" onchange="saveBankLevel('${s.id}', this)" /></td>
         <td><div class="flex flex-wrap gap-1">${issuesHtml}</div></td>
         <td class="text-right">
             <label class="inline-flex items-center gap-2 cursor-pointer">
@@ -335,6 +350,8 @@ function blockNonNumeric(event) {
     if (event.data && /[^0-9.\-]/.test(event.data)) event.preventDefault();
 }
 
+const bankLevelSaves = new Map();
+
 async function saveBankLevel(id, input) {
     const station = stations.find(s => s.id === id);
     if (!station) return;
@@ -347,14 +364,24 @@ async function saveBankLevel(id, input) {
         showToast("ระดับตลิ่งต้องเป็นตัวเลข", true);
         return;
     }
+    if (value !== null && (value < BANK_LEVEL_MIN || value > BANK_LEVEL_MAX)) {
+        input.value = previous ?? "";
+        showToast(BANK_RANGE_MESSAGE, true);
+        return;
+    }
+
+    const attempt = (bankLevelSaves.get(id) || 0) + 1;
+    bankLevelSaves.set(id, attempt);
+    const isLatest = () => bankLevelSaves.get(id) === attempt;
 
     try {
         await apiPut(`/v1/stations/${id}/bank-level`, { bank_level: value });
         station.bank_level = value;
-        showToast(value === null ? "ล้างระดับตลิ่งแล้ว" : "บันทึกระดับตลิ่งแล้ว");
+        if (isLatest()) showToast(value === null ? "ล้างระดับตลิ่งแล้ว" : "บันทึกระดับตลิ่งแล้ว");
     } catch (e) {
         console.error(e);
-        input.value = previous ?? "";
+        if (!isLatest()) return;
+        input.value = station.bank_level ?? "";
         showToast("บันทึกไม่สำเร็จ: " + e.message, true);
         if (e instanceof SessionExpiredError) redirectToLogin();
     }

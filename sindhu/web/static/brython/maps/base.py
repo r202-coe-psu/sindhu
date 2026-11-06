@@ -73,12 +73,7 @@ class BaseMap(Map):
         ax = self.SECTION_ARROW_X
 
         gap = abs(diff_val)
-        bank = bank_status.to_number(station.get("bank_level"))
-        metadata = station.get("metadata") or {}
-        warning = bank_status.to_number(metadata.get("water_level_warning"))
-        warn_drop = None
-        if warning is not None and bank > warning:
-            warn_drop = bank - warning
+        warn_drop = bank_status.NEAR_BANK_BAND_M
 
         span = max(gap, warn_drop or 0.0, 0.2) * self.SECTION_HEADROOM
         px_per_m = self.SECTION_USABLE_PX / span

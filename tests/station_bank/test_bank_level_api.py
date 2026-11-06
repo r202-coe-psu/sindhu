@@ -58,6 +58,22 @@ class BankLevelSchemaTests(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 schemas.stations.UpdateStationBankLevel(bank_level=value)
 
+    def test_update_rejects_implausible_heights(self):
+        for value in (-20.01, 3000.01, -999.0):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                schemas.stations.UpdateStationBankLevel(bank_level=value)
+
+    def test_update_rejects_sensor_no_data_codes(self):
+        with self.assertRaises(ValidationError) as caught:
+            schemas.stations.UpdateStationBankLevel(bank_level=-9.99)
+        self.assertIn("ไม่มีข้อมูล", str(caught.exception))
+
+    def test_update_accepts_real_heights(self):
+        for value in (-1.5, 0.0, 12.34, 1200.0):
+            with self.subTest(value=value):
+                form = schemas.stations.UpdateStationBankLevel(bank_level=value)
+                self.assertEqual(form.bank_level, value)
+
 
 class BankLevelEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def _update(self, station, value):
@@ -78,11 +94,18 @@ class BankLevelEndpointTests(unittest.IsolatedAsyncioTestCase):
         return result, clear_cache
 
     def _db_station(self, bank_level=None):
-        return SimpleNamespace(
+        station = SimpleNamespace(
             bank_level=bank_level,
             updated_date=datetime.datetime(2020, 1, 1),
             save=AsyncMock(),
         )
+
+        async def partial_set(values):
+            for field, value in values.items():
+                setattr(station, str(field), value)
+
+        station.set = AsyncMock(side_effect=partial_set)
+        return station
 
     async def test_saves_the_value_and_drops_the_cached_map_data(self):
         station = self._db_station()
@@ -90,10 +113,16 @@ class BankLevelEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(result, station)
         self.assertEqual(station.bank_level, 12.5)
         self.assertGreater(station.updated_date, datetime.datetime(2020, 1, 1))
-        station.save.assert_awaited_once()
         clear_cache.assert_awaited_once_with(
             namespace=stations_router.STATION_METRICS_CACHE_NAMESPACE
         )
+
+    async def test_only_the_bank_fields_are_written(self):
+        station = self._db_station()
+        await self._update(station, 12.5)
+        station.save.assert_not_awaited()
+        written = {str(field) for field in station.set.await_args.args[0]}
+        self.assertEqual(written, {"bank_level", "updated_date"})
 
     async def test_null_clears_the_value(self):
         station = self._db_station(bank_level=12.5)

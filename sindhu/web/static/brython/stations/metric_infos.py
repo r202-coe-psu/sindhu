@@ -516,7 +516,7 @@ RISK_LEVELS = [
     {
         "risk": 3,
         "label": "อพยพ",
-        "range": "ถึงระดับอพยพ",
+        "range": "ล้นตลิ่งเกิน 0.5 ม.",
         "color": "#9333ea",
         "border": "#7e22ce",
         "text": "#FFFFFF",
@@ -525,7 +525,7 @@ RISK_LEVELS = [
     {
         "risk": 2,
         "label": "วิกฤต",
-        "range": "ถึงระดับวิกฤต",
+        "range": "ล้นตลิ่งไม่เกิน 0.5 ม.",
         "color": "#ef4444",
         "border": "#dc2626",
         "text": "#FFFFFF",
@@ -534,7 +534,7 @@ RISK_LEVELS = [
     {
         "risk": 1,
         "label": "เฝ้าระวัง",
-        "range": "ถึงระดับเฝ้าระวัง",
+        "range": "ต่ำกว่าตลิ่งไม่เกิน 1 ม.",
         "color": "#f97316",
         "border": "#ea580c",
         "text": "#FFFFFF",
@@ -543,7 +543,7 @@ RISK_LEVELS = [
     {
         "risk": 0,
         "label": "ปกติ",
-        "range": "ต่ำกว่าระดับเฝ้าระวัง",
+        "range": "ต่ำกว่าตลิ่งเกิน 1 ม.",
         "color": "#22c55e",
         "border": "#16a34a",
         "text": "#FFFFFF",
@@ -552,7 +552,7 @@ RISK_LEVELS = [
     {
         "risk": -1,
         "label": "ไม่ทราบสถานะ",
-        "range": "ไม่มีข้อมูลใน 24 ชม.",
+        "range": "ไม่มีข้อมูลหรือเทียบตลิ่งไม่ได้",
         "color": "#9ca3af",
         "border": "#6b7280",
         "text": "#FFFFFF",

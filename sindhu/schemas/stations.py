@@ -1,6 +1,6 @@
 import datetime
 from typing import Dict, List, Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from beanie import PydanticObjectId
 
 from sindhu.schemas import bases
@@ -65,6 +65,28 @@ class UpdateStationVisibility(BaseModel):
     is_visible: bool
 
 
+BANK_LEVEL_MIN_M = -20.0
+BANK_LEVEL_MAX_M = 3000.0
+
+SENSOR_NO_DATA_VALUES = (-9.99, -999.0)
+
+
 class UpdateStationBankLevel(BaseModel):
     # Required, so clearing the value has to be an explicit null
-    bank_level: Optional[float] = Field(..., allow_inf_nan=False)
+    bank_level: Optional[float] = Field(
+        ...,
+        allow_inf_nan=False,
+        ge=BANK_LEVEL_MIN_M,
+        le=BANK_LEVEL_MAX_M,
+    )
+
+    @field_validator("bank_level")
+    @classmethod
+    def not_a_no_data_code(cls, value: Optional[float]) -> Optional[float]:
+        if value is not None and any(
+            abs(value - code) < 0.001 for code in SENSOR_NO_DATA_VALUES
+        ):
+            raise ValueError(
+                f"{value} คือรหัส 'ไม่มีข้อมูล' ของเซนเซอร์ ไม่ใช่ระดับตลิ่ง"
+            )
+        return value

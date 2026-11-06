@@ -228,9 +228,9 @@ async def update_bank_level(
             detail="Not found station",
         )
 
-    station.bank_level = form.bank_level
-    station.updated_date = datetime.datetime.now()
-    await station.save()
+    await station.set(
+        {"bank_level": form.bank_level, "updated_date": datetime.datetime.now()}
+    )
 
     await FastAPICache.clear(namespace=STATION_METRICS_CACHE_NAMESPACE)
 

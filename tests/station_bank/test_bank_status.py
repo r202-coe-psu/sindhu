@@ -6,7 +6,7 @@ BRYTHON_ROOT = (
     Path(__file__).resolve().parents[2] / "sindhu" / "web" / "static" / "brython"
 )
 if str(BRYTHON_ROOT) not in sys.path:
-    sys.path.insert(0, str(BRYTHON_ROOT))
+    sys.path.append(str(BRYTHON_ROOT))
 
 from stations import bank_status  # noqa: E402
 
@@ -73,35 +73,46 @@ class CompareToBankTests(unittest.TestCase):
         self.assert_status("11.6", "12.0", bank_status.STATUS_NEAR, -0.4)
 
 
-class UnreliableReadingTests(unittest.TestCase):
-    def test_dead_sensor_constants_are_unreliable(self):
-        for water in (-9.99, -999.0):
-            self.assertTrue(bank_status.has_unreliable_reading(water, None))
-
-    def test_level_far_from_its_thresholds_is_unreliable(self):
-        self.assertTrue(bank_status.has_unreliable_reading(200.0, None, (11.25, 13.0)))
-
-    def test_huge_etl_diff_is_unreliable(self):
-        self.assertTrue(bank_status.has_unreliable_reading(11.6, -999.0))
-
-    def test_normal_readings_are_reliable(self):
-        for water, diff, references in (
-            (11.6, -0.4, (11.25, 13.0)),
-            (-0.5, None, (1.0,)),
-            (250.0, None, (240.0,)),
-            (None, None, (11.25,)),
-            (11.6, None, (None, "-")),
+class RiskTests(unittest.TestCase):
+    def test_risk_bands_around_the_bank(self):
+        for diff, risk in (
+            (-2.5, bank_status.RISK_NORMAL),
+            (-1.01, bank_status.RISK_NORMAL),
+            (-1.0, bank_status.RISK_WATCH),
+            (0.0, bank_status.RISK_WATCH),
+            (0.01, bank_status.RISK_CRITICAL),
+            (0.5, bank_status.RISK_CRITICAL),
+            (0.51, bank_status.RISK_EVACUATE),
+            (None, bank_status.RISK_UNKNOWN),
         ):
-            self.assertFalse(
-                bank_status.has_unreliable_reading(water, diff, references)
-            )
+            with self.subTest(diff=diff):
+                self.assertEqual(bank_status.risk_for_gap(diff), risk)
+
+    def test_comparison_carries_the_same_risk_as_its_gap(self):
+        for water in (9.0, 11.5, 12.3, 12.8):
+            result = bank_status.compare_to_bank(water, 12.0)
+            self.assertEqual(result["risk"], bank_status.risk_for_gap(result["diff"]))
+
+    def test_unknown_comparison_has_unknown_risk(self):
+        for water, bank in ((11.0, None), (-9.99, 12.0), (200.0, 12.0)):
+            result = bank_status.compare_to_bank(water, bank)
+            self.assertEqual(result["risk"], bank_status.RISK_UNKNOWN)
+
+    def test_chip_colour_follows_the_risk(self):
+        watch = bank_status.compare_to_bank(11.6, 12.0)
+        evacuate = bank_status.compare_to_bank(13.0, 12.0)
+        self.assertNotEqual(watch["color"], evacuate["color"])
+        self.assertEqual(
+            bank_status.compare_to_bank(11.5, 12.0)["color"], watch["color"]
+        )
 
 
 class CompareStationTests(unittest.TestCase):
-    def station(self, source, metrics, bank_level=12.0):
+    def station(self, source, metrics, bank_level=12.0, etl_critical=None):
         return {
             "source": source,
             "bank_level": bank_level,
+            "metadata": {"water_level_critical": etl_critical},
             "metrics": [{"metric_type": k, "value": v} for k, v in metrics.items()],
         }
 
@@ -122,13 +133,43 @@ class CompareStationTests(unittest.TestCase):
         station = self.station("dwr", {"waterlevel": 3.0, "waterlevel_msl": 11.6})
         self.assertEqual(bank_status.compare_station(station)["diff"], -0.4)
 
-    def test_etl_diff_is_not_a_substitute_for_bank_level(self):
+    def test_etl_diff_metric_is_never_used(self):
         station = self.station(
             "rid", {"waterlevel": 11.6, "diff_wl_bank": 2.0}, bank_level=None
         )
         result = bank_status.compare_station(station)
         self.assertEqual(result["status"], bank_status.STATUS_UNKNOWN)
         self.assertEqual(result["detail"], "ไม่มีข้อมูลระดับตลิ่ง")
+
+    def test_admin_bank_wins_over_the_etl_critical_level(self):
+        station = self.station(
+            "rid", {"waterlevel": 11.6}, bank_level=12.0, etl_critical=11.0
+        )
+        result = bank_status.compare_station(station)
+        self.assertEqual(result["diff"], -0.4)
+        self.assertEqual(result["bank_source"], bank_status.BANK_FROM_ADMIN)
+
+    def test_msl_sources_fall_back_to_the_etl_critical_level(self):
+        for source in ("rid", "thaiwater"):
+            with self.subTest(source=source):
+                station = self.station(
+                    source, {"waterlevel": 11.6}, bank_level=None, etl_critical=12.0
+                )
+                result = bank_status.compare_station(station)
+                self.assertEqual(result["diff"], -0.4)
+                self.assertEqual(result["bank_source"], bank_status.BANK_FROM_ETL)
+
+    def test_dwr_gets_no_etl_bank(self):
+        station = self.station(
+            "dwr", {"waterlevel_msl": 11.6}, bank_level=None, etl_critical=12.0
+        )
+        self.assertEqual(bank_status.station_bank_level(station), (None, None))
+
+    def test_dead_sensor_constant_is_not_a_bank(self):
+        station = self.station(
+            "rid", {"waterlevel": 11.6}, bank_level=None, etl_critical=-9.99
+        )
+        self.assertEqual(bank_status.station_bank_level(station), (None, None))
 
     def test_tolerates_malformed_stations(self):
         for station in ({}, {"metrics": None}, {"metrics": [None, {}]}):

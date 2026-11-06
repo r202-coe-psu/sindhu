@@ -62,78 +62,9 @@ class WaterMonitor(BaseMonitor):
         if not station or not isinstance(station, dict):
             return -1, None, None
 
-        metadata = station.get("metadata") or {}
-        if not isinstance(metadata, dict):
-            metadata = {}
-
-        wl_crit = metadata.get("water_level_critical")
-        wl_warn = metadata.get("water_level_warning")
-        wl_evac = metadata.get("water_level_evacuation")
-        if wl_evac is None and wl_crit is not None:
-            try:
-                wl_evac = float(wl_crit) + 0.5
-            except:
-                pass
-
-        waterlevel = None
-        diff_wl_bank = None
-        for m in station.get("metrics") or []:
-            if not m or not isinstance(m, dict):
-                continue
-            m_type = (m.get("metric_type") or "").lower()
-            val = m.get("value")
-            if val is not None:
-                try:
-                    if m_type in [
-                        "water_level",
-                        "waterlevel",
-                        "waterlevel_msl",
-                        "waterlevel_m",
-                    ]:
-                        waterlevel = float(val)
-                    elif m_type == "diff_wl_bank":
-                        diff_wl_bank = float(val)
-                except (ValueError, TypeError):
-                    pass
-
-        # A station is only rated once it has a bank level, so an alert never
-        # sits next to "no bank data" on the same card
-        if bank_status.to_number(station.get("bank_level")) is None:
-            return -1, waterlevel, diff_wl_bank
-
-        if bank_status.has_unreliable_reading(
-            waterlevel, diff_wl_bank, (wl_warn, wl_crit, station.get("bank_level"))
-        ):
-            return -1, waterlevel, diff_wl_bank
-
-        risk = -1
-        if waterlevel is not None and wl_crit is not None and wl_warn is not None:
-            try:
-                wl = float(waterlevel)
-                crit = float(wl_crit)
-                warn = float(wl_warn)
-                evac = float(wl_evac) if wl_evac is not None else crit + 0.5
-                if wl >= evac:
-                    risk = 3
-                elif wl >= crit:
-                    risk = 2
-                elif wl >= warn:
-                    risk = 1
-                else:
-                    risk = 0
-            except:
-                pass
-        elif diff_wl_bank is not None:
-            if diff_wl_bank >= 0.5:
-                risk = 3
-            elif diff_wl_bank >= 0:
-                risk = 2
-            elif diff_wl_bank >= -0.5:
-                risk = 1
-            else:
-                risk = 0
-
-        return risk, waterlevel, diff_wl_bank
+        comparison = bank_status.compare_station(station)
+        waterlevel = bank_status.to_number(bank_status.raw_water_level(station))
+        return comparison["risk"], waterlevel, comparison["diff"]
 
     """
     ===========================================================================
@@ -293,7 +224,7 @@ class WaterMonitor(BaseMonitor):
             # legend has to describe the risk levels instead
             self.map.set_legend(
                 metric_infos.RISK_LEVELS,
-                "ระดับน้ำเทียบเกณฑ์เตือนภัย",
+                "ระดับน้ำเทียบตลิ่ง",
                 metric_infos.RISK_LEVEL_TITLE,
             )
 
@@ -712,10 +643,10 @@ class WaterMonitor(BaseMonitor):
             other_html = self.build_metric_chips(station, metrics)
 
             if waterlevel is None and diff_wl_bank is None:
-                other_html = f"""
+                other_html = """
                 <div class="flex items-center gap-1.5 rounded-lg bg-ink-50 px-2.5 py-2 text-xs text-ink-500">
                     <i class="ph ph-clock-counter-clockwise text-sm" aria-hidden="true"></i>
-                    <span>{level["range"]}</span>
+                    <span>ไม่มีข้อมูลระดับน้ำใน 24 ชม.</span>
                 </div>
                 """
 

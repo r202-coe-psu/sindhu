@@ -154,20 +154,30 @@ class ZoneRiskAggregationTests(unittest.TestCase):
 
         self.assertEqual(level["risk"], -1)
 
-    def test_station_without_bank_level_does_not_recolour_zone(self):
+    def test_station_without_any_bank_does_not_recolour_zone(self):
         station = _station("no-bank", "rid", 3.5)
         station["bank_level"] = None
+        station["metadata"] = {}
         monitor = self.make_monitor([station])
 
         level = monitor.zone_risk_level({"stations": [{"code": "no-bank"}]})
 
         self.assertEqual(level["risk"], -1)
 
+    def test_station_without_admin_bank_is_rated_on_the_etl_bank(self):
+        station = _station("etl-bank", "rid", 3.5)
+        station["bank_level"] = None
+        monitor = self.make_monitor([station])
+
+        level = monitor.zone_risk_level({"stations": [{"code": "etl-bank"}]})
+
+        self.assertEqual(level["risk"], 3)
+
     def test_source_change_recomputes_zone_risk(self):
         monitor = self.make_monitor(
             [
                 _station("shared", "rid", 1.5),
-                _station("shared", "dwr", 3.5),
+                _station("shared", "thaiwater", 3.5),
             ],
             source="rid",
         )
@@ -175,7 +185,7 @@ class ZoneRiskAggregationTests(unittest.TestCase):
         monitor.map = _RiskMap()
 
         monitor.update_zone_risks()
-        monitor.get_selected_source = lambda: "dwr"
+        monitor.get_selected_source = lambda: "thaiwater"
         monitor.update_zone_risks()
 
         self.assertEqual(monitor.map.updates, [("zone-1", 1), ("zone-1", 3)])
