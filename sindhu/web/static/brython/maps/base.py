@@ -772,9 +772,6 @@ class BaseMap(Map):
             container = doc.createElement("div")
             # map-ui: hidden with the other floating cards in map focus mode
             container.className = "map-ui map-scale-legend"
-            container.style.cssText = (
-                "position:absolute;bottom:28px;right:12px;z-index:1000;width:250px;"
-            )
             self.map.getContainer() <= container
             self._interpolation_legend_container = container
             self.leaflet.DomEvent.disableClickPropagation(container)
@@ -876,9 +873,6 @@ class BaseMap(Map):
             container = doc.createElement("div")
             # map-ui: hidden with the other floating cards in map focus mode
             container.className = "map-ui map-legend"
-            container.style.cssText = (
-                "position:absolute;bottom:12px;left:12px;z-index:1000;max-width:220px;"
-            )
             self.map.getContainer() <= container
             self._metric_legend_container = container
             # Keep clicks and wheel events on the legend out of the map

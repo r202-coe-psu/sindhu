@@ -1,6 +1,6 @@
 {% extends '/base/map_page.html' %}
 
-{% include 'base/map_header.html' %}
+{% block additional_head %}{% include 'base/map_header.html' %}{% endblock %}
 {% block title %}ติดตามสถานการณ์{% endblock %}
 {% block content %}
 <main class="monitor-page">
@@ -37,7 +37,7 @@
     </button>
 
     {# Data panel card — a column on the right, folded to a pill under the user card #}
-    <section id="monitor_panel" class="map-ui monitor-data-panel monitor-panel flex flex-col rounded-2xl border overflow-hidden"
+    <section id="monitor_panel" class="map-ui monitor-data-panel monitor-panel is-collapsed flex flex-col rounded-2xl border overflow-hidden"
         aria-labelledby="panel_header_title">
         {# Header — also the handle that folds the panel #}
         <div id="monitor_panel_handle" class="monitor-panel-header p-4 flex-shrink-0 flex items-start gap-3 cursor-pointer">
@@ -48,8 +48,8 @@
                 </h2>
                 <p id="panel_header_subtitle" class="text-xs text-blue-100/90 mt-0.5">ข้อมูลสถานีวัดน้ำและจุดเฝ้าระวัง</p>
             </div>
-            <button id="monitor_panel_toggle" type="button" aria-expanded="true" aria-controls="monitor_panel_body"
-                aria-label="พับ panel" title="พับ panel"
+            <button id="monitor_panel_toggle" type="button" aria-expanded="false" aria-controls="monitor_panel_body"
+                aria-label="ขยาย panel" title="ขยาย panel"
                 class="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-blue-100 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
                 <i class="ph ph-caret-down text-lg monitor-panel-caret transition-transform" aria-hidden="true"></i>
             </button>
@@ -280,9 +280,6 @@
     </div>
 </dialog>
 <script type="text/javascript">
-    {# Fold/unfold the data panel and remember the choice on this device.
-       Without a saved choice it starts open on desktop and folded on
-       phones, where it would otherwise cover most of the map. #}
     (function () {
         var KEY = 'sindhu_monitor_panel_collapsed';
         var panel = document.getElementById('monitor_panel');
@@ -304,9 +301,7 @@
 
         var saved = null;
         try { saved = window.localStorage.getItem(KEY); } catch (e) {}
-        var startCollapsed = saved === null
-            ? !window.matchMedia('(min-width: 1024px)').matches
-            : saved === '1';
+        var startCollapsed = saved !== '0';
         setCollapsed(startCollapsed, false);
 
         handle.addEventListener('click', function () {
