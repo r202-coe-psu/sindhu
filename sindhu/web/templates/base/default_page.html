@@ -5,11 +5,11 @@
   {# Sidebar #}
   <aside id="app-sidebar" class="w-64 bg-base-100 border-r border-ink-200 transition-all duration-300 transform -translate-x-full absolute z-30 h-full flex flex-col md:relative md:translate-x-0">
     <div class="h-16 flex items-center justify-between px-4 border-b border-ink-100 shrink-0">
-      <a href="{{ url_for('sites.index') }}" class="text-2xl font-bold text-brand-600 flex items-center gap-2 hover:opacity-80 transition-opacity">
+      <a href="{{ url_for('sites.index') }}" class="text-2xl font-bold text-brand-600 flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity">
         <img src="{{ 'images/logo.png' | static_url }}" alt="" class="w-10 h-10 shrink-0">
-        <span class="text-lg text-ink-900 whitespace-nowrap">{{ config['APP_TITLE'] }}</span>
+        <span class="text-lg text-ink-900 whitespace-nowrap min-w-0 truncate">{{ config['APP_TITLE'] }}</span>
       </a>
-      <button id="close-sidebar-btn" class="md:hidden btn btn-sm btn-ghost btn-square">
+      <button id="close-sidebar-btn" class="md:hidden btn btn-sm btn-ghost btn-square shrink-0">
         <i class="ph ph-x text-xl"></i>
       </button>
     </div>
