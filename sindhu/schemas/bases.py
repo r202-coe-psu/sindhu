@@ -22,3 +22,8 @@ class GeoObject(BaseModel):
 class GeoPolygon(BaseModel):
     type: str = "Polygon"
     coordinates: List[List[List[float]]] = Field(default_factory=lambda: [[]])
+
+
+class GeoMultiPolygon(BaseModel):
+    type: str = "MultiPolygon"
+    coordinates: List[List[List[List[float]]]] = Field(default_factory=list)

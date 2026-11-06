@@ -1,9 +1,10 @@
 from typing import List, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from beanie import PydanticObjectId
 
 from sindhu.schemas import bases
 from sindhu.schemas.stations import Station as StationSchema
+from sindhu.schemas.tambons import TambonRef, TambonSummary, coerce_tambon_ref
 
 
 class BaseZone(BaseModel):
@@ -13,7 +14,15 @@ class BaseZone(BaseModel):
     boundary: bases.GeoPolygon
     zone_kind: Literal["flood", "reference"] = "flood"
     status: str = Field("active")
+    tambons: List[TambonRef] = Field(default_factory=list)
     metadata: dict | None = None
+
+    @field_validator("tambons", mode="before")
+    @classmethod
+    def _legacy_tambons(cls, v):
+        if v is None:
+            return []
+        return [coerce_tambon_ref(t) for t in v]
 
 
 class CreateUpdateZone(BaseZone):
@@ -45,3 +54,4 @@ class LocateResponse(BaseModel):
     zone: Zone | None = None
     nearby_stations: list = Field(default_factory=list)
     user_location: List[float]
+    tambon: TambonSummary | None = None
