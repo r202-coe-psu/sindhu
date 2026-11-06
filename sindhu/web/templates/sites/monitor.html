@@ -9,6 +9,16 @@
         <i class="ph ph-map-pin text-xl font-bold"></i>
         <span class="font-semibold text-sm">ใช้ตำแหน่งปัจจุบันของฉัน</span>
     </a>
+    <label class="flex-1 sm:flex-none flex items-center gap-2 min-w-0">
+        <span class="sr-only">เลือกพื้นที่</span>
+        <i class="ph ph-map-trifold text-xl text-ink-400" aria-hidden="true"></i>
+        <select id="area_selector" aria-label="เลือกพื้นที่"
+            class="select select-bordered rounded-xl text-sm font-semibold w-full sm:w-64 min-w-0">
+            <option value="">ทุกพื้นที่</option>
+        </select>
+    </label>
+    <div id="area_message" role="status" aria-live="polite"
+        class="hidden w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"></div>
 </div>
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
     {# Map Section (Left) #}
