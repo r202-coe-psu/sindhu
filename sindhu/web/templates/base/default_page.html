@@ -5,13 +5,11 @@
   {# Sidebar #}
   <aside id="app-sidebar" class="w-64 bg-white border-r border-ink-200 transition-all duration-300 transform -translate-x-full absolute z-30 h-full flex flex-col md:relative md:translate-x-0">
     <div class="h-16 flex items-center justify-between px-4 border-b border-ink-100 shrink-0">
-      <a href="{{ url_for('sites.index') }}" class="text-2xl font-bold text-primary flex items-center gap-2 hover:opacity-80 transition-opacity">
-        <span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-primary text-primary-content shadow-sm">
-          <i class="ph-fill ph-waves text-xl"></i>
-        </span>
-        <span class="text-ink-900">{{ config['APP_TITLE'] }}</span>
+      <a href="{{ url_for('sites.index') }}" class="text-2xl font-bold text-primary flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity">
+        <img src="{{ 'images/logo.png' | static_url }}" alt="" class="w-10 h-10 shrink-0">
+        <span class="text-lg text-ink-900 whitespace-nowrap min-w-0 truncate">{{ config['APP_TITLE'] }}</span>
       </a>
-      <button id="close-sidebar-btn" class="md:hidden btn btn-sm btn-ghost btn-square">
+      <button id="close-sidebar-btn" class="md:hidden btn btn-sm btn-ghost btn-square shrink-0">
         <i class="ph ph-x text-xl"></i>
       </button>
     </div>
