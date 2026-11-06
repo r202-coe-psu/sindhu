@@ -47,8 +47,8 @@ class HitAreaTests(unittest.TestCase):
         self.assertGreaterEqual(ms.HIT_BOX_PX, 28)
 
     def test_hit_box_tuples_at_least_28(self):
-        for name in ("CCTV_HIT_BOX", "USER_HIT_BOX", "MY_LOCATION_HIT_BOX"):
-            box = getattr(ms, name)
+        for name in ("CCTV", "USER", "MY_LOCATION"):
+            box = getattr(ms, name).hit_box
             for dim in box:
                 self.assertGreaterEqual(dim, 28, f"{name} dimension {dim} < 28")
 
@@ -59,67 +59,29 @@ class ShrinkTests(unittest.TestCase):
         self.assertLess(ms.STATION_TANK[0], 14)
         self.assertLess(ms.STATION_TANK[1], 28)
         self.assertLess(ms.BUBBLE_MAX_PX, 40)
-        self.assertLess(ms.CCTV_PIN[0], 28)
-        self.assertLess(ms.CCTV_PIN[1], 35)
-        self.assertLess(ms.USER_PIN[0], 30)
-        self.assertLess(ms.USER_PIN[1], 40)
-        self.assertLess(ms.MY_LOCATION_PX, 30)
+        self.assertLess(ms.CCTV.pin[0], 28)
+        self.assertLess(ms.CCTV.pin[1], 35)
+        self.assertLess(ms.USER.pin[0], 30)
+        self.assertLess(ms.USER.pin[1], 40)
+        self.assertLess(ms.MY_LOCATION.pin[1], 30)
 
 
 class VisualFitTests(unittest.TestCase):
     def test_station_dot_fits_hit_box(self):
         self.assertLessEqual(ms.STATION_DOT_PX, ms.HIT_BOX_PX)
 
-    def test_cctv_pin_fits_hit_box(self):
-        self.assertLessEqual(ms.CCTV_PIN[0], ms.CCTV_HIT_BOX[0])
-        self.assertLessEqual(ms.CCTV_PIN[1], ms.CCTV_HIT_BOX[1])
+    def test_pins_fit_their_hit_box(self):
+        for name in ("CCTV", "USER", "MY_LOCATION"):
+            spec = getattr(ms, name)
+            self.assertLessEqual(spec.pin[0], spec.hit_box[0], name)
+            self.assertLessEqual(spec.pin[1], spec.hit_box[1], name)
 
-    def test_user_pin_fits_hit_box(self):
-        self.assertLessEqual(ms.USER_PIN[0], ms.USER_HIT_BOX[0])
-        self.assertLessEqual(ms.USER_PIN[1], ms.USER_HIT_BOX[1])
+    def test_largest_bubble_fits_hit_box(self):
+        self.assertLessEqual(ms.BUBBLE_MAX_PX, ms.HIT_BOX_PX)
 
-    def test_cctv_anchor_is_bottom_center(self):
-        self.assertEqual(
-            ms.CCTV_ANCHOR, (ms.CCTV_HIT_BOX[0] / 2, ms.CCTV_HIT_BOX[1])
-        )
-
-
-class HaversineTests(unittest.TestCase):
-    def test_same_point_is_zero(self):
-        self.assertEqual(ms.haversine_distance([100.0, 7.0], [100.0, 7.0]), 0)
-
-    def test_one_thousandth_degree_latitude_is_about_111m(self):
-        d = ms.haversine_distance([100.0, 7.0], [100.0, 7.001])
-        self.assertAlmostEqual(d, 111, delta=2)
-
-    def test_bad_input_returns_inf(self):
-        self.assertEqual(ms.haversine_distance(None, [100.0, 7.0]), float("inf"))
-        self.assertEqual(ms.haversine_distance(["x", "y"], [100.0, 7.0]), float("inf"))
-        self.assertEqual(ms.haversine_distance([], [100.0, 7.0]), float("inf"))
-
-
-class IsPairedTests(unittest.TestCase):
-    def test_station_within_radius_is_paired(self):
-        self.assertTrue(
-            ms.is_paired_with_station([100.0, 7.0], [[100.0, 7.002]])
-        )
-
-    def test_station_outside_radius_is_not_paired(self):
-        self.assertFalse(
-            ms.is_paired_with_station([100.0, 7.0], [[100.0, 7.003]])
-        )
-
-    def test_empty_station_list_is_not_paired(self):
-        self.assertFalse(ms.is_paired_with_station([100.0, 7.0], []))
-
-    def test_none_feed_is_not_paired(self):
-        self.assertFalse(ms.is_paired_with_station(None, [[100.0, 7.002]]))
-
-    def test_malformed_station_entry_is_skipped(self):
-        self.assertFalse(ms.is_paired_with_station([100.0, 7.0], [[]]))
-        self.assertTrue(
-            ms.is_paired_with_station([100.0, 7.0], [[], [100.0, 7.002]])
-        )
+    def test_pin_anchor_is_bottom_center(self):
+        self.assertEqual(ms.CCTV.anchor, (14, 32))
+        self.assertEqual(ms.MY_LOCATION.anchor, (14, 28))
 
 
 class HitBoxHtmlTests(unittest.TestCase):
@@ -132,6 +94,14 @@ class HitBoxHtmlTests(unittest.TestCase):
     def test_bottom_alignment_uses_flex_end(self):
         html = ms.hit_box_html("<i>x</i>", align="bottom")
         self.assertIn("align-items: flex-end", html)
+
+
+class StationDotHtmlTests(unittest.TestCase):
+    def test_carries_class_size_style_and_inner(self):
+        html = ms.station_dot_html(10, 20, "border: 0;", "<i>x</i>")
+        self.assertIn('class="station-dot"', html)
+        self.assertIn("width: 10px; height: 20px; border: 0;", html)
+        self.assertIn("<i>x</i></div>", html)
 
 
 if __name__ == "__main__":

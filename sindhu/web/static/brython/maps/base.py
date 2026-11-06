@@ -14,6 +14,7 @@ from .marker_sizes import (
     WIND_ARROW_PX,
     bubble_size,
     hit_box_html,
+    station_dot_html,
 )
 from stations import metric_infos
 from stations.metric_colors import get_metric_color as _get_metric_color
@@ -41,6 +42,8 @@ class BaseMap(Map):
         self.metric_markers = {}
         self.metric_markers_by_code = {}
         self.metric_markers_by_key = {}
+        # station id -> code, so visible_stations() can link cameras by code
+        self.metric_station_codes = {}
         self.metric_markers_layer = {}
         self.metric_types = []
         self.panel_plus_sensors = []
@@ -566,13 +569,8 @@ class BaseMap(Map):
             if has_wind:
                 wind_speed_val = metrics.get("wind_speed", 0)
                 metric_color = await self.get_metric_color("wind_speed", wind_speed_val)
-                metric_marker = self.leaflet.icon(
-                    {
-                        "iconUrl": f"/static/resources/marks/up_arrow_{metric_color}.svg",
-                        "iconSize": [WIND_ARROW_PX, WIND_ARROW_PX],
-                        "color": metric_color,
-                        "fillColor": metric_color,
-                    }
+                metric_marker = self._station_icon(
+                    f'<img class="station-dot" src="/static/resources/marks/up_arrow_{metric_color}.svg" width="{WIND_ARROW_PX}" height="{WIND_ARROW_PX}" style="display: block;" alt="">'
                 )
                 marker_option["rotationAngle"] = rotate_direction
             else:
@@ -594,67 +592,42 @@ class BaseMap(Map):
                     metric_color = station["risk_color"]
 
                 if style == "donut":
-                    html_content = hit_box_html(
-                        f'<div class="station-dot" style="width: {STATION_DOT_PX}px; height: {STATION_DOT_PX}px; border-radius: 50%; background: conic-gradient({metric_color} {percent}%, #e5e7eb 0); border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>'
-                    )
-                    metric_marker = self.leaflet.divIcon(
-                        {
-                            "className": "custom-div-icon",
-                            "html": html_content,
-                            "iconSize": [HIT_BOX_PX, HIT_BOX_PX],
-                            "iconAnchor": [HIT_BOX_PX / 2, HIT_BOX_PX / 2],
-                        }
+                    inner = station_dot_html(
+                        STATION_DOT_PX,
+                        STATION_DOT_PX,
+                        f"border-radius: 50%; background: conic-gradient({metric_color} {percent}%, #e5e7eb 0); border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);",
                     )
                 elif style == "drop":
-                    html_content = hit_box_html(
-                        f'<div class="station-dot" style="width: {STATION_DOT_PX}px; height: {STATION_DOT_PX}px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));"><svg viewBox="0 0 24 24" fill="{metric_color}" width="{STATION_DOT_PX}" height="{STATION_DOT_PX}"><path d="M12 21.5c-3.3 0-6-2.7-6-6 0-3.1 3.5-8.5 5.5-11.3.3-.4.8-.4 1 0 2 2.8 5.5 8.2 5.5 11.3 0 3.3-2.7 6-6 6z"/></svg></div>'
-                    )
-                    metric_marker = self.leaflet.divIcon(
-                        {
-                            "className": "custom-div-icon",
-                            "html": html_content,
-                            "iconSize": [HIT_BOX_PX, HIT_BOX_PX],
-                            "iconAnchor": [HIT_BOX_PX / 2, HIT_BOX_PX / 2],
-                        }
+                    inner = station_dot_html(
+                        STATION_DOT_PX,
+                        STATION_DOT_PX,
+                        "display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));",
+                        f'<svg viewBox="0 0 24 24" fill="{metric_color}" width="{STATION_DOT_PX}" height="{STATION_DOT_PX}"><path d="M12 21.5c-3.3 0-6-2.7-6-6 0-3.1 3.5-8.5 5.5-11.3.3-.4.8-.4 1 0 2 2.8 5.5 8.2 5.5 11.3 0 3.3-2.7 6-6 6z"/></svg>',
                     )
                 elif style == "tank":
-                    tank_w, tank_h = STATION_TANK
-                    html_content = hit_box_html(
-                        f'<div class="station-dot" style="width: {tank_w}px; height: {tank_h}px; border-radius: 4px; border: 2px solid #cbd5e1; background: white; position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"><div style="position: absolute; bottom: 0; left: 0; width: 100%; height: {percent}%; background-color: {metric_color}; transition: height 0.3s ease;"></div></div>'
-                    )
-                    metric_marker = self.leaflet.divIcon(
-                        {
-                            "className": "custom-div-icon",
-                            "html": html_content,
-                            "iconSize": [HIT_BOX_PX, HIT_BOX_PX],
-                            "iconAnchor": [HIT_BOX_PX / 2, HIT_BOX_PX / 2],
-                        }
+                    inner = station_dot_html(
+                        *STATION_TANK,
+                        "border-radius: 4px; border: 2px solid #cbd5e1; background: white; position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);",
+                        f'<div style="position: absolute; bottom: 0; left: 0; width: 100%; height: {percent}%; background-color: {metric_color}; transition: height 0.3s ease;"></div>',
                     )
                 elif style == "bubble":
+                    # BUBBLE_MAX_PX fits in the hit box, so every bubble
+                    # shares the same 28px box
                     size = bubble_size(percent)
-                    box = max(HIT_BOX_PX, size)
-                    html_content = hit_box_html(
-                        f'<div class="station-dot" style="width: {size}px; height: {size}px; border-radius: 50%; background-color: {metric_color}; border: 2px solid white; opacity: 0.85; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>',
-                        box,
-                        box,
-                    )
-                    metric_marker = self.leaflet.divIcon(
-                        {
-                            "className": "custom-div-icon",
-                            "html": html_content,
-                            "iconSize": [box, box],
-                            "iconAnchor": [box / 2, box / 2],
-                        }
+                    inner = station_dot_html(
+                        size,
+                        size,
+                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid white; opacity: 0.85; box-shadow: 0 2px 4px rgba(0,0,0,0.3);",
                     )
                 else:
-                    metric_marker = self.leaflet.icon.pulse(
-                        {
-                            "iconSize": [PULSE_PX, PULSE_PX],
-                            "color": metric_color,
-                            "fillColor": metric_color,
-                            "animate": False,
-                        }
+                    # plain dot; replaces L.icon.pulse, which could not
+                    # carry a hit box or shrink at far zoom
+                    inner = station_dot_html(
+                        PULSE_PX,
+                        PULSE_PX,
+                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);",
                     )
+                metric_marker = self._station_icon(inner)
 
             marker_option["customId"] = station["id"]
             marker_option["icon"] = metric_marker
@@ -704,6 +677,7 @@ class BaseMap(Map):
                 markers.append(marker)
                 self.metric_markers[station["id"]] = marker
                 code = station.get("code")
+                self.metric_station_codes[station["id"]] = code
                 if code:
                     # rid and dwr publish the same station codes, so a code
                     # maps to a list and (source, code) is the exact key
@@ -731,7 +705,7 @@ class BaseMap(Map):
         ).addTo(self.map)
 
         # cameras may have loaded before these stations
-        self.refresh_cctv_pairing()
+        self.refresh_cctv_pins()
 
     """
     ===========================================================================
@@ -942,6 +916,7 @@ class BaseMap(Map):
                 marker.addTo(self.map)
             elif key not in wanted and on_map:
                 self.map.removeLayer(marker)
+        self.refresh_cctv_pins()
 
     def filter_markers_by_codes(self, station_codes):
         """Keep only the markers for these codes, whatever source they came from.
@@ -960,11 +935,39 @@ class BaseMap(Map):
                     marker.addTo(self.map)
                 elif not wanted and on_map:
                     self.map.removeLayer(marker)
+        self.refresh_cctv_pins()
 
     def show_all_markers(self):
         for station_id, marker in self.metric_markers.items():
             if not self.map.hasLayer(marker):
                 marker.addTo(self.map)
+        self.refresh_cctv_pins()
+
+    def visible_stations(self):
+        """Station markers on the map now; filtered-out ones are left out."""
+        stations = []
+        for station_id, marker in self.metric_markers.items():
+            if not self.map.hasLayer(marker):
+                continue
+            latlng = marker.getLatLng()
+            stations.append(
+                {
+                    "code": self.metric_station_codes.get(station_id),
+                    "coordinates": {"coordinates": [latlng.lng, latlng.lat]},
+                }
+            )
+        return stations
+
+    def _station_icon(self, inner_html):
+        """divIcon with a station visual centered in the 28px hit box."""
+        return self.leaflet.divIcon(
+            {
+                "className": "custom-div-icon",
+                "html": hit_box_html(inner_html),
+                "iconSize": [HIT_BOX_PX, HIT_BOX_PX],
+                "iconAnchor": [HIT_BOX_PX / 2, HIT_BOX_PX / 2],
+            }
+        )
 
     def close_all_tooltips(self):
         """Tooltips opened by a click stay open, so clear them before the next."""

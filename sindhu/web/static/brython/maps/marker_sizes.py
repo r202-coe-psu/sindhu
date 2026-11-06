@@ -8,14 +8,11 @@ HIT_BOX_PX so it stays easy to tap, and the smaller visual is centered inside
 it. Anchors are expressed in hit box pixels.
 """
 
-import math
-
 # Transparent click/tap target around every marker
 HIT_BOX_PX = 28
 
 # Station markers (donut / drop / tank / bubble / pulse / wind arrow)
 STATION_DOT_PX = 16
-STATION_DOT_FAR_PX = 12  # visual size at far zoom (CSS scale 0.75 of 16)
 STATION_TANK = (10, 20)
 BUBBLE_MIN_PX = 8
 BUBBLE_MAX_PX = 24
@@ -23,25 +20,31 @@ WIND_ARROW_PX = 12
 PULSE_PX = 12
 STATION_TOOLTIP_OFFSET = (0, 26)
 
-# CCTV pin: visual size, hit box, tip anchor, popup/tooltip offset
-CCTV_PIN = (20, 25)
-CCTV_HIT_BOX = (28, 32)
-CCTV_ANCHOR = (14, 32)  # pin tip: horizontal center, bottom of the hit box
-CCTV_POPUP_OFFSET_Y = -24
-# A camera paired with a station is shifted by this much (right, up) so its
-# pin sits upper-right of the station dot instead of covering it
-CCTV_PAIRED_SHIFT = (8, 8)
-PAIRED_RADIUS_M = 300
 
-# Pin dropped by the user (place_pin) and the "my location" pin
-USER_PIN = (22, 30)
-USER_HIT_BOX = (28, 32)
-USER_ANCHOR = (14, 32)
-USER_POPUP_OFFSET_Y = -27
-MY_LOCATION_PX = 22
-MY_LOCATION_HIT_BOX = (28, 28)
-MY_LOCATION_ANCHOR = (14, 28)
-MY_LOCATION_POPUP_OFFSET_Y = -24
+class PinSpec:
+    """Sizes of a pin whose tip marks the point.
+
+    ``pin`` is the visual (width, height), ``hit_box`` the transparent
+    (width, height) around it, and ``popup_offset_y`` how far above the tip
+    popups and tooltips open.
+    """
+
+    def __init__(self, pin, hit_box, popup_offset_y):
+        self.pin = pin
+        self.hit_box = hit_box
+        self.popup_offset_y = popup_offset_y
+
+    @property
+    def anchor(self):
+        """The pin tip: horizontal center, bottom of the hit box."""
+        return (self.hit_box[0] // 2, self.hit_box[1])
+
+
+CCTV = PinSpec(pin=(20, 25), hit_box=(28, 32), popup_offset_y=-24)
+# Pin dropped by the user (place_pin)
+USER = PinSpec(pin=(22, 30), hit_box=(28, 32), popup_offset_y=-27)
+# "My location" pin; an icon font glyph, so pin[1] is its font size
+MY_LOCATION = PinSpec(pin=(22, 22), hit_box=(28, 28), popup_offset_y=-24)
 
 # Zoom levels at or below this are "far" (city overview)
 FAR_ZOOM_MAX = 11
@@ -71,34 +74,9 @@ def hit_box_html(inner_html, width=HIT_BOX_PX, height=HIT_BOX_PX, align="center"
     )
 
 
-def haversine_distance(coord1, coord2):
-    """Calculate distance in meters between two [lon, lat] coordinates."""
-    try:
-        lon1, lat1 = float(coord1[0]), float(coord1[1])
-        lon2, lat2 = float(coord2[0]), float(coord2[1])
-        r = 6371000.0
-        phi1, phi2 = math.radians(lat1), math.radians(lat2)
-        dphi = math.radians(lat2 - lat1)
-        dlam = math.radians(lon2 - lon1)
-        a = (
-            math.sin(dphi / 2) ** 2
-            + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-        )
-        return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    except Exception:
-        return float("inf")
-
-
-def is_paired_with_station(feed_coords, station_coords_list):
-    """True if the camera is within PAIRED_RADIUS_M of any station.
-
-    Coordinates are GeoJSON [lng, lat]. Empty or malformed input is unpaired.
-    """
-    if not feed_coords or len(feed_coords) < 2 or not station_coords_list:
-        return False
-    for s_coords in station_coords_list:
-        if not s_coords or len(s_coords) < 2:
-            continue
-        if haversine_distance(feed_coords, s_coords) <= PAIRED_RADIUS_M:
-            return True
-    return False
+def station_dot_html(width, height, style, inner_html=""):
+    """A station visual: the .station-dot box (shrunk at far zoom by CSS)."""
+    return (
+        f'<div class="station-dot" style="width: {width}px; height: {height}px; '
+        f'{style}">{inner_html}</div>'
+    )
