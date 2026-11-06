@@ -192,7 +192,7 @@ class ZoneStyleTests(unittest.TestCase):
         map_view = Map.__new__(Map)
         map_view.map = _BrowserStub()
         map_view.zone_shading_mode = "outline"
-        map_view._selected_zone_id = None
+        map_view._selected_zone_ids = []
         map_view.zone_layers_by_id = {
             "zone": {"zone": zone, "risk": risk, "layer": _Layer()}
         }
