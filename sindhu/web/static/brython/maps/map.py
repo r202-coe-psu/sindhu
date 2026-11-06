@@ -669,7 +669,7 @@ class Map:
         btn.href = "#"
         btn.title = "ปักหมุดบนแผนที่"
         btn.attrs["role"] = "button"
-        btn.html = '<svg width="14" height="18" viewBox="0 0 30 40"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="currentColor"/><circle cx="15" cy="15" r="6" fill="var(--color-base-100)"/></svg>'
+        btn.html = '<svg width="14" height="18" viewBox="0 0 30 40"><path d="M15 0C6.7 0 0 6.7 0 15c0 10.5 13.2 23.7 14 24.5.5.5 1.3.5 1.8 0C16.8 38.7 30 25.5 30 15 30 6.7 23.3 0 15 0z" fill="currentColor"/><circle cx="15" cy="15" r="6" style="fill:var(--color-base-100)"/></svg>'
         btn.style.cssText = "display:flex;align-items:center;justify-content:center;width:30px;height:30px;cursor:pointer;border-top:1px solid var(--color-ink-200);"
         self._pin_btn = btn
 

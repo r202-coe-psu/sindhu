@@ -528,7 +528,7 @@ function renderZoneList(zones) {
 
         /* Quick toggle button for status */
         const statusBtn = isActive
-            ? `<button type="button" class="btn btn-xs btn-success text-white font-medium gap-1 rounded-full shadow-xs text-[11px]" onclick="event.stopPropagation();quickToggleZoneStatus('${z.id}')" title="คลิกเพื่อปิดใช้งาน (ซ่อนจากแผนที่สาธารณะ)">
+            ? `<button type="button" class="btn btn-xs btn-success font-medium gap-1 rounded-full shadow-xs text-[11px]" onclick="event.stopPropagation();quickToggleZoneStatus('${z.id}')" title="คลิกเพื่อปิดใช้งาน (ซ่อนจากแผนที่สาธารณะ)">
                 <i class="ph ph-check-circle text-xs"></i> เปิดใช้งาน
                </button>`
             : `<button type="button" class="btn btn-xs bg-ink-200 text-ink-600 border border-ink-300 font-medium gap-1 rounded-full hover:bg-ink-300 text-[11px]" onclick="event.stopPropagation();quickToggleZoneStatus('${z.id}')" title="คลิกเพื่อเปิดใช้งาน (แสดงบนแผนที่สาธารณะ)">
@@ -570,7 +570,7 @@ function renderZoneList(zones) {
                     <button class="btn btn-ghost btn-xs text-brand-600 hover:bg-brand-100 rounded" onclick="event.stopPropagation();editZone('${z.id}')" title="แก้ไข">
                         <i class="ph ph-pencil-simple text-sm"></i>
                     </button>
-                    <button class="btn btn-ghost btn-xs text-red-500 hover:bg-red-500/15 rounded" onclick="event.stopPropagation();confirmDelete('${z.id}')" title="ลบ">
+                    <button class="btn btn-ghost btn-xs text-error hover:bg-error/15 rounded" onclick="event.stopPropagation();confirmDelete('${z.id}')" title="ลบ">
                         <i class="ph ph-trash text-sm"></i>
                     </button>
                 </div>

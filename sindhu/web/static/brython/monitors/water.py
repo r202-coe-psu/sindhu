@@ -691,7 +691,7 @@ class WaterMonitor(BaseMonitor):
                         elif v > 0:
                             display_text = f'{m_label}: <span class="font-medium text-red-400">ล้นตลิ่ง {v:.2f} ม.</span>'
                         else:
-                            display_text = f'{m_label}: <span class="font-medium text-yellow-600">เสมอระดับตลิ่งพอดี</span>'
+                            display_text = f'{m_label}: <span class="font-medium text-amber-400">เสมอระดับตลิ่งพอดี</span>'
                     except:
                         display_text = f'{m_label}: <span class="font-medium text-ink-700">{val} ม.</span>'
                 else:

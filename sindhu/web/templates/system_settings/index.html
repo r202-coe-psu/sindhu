@@ -95,7 +95,7 @@ System Setting
                   <button onclick="access_token_modal_{{ key.id }}.showModal()" class="btn btn-xs btn-ghost text-brand-600 justify-start px-0 font-semibold hover:bg-primary/10">
                     <i class="ph ph-key"></i> Access Token
                   </button>
-                  <button onclick="refresh_token_modal_{{ key.id }}.showModal()" class="btn btn-xs btn-ghost text-secondary justify-start px-0 font-semibold hover:bg-secondary/10">
+                  <button onclick="refresh_token_modal_{{ key.id }}.showModal()" class="btn btn-xs btn-ghost text-brand-600 justify-start px-0 font-semibold hover:bg-brand-600/10">
                     <i class="ph ph-arrows-clockwise"></i> Refresh Token
                   </button>
                 </div>
@@ -135,7 +135,7 @@ System Setting
                   <form method="dialog">
                     <button class="btn btn-ghost">No, Cancel</button>
                   </form>
-                  <a href="{{ url_for('system_settings.remove_api_token', api_token_id=key.id)}}" class="btn btn-error text-white">
+                  <a href="{{ url_for('system_settings.remove_api_token', api_token_id=key.id)}}" class="btn btn-error">
                     Yes, Delete
                   </a>
                 </div>
@@ -174,7 +174,7 @@ System Setting
             <dialog id="refresh_token_modal_{{ key.id }}" class="modal modal-bottom sm:modal-middle">
               <div class="modal-box w-11/12 max-w-2xl">
                 <div class="flex items-center justify-between mb-4">
-                  <h3 class="font-bold text-lg text-secondary">Refresh Token: {{ key.source }}</h3>
+                  <h3 class="font-bold text-lg text-brand-600">Refresh Token: {{ key.source }}</h3>
                   <form method="dialog">
                     <button class="btn btn-sm btn-circle btn-ghost">✕</button>
                   </form>
