@@ -1,4 +1,4 @@
-from browser import alert, window, ajax
+from browser import window, ajax
 import json
 import math
 
@@ -131,7 +131,7 @@ class Map:
 
         self.zone_layers_by_id = {}
         self.reference_boundary_layer = None
-        self._selected_zone_id = None
+        self._selected_zone_ids = []
         self._on_zone_select = None
         self._zone_renderer = None
         self.zone_shading_mode = "outline"
@@ -195,7 +195,7 @@ class Map:
             return False
 
         entry["risk"] = level
-        if self._selected_zone_id != str(zone_id):
+        if str(zone_id) not in self._selected_zone_ids:
             entry["layer"].setStyle(self.zone_style(str(zone_id)))
         else:
             entry["layer"].setStyle(self.zone_style(str(zone_id), "selected"))
@@ -298,7 +298,7 @@ class Map:
         """Toggle zone fill between outline-only (transparent) and shaded (colored fill)."""
         self.zone_shading_mode = mode
         for key, entry in self.zone_layers_by_id.items():
-            state = "selected" if self._selected_zone_id == key else "normal"
+            state = "selected" if key in self._selected_zone_ids else "normal"
             entry["layer"].setStyle(self.zone_style(key, state))
 
     def set_zone_visible(self, zone_identifier, visible):
@@ -539,7 +539,7 @@ class Map:
 
     def _make_zone_hover(self, zone_id, entering):
         def handler(e):
-            if self._pin_mode_active or self._selected_zone_id == zone_id:
+            if self._pin_mode_active or zone_id in self._selected_zone_ids:
                 return
             entry = self.zone_layers_by_id.get(zone_id)
             if not entry:
@@ -566,29 +566,43 @@ class Map:
         return handler
 
     def select_zone(self, zone_id, fit_bounds=True):
-        zone_id = str(zone_id)
-        entry = self.zone_layers_by_id.get(zone_id)
-        if not entry:
+        return self.select_zones([zone_id], fit_bounds)
+
+    def select_zones(self, zone_ids, fit_bounds=True):
+        """Highlight one or more zones and (optionally) fit their union bounds."""
+        ids = []
+        for zone_id in zone_ids or []:
+            zone_id = str(zone_id)
+            if zone_id in self.zone_layers_by_id and zone_id not in ids:
+                ids.append(zone_id)
+        if not ids:
             return False
 
-        self._selected_zone_id = zone_id
+        self._selected_zone_ids = ids
         # The other zones keep their normal dashed outline: they stay visible
         # and clickable so a different zone can be picked straight away.
         for key, other in self.zone_layers_by_id.items():
-            if key == zone_id:
+            if key in ids:
                 other["layer"].setStyle(self.zone_style(key, "selected"))
                 other["layer"].bringToFront()
             else:
                 other["layer"].setStyle(self.zone_style(key))
 
         if fit_bounds:
-            self.map.fitBounds(entry["layer"].getBounds(), {"padding": [24, 24]})
+            bounds = None
+            for key in ids:
+                b = self.zone_layers_by_id[key]["layer"].getBounds()
+                if bounds is None:
+                    bounds = self.leaflet.latLngBounds(b.getSouthWest(), b.getNorthEast())
+                else:
+                    bounds.extend(b)
+            self.map.fitBounds(bounds, {"padding": [24, 24]})
 
         self.show_reset_button()
         return True
 
     def clear_zone_selection(self):
-        self._selected_zone_id = None
+        self._selected_zone_ids = []
         for zone_id, entry in self.zone_layers_by_id.items():
             entry["layer"].setStyle(self.zone_style(zone_id))
 
@@ -598,7 +612,7 @@ class Map:
         for entry in self.zone_layers_by_id.values():
             self.map.removeLayer(entry["layer"])
         self.zone_layers_by_id = {}
-        self._selected_zone_id = None
+        self._selected_zone_ids = []
 
     def __del__(self):
         self.map.remove()
@@ -1051,7 +1065,7 @@ class Map:
             ).addTo(self.map)
             self.station_lines.append(line)
 
-    def fly_to_user(self):
+    def fly_to_user(self, on_found=None, on_error=None):
         self.map.locate()
 
         def on_location_found(e):
@@ -1092,11 +1106,14 @@ class Map:
 
             self.map.off("locationfound", on_location_found)
             self.map.off("locationerror", on_location_error)
+            if on_found:
+                on_found(self.user_coord[0], self.user_coord[1])
 
         def on_location_error(e):
-            alert(f"ไม่สามารถระบุตำแหน่งได้: {e.message}")
             self.map.off("locationfound", on_location_found)
             self.map.off("locationerror", on_location_error)
+            if on_error:
+                on_error(e)
 
         # ผูกเหตุการณ์
         self.map.on("locationfound", on_location_found)
