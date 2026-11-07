@@ -57,6 +57,42 @@ class FindMatchTests(unittest.TestCase):
         self.assertIs(cp.find_match(camera, [station]), station)
 
 
+def _station(sid, code=None, lat=7.0):
+    return dict(_item(code, lat=lat), id=sid)
+
+
+def _feed(uid, code=None, lat=7.0):
+    return dict(_item(code, lat=lat), source="rid", upstream_id=uid)
+
+
+class PairCamerasTests(unittest.TestCase):
+    def test_station_shows_only_a_camera_that_belongs_to_it(self):
+        # camera A is nearest S2, but camera C is nearer S2 than A is; the
+        # old station -> camera lookup gave S2 camera C while A's pin
+        # belonged to S2
+        s1, s2 = _station("s1", lat=7.0), _station("s2", lat=7.0018)
+        a, c = _feed("a", lat=7.0012), _feed("c", lat=7.0022)
+        station_of, camera_of = cp.pair_cameras([a, c], [s1, s2])
+        self.assertIs(station_of["rid_a"], s2)
+        self.assertIs(station_of["rid_c"], s2)
+        self.assertIs(camera_of["s2"], c)
+        self.assertNotIn("s1", camera_of)
+        for station_id, camera in camera_of.items():
+            key = cp.feed_key(camera["source"], camera["upstream_id"])
+            self.assertEqual(station_of[key]["id"], station_id)
+
+    def test_same_code_wins_for_both_sides(self):
+        st = _station("s1", "STN04")
+        near, coded = _feed("near", lat=7.0001), _feed("coded", "stn04", lat=7.01)
+        station_of, camera_of = cp.pair_cameras([near, coded], [st])
+        self.assertIs(camera_of["s1"], coded)
+        self.assertIs(station_of["rid_near"], st)
+
+    def test_no_feeds_or_stations(self):
+        self.assertEqual(cp.pair_cameras(None, [_station("s1")]), ({}, {}))
+        self.assertEqual(cp.pair_cameras([_feed("a")], []), ({}, {}))
+
+
 def _overlaps(dx, dy):
     """Pin visual with its tip at (dx, dy) vs the station hit box at (0, 0)."""
     half = HIT_BOX_PX / 2

@@ -80,6 +80,43 @@ def find_match(item, candidates):
     return best
 
 
+def feed_key(source, upstream_id):
+    """Key of a camera: ``"<source>_<upstream_id>"``."""
+    return f"{source}_{upstream_id}"
+
+
+def _feed_key_of(feed):
+    return feed_key(feed.get("source", ""), feed.get("upstream_id", ""))
+
+
+def pair_cameras(feeds, stations):
+    """Link cameras and stations by one rule, in both directions.
+
+    Each camera belongs to the station ``find_match(camera, stations)``
+    picks, the same lookup the CCTV panel does. A station shows the best of
+    the cameras that belong to it (same code first, else nearest), so a
+    station never shows a camera that belongs to another station.
+
+    Returns ``(station_of, camera_of)``: camera key -> station dict, and
+    station id -> camera dict.
+    """
+    station_of = {}
+    owned = {}
+    for feed in feeds or []:
+        if not isinstance(feed, dict):
+            continue
+        station = find_match(feed, stations)
+        if station is None:
+            continue
+        station_of[_feed_key_of(feed)] = station
+        owned.setdefault(station.get("id"), (station, []))[1].append(feed)
+    camera_of = {
+        station_id: find_match(station, cams)
+        for station_id, (station, cams) in owned.items()
+    }
+    return station_of, camera_of
+
+
 def _away_from_zero(value):
     return int(math.copysign(math.ceil(abs(value)), value))
 

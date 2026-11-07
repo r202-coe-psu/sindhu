@@ -932,6 +932,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         map_obj.leaflet = True
         map_obj.visual_feeds = [{"id": 1}]
         map_obj.visual_feed_markers_by_id = {"hatyai_1": "marker"}
+        map_obj.latest_stations = []
         rendered_layers = []
         map_obj.set_visual_feed_layer = lambda markers: rendered_layers.append(markers)
 
@@ -962,6 +963,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         map_obj.leaflet = DummyLeaflet()
         map_obj.visual_feeds = []
         map_obj.visual_feed_markers_by_id = {}
+        map_obj.latest_stations = []
         map_obj.set_visual_feed_layer = lambda markers: setattr(
             map_obj, "visual_feed_markers", markers
         )
@@ -1005,6 +1007,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         map_obj.leaflet = DummyLeaflet()
         map_obj.visual_feeds = []
         map_obj.visual_feed_markers_by_id = {}
+        map_obj.latest_stations = []
         map_obj.set_visual_feed_layer = lambda markers: setattr(
             map_obj, "visual_feed_markers", markers
         )
@@ -1064,6 +1067,7 @@ class VisualFeedUiHelperTests(unittest.TestCase):
         map_obj.leaflet = DummyLeaflet()
         map_obj.visual_feeds = []
         map_obj.visual_feed_markers_by_id = {}
+        map_obj.latest_stations = []
         map_obj.set_visual_feed_layer = lambda markers: setattr(
             map_obj, "visual_feed_markers", markers
         )

@@ -1,13 +1,9 @@
 from browser import alert, window, ajax
 import json
 
-from maps.cctv_pairing import find_match, geo_coords, pin_shift
+from maps.cctv_pairing import feed_key as visual_feed_key
+from maps.cctv_pairing import pair_cameras, pin_shift
 from maps.marker_sizes import CCTV, MY_LOCATION, USER, hit_box_html, is_far_zoom
-
-
-def visual_feed_key(source, upstream_id):
-    """Key of a camera in ``visual_feed_markers_by_id``."""
-    return f"{source}_{upstream_id}"
 
 
 VISUAL_FEED_POPUP_OPTIONS = {"minWidth": 240, "maxWidth": 280, "autoPanPadding": [24, 24]}
@@ -140,6 +136,10 @@ class Map:
         self.visual_feed_markers_by_id = {}
         # key -> (dx, dy) px a camera pin is moved off its station
         self.visual_feed_shift = {}
+        # camera key -> station, station id -> camera (see pair_cameras);
+        # rebuilt when cameras or stations load, not on zoom or filter
+        self.cctv_station_of = {}
+        self.cctv_camera_of = {}
         self.visual_feed_layer_visible = True
         self.visual_feeds = []
         self.latest_stations = []
@@ -734,16 +734,22 @@ class Map:
         self.update_zoom_class()
         self.refresh_cctv_pins()
 
-    def visible_stations(self):
-        """Stations currently drawn on the map, as dicts with code/coordinates.
+    def station_marker(self, station_id):
+        """The Leaflet marker of a station. The base Map draws no stations;
+        BaseMap overrides this."""
+        return None
 
-        The base Map draws no stations; BaseMap overrides this.
-        """
-        return []
+    def update_cctv_pairs(self):
+        """Re-pair cameras with stations; call when either list changes."""
+        self.cctv_station_of, self.cctv_camera_of = pair_cameras(
+            self.visual_feeds, self.latest_stations
+        )
 
     def find_matching_cctv(self, station):
-        """The CCTV camera linked to a water station (see cctv_pairing)."""
-        return find_match(station, getattr(self, "visual_feeds", None))
+        """The CCTV camera linked to a water station (see pair_cameras)."""
+        if not isinstance(station, dict):
+            return None
+        return self.cctv_camera_of.get(station.get("id"))
 
     @staticmethod
     def _feed_status(feed):
@@ -805,11 +811,9 @@ class Map:
         Call whenever stations load, are filtered, or the zoom changes. Only
         pins whose shift changed get a new icon.
         """
-        feeds = getattr(self, "visual_feeds", None)
-        if not feeds or not self.visual_feed_markers_by_id:
+        if not self.visual_feeds or not self.visual_feed_markers_by_id:
             return
-        stations = self.visible_stations()
-        for feed in feeds:
+        for feed in self.visual_feeds:
             if not isinstance(feed, dict):
                 continue
             key = visual_feed_key(feed.get("source", ""), feed.get("upstream_id", ""))
@@ -817,15 +821,22 @@ class Map:
             if marker is None:
                 continue
             shift = (0, 0)
-            station = find_match(feed, stations)
-            if station is not None:
-                s_lng, s_lat = geo_coords(station)[:2]
-                s_pt = self.map.latLngToLayerPoint([s_lat, s_lng])
+            station = self.cctv_station_of.get(key)
+            s_marker = self.station_marker(station.get("id")) if station else None
+            # a filtered-out station covers nothing, so the pin stays put
+            if s_marker is not None and self.map.hasLayer(s_marker):
+                s_pt = self.map.latLngToLayerPoint(s_marker.getLatLng())
                 c_pt = self.map.latLngToLayerPoint(marker.getLatLng())
                 shift = pin_shift(c_pt.x - s_pt.x, c_pt.y - s_pt.y)
             if self.visual_feed_shift.get(key, (0, 0)) != shift:
                 self.visual_feed_shift[key] = shift
                 marker.setIcon(self._build_cctv_icon(feed, shift))
+                # an open popup/tooltip reads its anchor only when it opens
+                # or the map zooms, so move it to the new pin position
+                if marker.isPopupOpen():
+                    marker.getPopup().update()
+                if marker.isTooltipOpen():
+                    marker.getTooltip().update()
 
     def show_visual_feeds(self, feeds, on_feed_click=None):
         """Create and display CCTV markers on the visual_feed_layer."""
@@ -835,6 +846,7 @@ class Map:
             self.visual_feeds = []
             self.visual_feed_markers_by_id = {}
             self.visual_feed_shift = {}
+            self.update_cctv_pairs()
             self.set_visual_feed_layer([])
             return
 
@@ -895,6 +907,7 @@ class Map:
 
         self.set_visual_feed_layer(markers)
         # stations may have loaded before these cameras
+        self.update_cctv_pairs()
         self.refresh_cctv_pins()
 
     def fly_to_visual_feed(self, source, upstream_id, zoom=17):

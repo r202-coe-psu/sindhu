@@ -42,8 +42,6 @@ class BaseMap(Map):
         self.metric_markers = {}
         self.metric_markers_by_code = {}
         self.metric_markers_by_key = {}
-        # station id -> code, so visible_stations() can link cameras by code
-        self.metric_station_codes = {}
         self.metric_markers_layer = {}
         self.metric_types = []
         self.panel_plus_sensors = []
@@ -253,6 +251,8 @@ class BaseMap(Map):
         # logic handler
         if isinstance(data, dict):
             self.latest_stations = data.get("stations", [])
+            # before the markers render, so their tooltips find the camera
+            self.update_cctv_pairs()
         await self.update_metric_marker(
             document_id, data, target_timestamp=target_timestamp
         )
@@ -570,7 +570,7 @@ class BaseMap(Map):
                 wind_speed_val = metrics.get("wind_speed", 0)
                 metric_color = await self.get_metric_color("wind_speed", wind_speed_val)
                 metric_marker = self._station_icon(
-                    f'<img class="station-dot" src="/static/resources/marks/up_arrow_{metric_color}.svg" width="{WIND_ARROW_PX}" height="{WIND_ARROW_PX}" style="display: block;" alt="">'
+                    f'<img class="station-dot" src="/static/resources/marks/up_arrow_{metric_color}.svg" style="display: block; width: {WIND_ARROW_PX}px; height: {WIND_ARROW_PX}px;" alt="">'
                 )
                 marker_option["rotationAngle"] = rotate_direction
             else:
@@ -677,7 +677,6 @@ class BaseMap(Map):
                 markers.append(marker)
                 self.metric_markers[station["id"]] = marker
                 code = station.get("code")
-                self.metric_station_codes[station["id"]] = code
                 if code:
                     # rid and dwr publish the same station codes, so a code
                     # maps to a list and (source, code) is the exact key
@@ -943,20 +942,8 @@ class BaseMap(Map):
                 marker.addTo(self.map)
         self.refresh_cctv_pins()
 
-    def visible_stations(self):
-        """Station markers on the map now; filtered-out ones are left out."""
-        stations = []
-        for station_id, marker in self.metric_markers.items():
-            if not self.map.hasLayer(marker):
-                continue
-            latlng = marker.getLatLng()
-            stations.append(
-                {
-                    "code": self.metric_station_codes.get(station_id),
-                    "coordinates": {"coordinates": [latlng.lng, latlng.lat]},
-                }
-            )
-        return stations
+    def station_marker(self, station_id):
+        return self.metric_markers.get(station_id)
 
     def _station_icon(self, inner_html):
         """divIcon with a station visual centered in the 28px hit box."""
@@ -994,6 +981,7 @@ class BaseMap(Map):
 
         if not self.map.hasLayer(marker):
             marker.addTo(self.map)
+            self.refresh_cctv_pins()
 
         target_zoom = max(self.map.getZoom(), zoom)
         self.map.flyTo(marker.getLatLng(), target_zoom)

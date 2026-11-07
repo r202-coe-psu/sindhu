@@ -4,7 +4,7 @@ import datetime
 
 from .base import BaseMonitor
 from stations import metric_infos
-from maps.cctv_pairing import find_match
+from maps.cctv_pairing import pair_cameras
 import json
 
 
@@ -132,7 +132,7 @@ class WaterMonitor(BaseMonitor):
     """
 
     def find_matching_cctv(self, station):
-        """Find the nearest co-located CCTV camera for a given water station."""
+        """The CCTV camera linked to a water station (see pair_cameras)."""
         if (
             hasattr(self, "map")
             and self.map
@@ -142,7 +142,9 @@ class WaterMonitor(BaseMonitor):
         feeds = []
         if hasattr(self, "visual_feed_monitor") and self.visual_feed_monitor:
             feeds = getattr(self.visual_feed_monitor, "latest_feeds", [])
-        return find_match(station, feeds)
+        stations = (self.latest_data or {}).get("stations") or [station]
+        _station_of, camera_of = pair_cameras(feeds, stations)
+        return camera_of.get(station.get("id"))
 
     def focus_station(self, code, source=None):
         """Switch to water panel, scroll to the station card, and fly to marker."""
