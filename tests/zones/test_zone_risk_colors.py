@@ -278,6 +278,19 @@ class ZoneStyleTests(unittest.TestCase):
         zone = {"code": "zone-9", "metadata": {"zone_number": 2}}
         self.assertEqual(Map.zone_number(zone), 2)
 
+    def test_zone_number_comes_from_the_digits_after_zone_in_the_code(self):
+        cases = {
+            "songkhla-zone-2": 2,
+            "zone-1-v2": 1,
+            "songkhla-zone-3-2026": 3,
+            "Zone_4": 4,
+            "TSL40": None,
+            "code-123": None,
+        }
+        for code, number in cases.items():
+            with self.subTest(code=code):
+                self.assertEqual(Map.zone_number({"code": code}), number)
+
     def test_unnumbered_zone_falls_back_to_its_draw_order(self):
         map_view = Map.__new__(Map)
         map_view.map = _BrowserStub()
@@ -694,6 +707,36 @@ class FocusModeTests(unittest.TestCase):
         map_view = self.make_map("none")
         self.toggle(map_view, True, False)
         self.assertEqual(map_view.lifts, 0)
+
+
+class LegendRedrawTests(unittest.TestCase):
+    def render(self, reset_display):
+        from maps.base import BaseMap
+
+        map_view = BaseMap.__new__(BaseMap)
+        map_view.map = _BrowserStub()
+        map_view.zone_layers_by_id = {}
+        map_view._reset_btn_container = types.SimpleNamespace(
+            style=types.SimpleNamespace(display=reset_display)
+        )
+        map_view.lifts = 0
+
+        def lift():
+            map_view.lifts += 1
+
+        map_view._lift_reset_button_over_legends = lift
+        map_view._legend_collapsed = False
+        map_view._metric_legend_container = types.SimpleNamespace(
+            html="", select_one=lambda selector: None
+        )
+        map_view.render_legend([], "ระดับน้ำ")
+        return map_view
+
+    def test_redrawn_legend_restacks_a_visible_reset_button(self):
+        self.assertEqual(self.render("block").lifts, 1)
+
+    def test_redrawn_legend_leaves_a_hidden_reset_button_alone(self):
+        self.assertEqual(self.render("none").lifts, 0)
 
 
 class _Rect:

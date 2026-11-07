@@ -198,6 +198,7 @@ class Map:
     ZONE_RISK_FILL_OPACITY = 0.28
     HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
     DASH_PATTERN = re.compile(r"^[0-9][0-9 ,.]*$")
+    ZONE_CODE_NUMBER = re.compile(r"zone[-_ ]?([0-9]+)", re.IGNORECASE)
 
     @staticmethod
     def _is_reference_zone(zone, style=None):
@@ -217,8 +218,8 @@ class Map:
         meta = zone.get("metadata") or {}
         number = meta.get("zone_number")
         if number is None:
-            digits = "".join(ch for ch in str(zone.get("code") or "") if ch.isdigit())
-            number = digits or None
+            match = Map.ZONE_CODE_NUMBER.search(str(zone.get("code") or ""))
+            number = match.group(1) if match else None
         try:
             number = int(number)
         except (TypeError, ValueError):

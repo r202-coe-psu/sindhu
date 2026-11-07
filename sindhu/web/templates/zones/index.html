@@ -351,6 +351,7 @@ const ZONE_IDENTITIES = [
 ];
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const DASH_PATTERN = /^[0-9][0-9 ,.]*$/;
+const ZONE_CODE_NUMBER = /zone[-_ ]?([0-9]+)/i;
 
 function isReferenceZone(z) {
     const meta = z.metadata || {};
@@ -368,8 +369,8 @@ function zoneNumber(z) {
     const meta = z.metadata || {};
     let number = meta.zone_number;
     if (number === undefined || number === null) {
-        const digits = String(z.code || "").replace(/\D/g, "");
-        number = digits || null;
+        const match = String(z.code || "").match(ZONE_CODE_NUMBER);
+        number = match ? match[1] : null;
     }
     number = Number(number);
     return Number.isInteger(number) && number > 0 ? number : null;
@@ -849,7 +850,7 @@ document.addEventListener("DOMContentLoaded", function() {
         const opacity = parseFloat(document.getElementById("zone-opacity").value) / 100.0;
         const status = document.getElementById("zone-status-toggle").checked ? "active" : "inactive";
 
-        const { stroke, fill, shading_mode, ...keptMeta } = existingMeta;
+        const { stroke, shading_mode, ...keptMeta } = existingMeta;
         const updatedMeta = { ...keptMeta, "fill-opacity": opacity };
         if (customStroke) updatedMeta.stroke = customStroke;
 
