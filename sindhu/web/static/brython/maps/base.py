@@ -5,13 +5,14 @@ from browser import ajax, document, html, window, aio
 import javascript as js
 
 from .map import Map
+from .legend import LegendMixin
 from stations import metric_infos
 from stations.metric_colors import get_metric_color as _get_metric_color
 
 DATA_MARKER_Z_OFFSET = 1000
 
 
-class BaseMap(Map):
+class BaseMap(LegendMixin, Map):
     def __init__(
         self,
         center,
@@ -763,53 +764,6 @@ class BaseMap(Map):
             },
         ).addTo(self.map)
 
-    def set_interpolation_legend(self, legend):
-        """Draw the color scale of the interpolated surface as a gradient bar."""
-        from browser import document as doc
-
-        container = self._interpolation_legend_container
-        if container is None:
-            container = doc.createElement("div")
-            # map-ui: hidden with the other floating cards in map focus mode
-            container.className = "map-ui map-scale-legend"
-            self.map.getContainer() <= container
-            self._interpolation_legend_container = container
-            self.leaflet.DomEvent.disableClickPropagation(container)
-            self.leaflet.DomEvent.disableScrollPropagation(container)
-
-        if not legend:
-            container.html = ""
-            return
-
-        # Sizes are inline styles: Tailwind only ships classes it finds in the
-        # templates, and it never scans these Brython sources
-        bands = legend.get("bands") or []
-        chips = "".join(
-            f'<span style="flex:1 1 0;background-color:{band["color"]};"></span>'
-            for band in bands
-        )
-
-        # Labels sit at their own band edge; the end ones are pulled inside the
-        # bar so they do not overflow the legend box
-        ticks = ""
-        for tick in legend.get("ticks") or []:
-            percent = round(tick["offset"] * 100)
-            shift = "0" if percent == 0 else ("-100%" if percent >= 99 else "-50%")
-            ticks += (
-                f'<span style="position:absolute;white-space:nowrap;font-size:9px;'
-                f'color:var(--color-ink-500);left:{percent}%;transform:translateX({shift});">'
-                f'{tick["value"]:g}</span>'
-            )
-
-        container.html = f"""
-        <div class="bg-base-100/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
-            <div style="font-size:11px;font-weight:600;color:var(--color-ink-700);line-height:1.2;">{legend.get("title", "")}</div>
-            <div style="display:flex;height:10px;margin-top:6px;border:1px solid var(--color-ink-300);border-radius:3px;overflow:hidden;">{chips}</div>
-            <div style="position:relative;height:13px;margin-top:2px;">{ticks}</div>
-            <div style="font-size:9px;color:var(--color-ink-500);text-align:right;">{legend.get("unit", "")}</div>
-        </div>
-        """
-
     def remove_interpolation_layer(self, key):
         layer = self.interpolate_layers.pop(key, None)
         if layer:
@@ -823,80 +777,6 @@ class BaseMap(Map):
 
     async def get_metric_color(self, type_, value):
         return _get_metric_color(type_, value)
-
-    def set_legend(self, levels, title, subtitle=""):
-        """Let the caller own the legend when markers are not coloured by a
-        metric scale — the water monitor colours them by risk instead."""
-        self._legend_override = True
-        self.render_legend(levels, title, subtitle)
-
-    async def update_metric_legend(self, document_id):
-        """Draw the colour scale of the active metric on top of the map.
-
-        The bands come from `metric_infos.get_metric_levels`, which reads the
-        same `metric_colors` ranks the markers use, so the legend can never
-        describe colours the map does not actually draw.
-        """
-        if self._legend_override:
-            # A caller already put its own scale there; leave it alone
-            self.metric_legends[document_id] = True
-            return
-
-        metric_type = document_id.replace("empirical_", "").lower()
-        levels = metric_infos.get_metric_levels(metric_type)
-        if not levels:
-            self.metric_legends[document_id] = True
-            return
-
-        self.render_legend(
-            levels,
-            metric_infos.get_metric_level_title(metric_type),
-            "ระดับความปลอดภัย",
-        )
-        self.metric_legends[document_id] = True
-
-    def render_legend(self, levels, title, subtitle=""):
-        from browser import document as doc
-
-        rows = ""
-        for level in levels:
-            rows += f"""
-            <div class="flex items-center gap-2">
-                <span class="inline-block w-4 h-3 rounded-sm shrink-0 border border-ink-300" style="background-color: {level["color"]};"></span>
-                <span class="text-[11px] text-ink-700 leading-tight">{level["label"]}</span>
-                <span class="text-[10px] text-ink-400 leading-tight ml-auto pl-2 whitespace-nowrap">{level["range"]}</span>
-            </div>
-            """
-
-        container = self._metric_legend_container
-        if container is None:
-            container = doc.createElement("div")
-            # map-ui: hidden with the other floating cards in map focus mode
-            container.className = "map-ui map-legend"
-            self.map.getContainer() <= container
-            self._metric_legend_container = container
-            # Keep clicks and wheel events on the legend out of the map
-            self.leaflet.DomEvent.disableClickPropagation(container)
-            self.leaflet.DomEvent.disableScrollPropagation(container)
-
-        subtitle_html = ""
-        if subtitle:
-            subtitle_html = f'<div class="text-[9px] text-ink-400">{subtitle}</div>'
-
-        container.html = f"""
-        <div class="bg-base-100/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
-            <div class="flex items-center gap-1.5 pb-1 mb-1.5 border-b border-ink-100">
-                <i class="ph ph-palette text-brand-600 text-sm"></i>
-                <div class="leading-tight">
-                    <div class="text-[11px] font-semibold text-ink-700">{title}</div>
-                    {subtitle_html}
-                </div>
-            </div>
-            <div class="flex flex-col gap-1">
-                {rows}
-            </div>
-        </div>
-        """
 
     def marker_key(self, source, code):
         return f"{str(source).lower()}:{code}"

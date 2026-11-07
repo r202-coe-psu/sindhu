@@ -225,6 +225,9 @@ class WaterMonitor(BaseMonitor):
                 "change", self.on_toggle_rain_interpolation
             )
 
+        if "toggle_zones_layer" in document:
+            document["toggle_zones_layer"].bind("change", self.on_toggle_zones_layer)
+
         while self.running:
             print(f"monitor: wake up {datetime.datetime.now()}")
             print(f"monitor: {self.monitor_name} monitor")
