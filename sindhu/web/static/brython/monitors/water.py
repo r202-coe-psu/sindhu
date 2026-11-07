@@ -4,7 +4,7 @@ import datetime
 
 from .base import BaseMonitor
 from stations import metric_infos
-from maps.map import _haversine_distance
+from maps.cctv_pairing import pair_cameras
 import json
 
 
@@ -132,7 +132,7 @@ class WaterMonitor(BaseMonitor):
     """
 
     def find_matching_cctv(self, station):
-        """Find the nearest co-located CCTV camera for a given water station."""
+        """The CCTV camera linked to a water station (see pair_cameras)."""
         if (
             hasattr(self, "map")
             and self.map
@@ -142,29 +142,9 @@ class WaterMonitor(BaseMonitor):
         feeds = []
         if hasattr(self, "visual_feed_monitor") and self.visual_feed_monitor:
             feeds = getattr(self.visual_feed_monitor, "latest_feeds", [])
-        if not feeds:
-            return None
-        st_code = str(station.get("code") or "").strip().lower()
-        scoord_obj = station.get("coordinates")
-        s_coords = (
-            scoord_obj.get("coordinates") if isinstance(scoord_obj, dict) else None
-        )
-        best = None
-        min_dist = float("inf")
-        for feed in feeds:
-            c_code = str(feed.get("code") or "").strip().lower()
-            if st_code and c_code and st_code == c_code:
-                return feed
-            ccoord_obj = feed.get("coordinates")
-            c_coords = (
-                ccoord_obj.get("coordinates") if isinstance(ccoord_obj, dict) else None
-            )
-            if s_coords and c_coords and len(s_coords) >= 2 and len(c_coords) >= 2:
-                dist = _haversine_distance(s_coords, c_coords)
-                if dist <= 300 and dist < min_dist:
-                    min_dist = dist
-                    best = feed
-        return best
+        stations = (self.latest_data or {}).get("stations") or [station]
+        _station_of, camera_of = pair_cameras(feeds, stations)
+        return camera_of.get(station.get("id"))
 
     def focus_station(self, code, source=None):
         """Switch to water panel, scroll to the station card, and fly to marker."""
