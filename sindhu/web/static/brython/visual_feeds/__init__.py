@@ -1017,7 +1017,7 @@ class VisualFeedMonitor:
                 body,
                 _el(
                     "span",
-                    f"cctv-status inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold text-white {_image_freshness_status_class(image_freshness)}",
+                    f"cctv-status inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold {_image_freshness_status_class(image_freshness)}",
                     _image_freshness_label(image_freshness),
                 ),
             )
@@ -1143,7 +1143,7 @@ class VisualFeedMonitor:
             body,
             _el(
                 "span",
-                f"cctv-status inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold text-white {_image_freshness_status_class(image_freshness)}",
+                f"cctv-status inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold {_image_freshness_status_class(image_freshness)}",
                 _image_freshness_label(image_freshness),
             ),
         )

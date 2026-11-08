@@ -184,7 +184,7 @@ class LegendMixin:
         if not getattr(self, "rivers_unavailable", False):
             return ""
         return """
-            <div class="mt-1.5 pt-1.5 border-t border-ink-100 text-[10px] text-amber-400 flex items-center gap-1">
+            <div class="mt-1.5 pt-1.5 border-t border-ink-100 text-[10px] text-warning flex items-center gap-1">
                 <i class="ph ph-warning text-xs" aria-hidden="true"></i>
                 <span>โหลดเส้นแม่น้ำไม่สำเร็จ</span>
             </div>

@@ -225,7 +225,7 @@ class BaseMap(LegendMixin, Map):
                     </div>
                 </div>
             </div>
-            <div style="margin-top:8px; text-align:center; font-size:12px; font-weight:700; border-radius:7px; padding:4px 0; color:color-mix(in oklab, {color} 55%, white); background:color-mix(in oklab, {color} 24%, transparent);">{headline}</div>
+            <div style="margin-top:8px; text-align:center; font-size:12px; font-weight:700; border-radius:7px; padding:4px 0; color:color-mix(in oklab, {color} 55%, var(--color-ink-950)); background:color-mix(in oklab, {color} 24%, transparent);">{headline}</div>
         </div>
         """
 
@@ -457,7 +457,7 @@ class BaseMap(LegendMixin, Map):
                     cctv_btn_html = f"""
                     <div style="margin-top:6px; padding-top:6px; border-top:1px dashed var(--color-ink-200);">
                         <button type="button" onclick="if(window.open_cctv_detail)window.open_cctv_detail('{cctv_source}','{cctv_upstream_id}')"
-                            style="width:100%; background:var(--color-primary); color:white; font-size:11px; font-weight:600; padding:6px 10px; border-radius:6px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            style="width:100%; background:var(--color-primary); color:var(--color-primary-content); font-size:11px; font-weight:600; padding:6px 10px; border-radius:6px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:6px;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h10a2 2 0 0 1 2 2v2.5l4-2.5v12l-4-2.5V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
                             <span>ดูกล้อง CCTV ({cctv_title})</span>
                         </button>
@@ -585,7 +585,7 @@ class BaseMap(LegendMixin, Map):
                     metric_color = station["risk_color"]
 
                 if style == "donut":
-                    html_content = f'<div style="width: 24px; height: 24px; border-radius: 50%; background: conic-gradient({metric_color} {percent}%, var(--color-ink-200) 0); border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>'
+                    html_content = f'<div style="width: 24px; height: 24px; border-radius: 50%; background: conic-gradient({metric_color} {percent}%, var(--color-ink-200) 0); border: 2px solid var(--color-ink-950); box-shadow: 0 0 4px rgba(0,0,0,0.3);"></div>'
                     metric_marker = self.leaflet.divIcon(
                         {
                             "className": "custom-div-icon",
@@ -605,7 +605,7 @@ class BaseMap(LegendMixin, Map):
                         }
                     )
                 elif style == "tank":
-                    html_content = f'<div style="width: 14px; height: 28px; border-radius: 6px; border: 2px solid white; background: var(--color-base-100); position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"><div style="position: absolute; bottom: 0; left: 0; width: 100%; height: {percent}%; background-color: {metric_color}; transition: height 0.3s ease;"></div></div>'
+                    html_content = f'<div style="width: 14px; height: 28px; border-radius: 6px; border: 2px solid var(--color-ink-950); background: var(--color-base-100); position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"><div style="position: absolute; bottom: 0; left: 0; width: 100%; height: {percent}%; background-color: {metric_color}; transition: height 0.3s ease;"></div></div>'
                     metric_marker = self.leaflet.divIcon(
                         {
                             "className": "custom-div-icon",
@@ -616,7 +616,7 @@ class BaseMap(LegendMixin, Map):
                     )
                 elif style == "bubble":
                     size = max(12, min(percent / 2.5, 40))
-                    html_content = f'<div style="width: {size}px; height: {size}px; border-radius: 50%; background-color: {metric_color}; border: 2px solid white; opacity: 0.85; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>'
+                    html_content = f'<div style="width: {size}px; height: {size}px; border-radius: 50%; background-color: {metric_color}; border: 2px solid var(--color-ink-950); opacity: 0.85; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>'
                     metric_marker = self.leaflet.divIcon(
                         {
                             "className": "custom-div-icon",

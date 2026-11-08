@@ -70,12 +70,12 @@
                 <div class="p-3 bg-ink-50 border border-ink-200 rounded-xl flex items-center justify-between">
                     <div>
                         <label class="text-xs font-bold text-ink-700 block">เปิด/ปิดการแสดงผลโซน</label>
-                        <span id="zone-status-desc" class="text-[11px] text-emerald-400 font-medium flex items-center gap-1"><i class="ph ph-check-circle text-xs"></i> แสดงผลบนหน้ามอนิเตอร์สาธารณะ</span>
+                        <span id="zone-status-desc" class="text-[11px] text-success font-medium flex items-center gap-1"><i class="ph ph-check-circle text-xs"></i> แสดงผลบนหน้ามอนิเตอร์สาธารณะ</span>
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" id="zone-status-toggle" class="sr-only peer" checked onchange="onFormStatusChange()" />
                         <div class="w-10 h-5 bg-ink-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-ink-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
-                        <span id="zone-status-text" class="ml-2 text-xs font-bold text-emerald-400">เปิด</span>
+                        <span id="zone-status-text" class="ml-2 text-xs font-bold text-success">เปิด</span>
                     </label>
                 </div>
                 <div>
@@ -140,9 +140,9 @@
                 <div>
                     <label class="label text-xs font-semibold text-ink-600 py-0.5">ขอบเขต (GeoJSON) — วาดบนแผนที่ หรือวาง/แก้พิกัด</label>
                     <textarea id="zone-boundary" rows="4" class="textarea textarea-bordered textarea-sm w-full font-mono text-xs leading-tight" placeholder='{"type":"Polygon","coordinates":[[[100.5,7.0],[100.6,7.0],[100.6,7.1],[100.5,7.0]]]}'></textarea>
-                    <div id="boundary-json-error" class="text-xs text-red-400 hidden mt-1"></div>
+                    <div id="boundary-json-error" class="text-xs text-error hidden mt-1"></div>
                 </div>
-                <div id="boundary-status" class="text-xs text-amber-400 hidden">
+                <div id="boundary-status" class="text-xs text-warning hidden">
                     <i class="ph ph-warning"></i> กรุณาวาด polygon บนแผนที่
                 </div>
                 <div class="flex gap-2 pt-2">
@@ -185,7 +185,7 @@ function renderStationChips() {
         const label = s ? stationLabel(s) : id;
         return `<span class="badge badge-sm badge-primary gap-1 py-2">
             ${label}
-            <button type="button" class="hover:text-red-200" onclick="removeStation('${id}')">&times;</button>
+            <button type="button" class="rounded-full px-1 hover:bg-primary-content/20" onclick="removeStation('${id}')">&times;</button>
         </span>`;
     }).join("");
 }
@@ -457,9 +457,9 @@ function onFormStatusChange() {
     const descEl = document.getElementById("zone-status-desc");
     if (isChecked) {
         textEl.textContent = "เปิด";
-        textEl.className = "ml-2 text-xs font-bold text-emerald-400";
+        textEl.className = "ml-2 text-xs font-bold text-success";
         descEl.innerHTML = '<i class="ph ph-check-circle text-xs"></i> แสดงผลบนหน้ามอนิเตอร์สาธารณะ';
-        descEl.className = "text-[11px] text-emerald-400 font-medium flex items-center gap-1";
+        descEl.className = "text-[11px] text-success font-medium flex items-center gap-1";
     } else {
         textEl.textContent = "ปิด";
         textEl.className = "ml-2 text-xs font-bold text-ink-400";
@@ -613,7 +613,7 @@ function toggleAllAdminLayers() {
     const icon = document.getElementById("admin-toggle-all-icon");
     const text = document.getElementById("admin-toggle-all-text");
     if (icon && text) {
-        icon.className = adminAllVisible ? "ph ph-eye text-xs" : "ph ph-eye-slash text-xs text-amber-400";
+        icon.className = adminAllVisible ? "ph ph-eye text-xs" : "ph ph-eye-slash text-xs text-warning";
         text.textContent = adminAllVisible ? "ซ่อนทั้งหมด" : "แสดงทั้งหมด";
     }
     document.querySelectorAll(".zone-eye-btn").forEach(btn => {

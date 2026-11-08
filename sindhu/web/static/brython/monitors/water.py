@@ -353,7 +353,7 @@ class WaterMonitor(BaseMonitor):
             return
         document["reservoir_data_list"].html = f"""
         <div class="flex flex-col items-center justify-center h-full text-center gap-2 px-4">
-            <i class="ph ph-warning-circle text-4xl text-amber-500"></i>
+            <i class="ph ph-warning-circle text-4xl text-warning"></i>
             <div class="text-sm font-medium text-ink-600">{message}</div>
         </div>
         """
@@ -689,9 +689,9 @@ class WaterMonitor(BaseMonitor):
                         if v < 0:
                             display_text = f'{m_label}: <span class="font-medium text-ink-700">ต่ำกว่าตลิ่ง {abs(v):.2f} ม.</span>'
                         elif v > 0:
-                            display_text = f'{m_label}: <span class="font-medium text-red-400">ล้นตลิ่ง {v:.2f} ม.</span>'
+                            display_text = f'{m_label}: <span class="font-medium text-error">ล้นตลิ่ง {v:.2f} ม.</span>'
                         else:
-                            display_text = f'{m_label}: <span class="font-medium text-amber-400">เสมอระดับตลิ่งพอดี</span>'
+                            display_text = f'{m_label}: <span class="font-medium text-warning">เสมอระดับตลิ่งพอดี</span>'
                     except:
                         display_text = f'{m_label}: <span class="font-medium text-ink-700">{val} ม.</span>'
                 else:
@@ -745,7 +745,7 @@ class WaterMonitor(BaseMonitor):
                         <div class="text-xs text-ink-500 mt-0.5">{location}</div>
                     </div>
                     <span class="badge gap-1 px-2 py-3 shadow-sm border border-ink-200" style="background-color: {hex_color}; color: {text_color};">
-                        <span class="w-2 h-2 rounded-full border border-ink-300" style="background-color: {'white'};"></span>{label}
+                        <span class="w-2 h-2 rounded-full border border-ink-300" style="background-color: var(--color-ink-950);"></span>{label}
                     </span>
                 </div>
                 <div class="mt-3 flex flex-wrap gap-2">

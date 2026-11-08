@@ -288,7 +288,7 @@ class BaseMonitor:
                 mark = self.map.user_mark
                 if mark and not isinstance(mark, list):
                     mark.setPopupContent(
-                        '<div class="text-sm text-amber-400 font-semibold"><i class="ph ph-warning"></i> ไม่พบลุ่มน้ำสำหรับตำแหน่งนี้</div>'
+                        '<div class="text-sm text-warning font-semibold"><i class="ph ph-warning"></i> ไม่พบลุ่มน้ำสำหรับตำแหน่งนี้</div>'
                     ).openPopup()
         except Exception as e:
             print(f"[Monitor] Locate error: {e}")
