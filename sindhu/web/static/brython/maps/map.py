@@ -23,6 +23,10 @@ class Map:
     _visual_feed_popup = None
     _visual_feed_popup_flying = False
     _replacing_visual_feed_layer = False
+    # Zones feeding the selected zone, and the label that names them.  Class
+    # level so a Map without a selection reads as "nothing upstream".
+    _upstream_zone_ids = frozenset()
+    _upstream_label = None
 
     def __init__(self, center, zoom, min_zoom):
         self.center = center
@@ -185,6 +189,17 @@ class Map:
         "dashArray": "",
     }
 
+    # Dashed blue water tone with a light fill: reads as "water comes from
+    # here" and stays distinct from the solid, risk-coloured selected zone.
+    ZONE_UPSTREAM_STYLE = {
+        "fillColor": "#38bdf8",
+        "fillOpacity": 0.22,
+        "color": "#0369a1",
+        "weight": 3.5,
+        "opacity": 1.0,
+        "dashArray": "10, 6",
+    }
+
     def set_zone_risk(self, zone_id, level):
         """Colour a zone by the worst risk among its stations."""
         entry = self.zone_layers_by_id.get(str(zone_id))
@@ -192,11 +207,17 @@ class Map:
             return False
 
         entry["risk"] = level
-        if self._selected_zone_id != str(zone_id):
-            entry["layer"].setStyle(self.zone_style(str(zone_id)))
-        else:
-            entry["layer"].setStyle(self.zone_style(str(zone_id), "selected"))
+        entry["layer"].setStyle(
+            self.zone_style(str(zone_id), self._zone_state(str(zone_id)))
+        )
         return True
+
+    def _zone_state(self, zone_id):
+        if self._selected_zone_id == zone_id:
+            return "selected"
+        if zone_id in self._upstream_zone_ids:
+            return "upstream"
+        return "normal"
 
     def zone_style(self, zone_id, state="normal"):
         """Style for one zone in a given interaction state."""
@@ -255,6 +276,9 @@ class Map:
                 "interactive": False,
             }
 
+        if state == "upstream":
+            return dict(self.ZONE_UPSTREAM_STYLE)
+
         # Zone colours follow the same risk scale as their stations.  A zone
         # gets the worst level among its member stations; no data is grey.
         if not level:
@@ -295,8 +319,7 @@ class Map:
         """Toggle zone fill between outline-only (transparent) and shaded (colored fill)."""
         self.zone_shading_mode = mode
         for key, entry in self.zone_layers_by_id.items():
-            state = "selected" if self._selected_zone_id == key else "normal"
-            entry["layer"].setStyle(self.zone_style(key, state))
+            entry["layer"].setStyle(self.zone_style(key, self._zone_state(key)))
 
     def set_zone_visible(self, zone_identifier, visible):
         """Set visibility of an individual zone by id, code, or zone_number."""
@@ -542,7 +565,9 @@ class Map:
             if not entry:
                 return
             entry["layer"].setStyle(
-                self.zone_style(zone_id, "hover" if entering else "normal")
+                self.zone_style(
+                    zone_id, "hover" if entering else self._zone_state(zone_id)
+                )
             )
 
         return handler
@@ -569,14 +594,26 @@ class Map:
             return False
 
         self._selected_zone_id = zone_id
+        # Old documents have no field; ids with no drawn layer (inactive or
+        # reference zones) simply have nothing to highlight.
+        upstream_ids = [
+            str(upstream_id)
+            for upstream_id in (entry["zone"].get("upstream_zone_ids") or [])
+            if str(upstream_id) in self.zone_layers_by_id
+            and str(upstream_id) != zone_id
+        ]
+        self._upstream_zone_ids = frozenset(upstream_ids)
         # The other zones keep their normal dashed outline: they stay visible
         # and clickable so a different zone can be picked straight away.
         for key, other in self.zone_layers_by_id.items():
+            other["layer"].setStyle(self.zone_style(key, self._zone_state(key)))
             if key == zone_id:
-                other["layer"].setStyle(self.zone_style(key, "selected"))
                 other["layer"].bringToFront()
-            else:
-                other["layer"].setStyle(self.zone_style(key))
+
+        names = [self._zone_display_name(upstream_id) for upstream_id in upstream_ids]
+        self._show_upstream_label(
+            "น้ำไหลมาจาก: " + ", ".join(names) if names else "ไม่มีข้อมูลต้นน้ำ"
+        )
 
         if fit_bounds:
             self.map.fitBounds(entry["layer"].getBounds(), self.fit_bounds_options())
@@ -584,8 +621,35 @@ class Map:
         self.show_reset_button()
         return True
 
+    def _zone_display_name(self, zone_id):
+        zone = self.zone_layers_by_id[zone_id]["zone"]
+        return zone.get("name_th") or zone.get("name") or zone_id
+
+    def _show_upstream_label(self, text):
+        from browser import document as doc
+
+        if self._upstream_label is None:
+            label = doc.createElement("div")
+            label.style.cssText = (
+                "position:absolute;top:12px;left:12px;z-index:1000;"
+                "max-width:55%;pointer-events:none;background:rgba(255,255,255,0.92);"
+                "color:#0369a1;border:1px solid #7dd3fc;border-radius:8px;"
+                "padding:6px 12px;font-size:13px;font-weight:600;"
+                "box-shadow:0 2px 6px rgba(0,0,0,0.15);"
+            )
+            self.map.getContainer().appendChild(label)
+            self._upstream_label = label
+        self._upstream_label.text = text
+        self._upstream_label.style.display = "block"
+
+    def _hide_upstream_label(self):
+        if self._upstream_label is not None:
+            self._upstream_label.style.display = "none"
+
     def clear_zone_selection(self):
         self._selected_zone_id = None
+        self._upstream_zone_ids = frozenset()
+        self._hide_upstream_label()
         for zone_id, entry in self.zone_layers_by_id.items():
             entry["layer"].setStyle(self.zone_style(zone_id))
 
@@ -596,6 +660,8 @@ class Map:
             self.map.removeLayer(entry["layer"])
         self.zone_layers_by_id = {}
         self._selected_zone_id = None
+        self._upstream_zone_ids = frozenset()
+        self._hide_upstream_label()
 
     def __del__(self):
         self.map.remove()
