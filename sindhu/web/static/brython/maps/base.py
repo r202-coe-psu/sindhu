@@ -5,6 +5,7 @@ from browser import ajax, document, html, window, aio
 import javascript as js
 
 from .map import Map
+from .legend import LegendMixin
 from .marker_sizes import (
     HIT_BOX_PX,
     PULSE_PX,
@@ -22,7 +23,7 @@ from stations.metric_colors import get_metric_color as _get_metric_color
 DATA_MARKER_Z_OFFSET = 1000
 
 
-class BaseMap(Map):
+class BaseMap(LegendMixin, Map):
     def __init__(
         self,
         center,
@@ -61,11 +62,11 @@ class BaseMap(Map):
     SECTION_USABLE_PX = 62
     SECTION_HEADROOM = 1.25
     SECTION_OVERFLOW_PX = 26
-    SECTION_RISK_TINTS = {
-        3: ("#9333ea", "#f3e8ff"),
-        2: ("#ef4444", "#fee2e2"),
-        1: ("#f97316", "#ffedd5"),
-        0: ("#16a34a", "#dcfce7"),
+    SECTION_RISK_COLORS = {
+        3: "#9333ea",
+        2: "#ef4444",
+        1: "#f97316",
+        0: "#16a34a",
     }
 
     def build_waterlevel_section(self, station, waterlevel_val, diff_val):
@@ -116,19 +117,19 @@ class BaseMap(Map):
         else:
             water_y = bank_y + gap * px_per_m
 
-        color, tint = self.SECTION_RISK_TINTS.get(station.get("risk"), (None, None))
+        color = self.SECTION_RISK_COLORS.get(station.get("risk"))
         if color is None:
             d = diff_val if diff_val is not None else None
             if d is None:
-                color, tint = "#64748b", "#f1f5f9"
+                color = "#64748b"
             elif d >= 0.5:
-                color, tint = self.SECTION_RISK_TINTS[3]
+                color = self.SECTION_RISK_COLORS[3]
             elif d >= 0:
-                color, tint = self.SECTION_RISK_TINTS[2]
+                color = self.SECTION_RISK_COLORS[2]
             elif d >= -0.5:
-                color, tint = self.SECTION_RISK_TINTS[1]
+                color = self.SECTION_RISK_COLORS[1]
             else:
-                color, tint = self.SECTION_RISK_TINTS[0]
+                color = self.SECTION_RISK_COLORS[0]
 
         if diff_val is None:
             headline = "ไม่มีค่าเทียบตลิ่ง"
@@ -165,20 +166,20 @@ class BaseMap(Map):
                     stroke="#f97316" stroke-width="1.4" stroke-dasharray="4 3"/>
             """
             warn_row = f"""
-            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:rgba(15,23,42,0.6);">
+            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:var(--color-ink-500);">
                 <span style="width:8px; height:2px; background:#f97316; flex:none;"></span>
                 <span>เฝ้าระวัง</span>
-                <b style="color:#0f172a; font-weight:600; margin-left:auto;">{warning:.2f}</b>
+                <b style="color:var(--color-ink-900); font-weight:600; margin-left:auto;">{warning:.2f}</b>
             </div>
             """
 
         crest_row = ""
         if crest is not None:
             crest_row = f"""
-            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:rgba(15,23,42,0.6);">
-                <span style="width:8px; height:2px; background:#475569; flex:none;"></span>
+            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:var(--color-ink-500);">
+                <span style="width:8px; height:2px; background:var(--color-ink-600); flex:none;"></span>
                 <span>ตลิ่ง</span>
-                <b style="color:#0f172a; font-weight:600; margin-left:auto;">{crest:.2f}</b>
+                <b style="color:var(--color-ink-900); font-weight:600; margin-left:auto;">{crest:.2f}</b>
             </div>
             """
 
@@ -191,15 +192,15 @@ class BaseMap(Map):
         <svg viewBox="0 0 {view_w} {view_h}" style="display:block; width:100%; height:auto;">
           <defs>
             <linearGradient id="wlg-{sid}" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" style="stop-color:var(--color-brand-400)"/>
-              <stop offset="100%" style="stop-color:var(--color-brand-700)"/>
+              <stop offset="0%" style="stop-color:var(--color-brand-500)"/>
+              <stop offset="100%" style="stop-color:var(--color-brand-300)"/>
             </linearGradient>
             <clipPath id="wlc-{sid}">
               <path d="M {ch_l} {bank_y} V {wall_y} C {ch_l} 132 {ch_r} 132 {ch_r} {wall_y} V {bank_y} Z"/>
               <rect x="0" y="0" width="{view_w}" height="{bank_y}"/>
             </clipPath>
           </defs>
-          <path d="M 0 {bank_y} H {channel} H {view_w} V {view_h} H 0 Z" fill="#eef2f7"/>
+          <path d="M 0 {bank_y} H {channel} H {view_w} V {view_h} H 0 Z" style="fill:var(--color-ink-100)"/>
           <g clip-path="url(#wlc-{sid})">
             <g transform="translate(0,{rise:.1f})">
               <animateTransform attributeName="transform" type="translate"
@@ -208,14 +209,14 @@ class BaseMap(Map):
               <rect x="0" y="{water_y:.1f}" width="{view_w}" height="{view_h}"
                     fill="url(#wlg-{sid})"/>
               <line x1="0" y1="{water_y:.1f}" x2="{view_w}" y2="{water_y:.1f}"
-                    style="stroke:var(--color-brand-100)" stroke-width="2"/>
+                    style="stroke:var(--color-brand-800)" stroke-width="2"/>
             </g>
           </g>
           <path d="M 0 {bank_y} H {channel} H {view_w}" fill="none"
-                stroke="#64748b" stroke-width="2.2" stroke-linejoin="round"/>
+                style="stroke:var(--color-ink-500)" stroke-width="2.2" stroke-linejoin="round"/>
           {warn_line}
           <line x1="{ch_l - 16}" y1="{bank_y}" x2="{ch_r + 16}" y2="{bank_y}"
-                stroke="#475569" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.85"/>
+                style="stroke:var(--color-ink-600)" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.85"/>
           {arrow_html}
         </svg>
         """
@@ -226,8 +227,8 @@ class BaseMap(Map):
                 <div style="flex:0 0 172px;">{svg}</div>
                 <div style="flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; gap:10px;">
                     <div>
-                        <div style="font-size:10px; color:rgba(15,23,42,0.55); line-height:1; margin-bottom:4px;">ระดับน้ำ</div>
-                        <div style="font-size:21px; font-weight:800; color:var(--color-brand-700); line-height:1; letter-spacing:-0.02em;">{f"{waterlevel_val:.2f}" if waterlevel_val is not None else "—"}<span style="font-size:11px; font-weight:600; color:rgba(15,23,42,0.5); margin-left:2px;">ม.</span></div>
+                        <div style="font-size:10px; color:var(--color-ink-500); line-height:1; margin-bottom:4px;">ระดับน้ำ</div>
+                        <div style="font-size:21px; font-weight:800; color:var(--color-brand-700); line-height:1; letter-spacing:-0.02em;">{f"{waterlevel_val:.2f}" if waterlevel_val is not None else "—"}<span style="font-size:11px; font-weight:600; color:var(--color-ink-500); margin-left:2px;">ม.</span></div>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:4px;">
                         {crest_row}
@@ -235,7 +236,7 @@ class BaseMap(Map):
                     </div>
                 </div>
             </div>
-            <div style="margin-top:8px; text-align:center; font-size:12px; font-weight:700; border-radius:7px; padding:4px 0; color:{color}; background:{tint};">{headline}</div>
+            <div style="margin-top:8px; text-align:center; font-size:12px; font-weight:700; border-radius:7px; padding:4px 0; color:color-mix(in oklab, {color} 55%, var(--color-ink-950)); background:color-mix(in oklab, {color} 24%, transparent);">{headline}</div>
         </div>
         """
 
@@ -467,9 +468,9 @@ class BaseMap(Map):
                         or "CCTV"
                     )
                     cctv_btn_html = f"""
-                    <div style="margin-top:6px; padding-top:6px; border-top:1px dashed rgba(0,0,0,0.12);">
+                    <div style="margin-top:6px; padding-top:6px; border-top:1px dashed var(--color-ink-200);">
                         <button type="button" onclick="if(window.open_cctv_detail)window.open_cctv_detail('{cctv_source}','{cctv_upstream_id}')"
-                            style="width:100%; background:var(--color-brand-600); color:white; font-size:11px; font-weight:600; padding:6px 10px; border-radius:6px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:6px;">
+                            style="width:100%; background:var(--color-primary); color:var(--color-primary-content); font-size:11px; font-weight:600; padding:6px 10px; border-radius:6px; border:none; cursor:pointer; text-align:center; display:flex; align-items:center; justify-content:center; gap:6px;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h10a2 2 0 0 1 2 2v2.5l4-2.5v12l-4-2.5V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/></svg>
                             <span>ดูกล้อง CCTV ({cctv_title})</span>
                         </button>
@@ -595,7 +596,7 @@ class BaseMap(Map):
                     inner = station_dot_html(
                         STATION_DOT_PX,
                         STATION_DOT_PX,
-                        f"border-radius: 50%; background: conic-gradient({metric_color} {percent}%, #e5e7eb 0); border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);",
+                        f"border-radius: 50%; background: conic-gradient({metric_color} {percent}%, var(--color-ink-200) 0); border: 2px solid var(--color-ink-950); box-shadow: 0 0 4px rgba(0,0,0,0.3);",
                     )
                 elif style == "drop":
                     inner = station_dot_html(
@@ -607,7 +608,7 @@ class BaseMap(Map):
                 elif style == "tank":
                     inner = station_dot_html(
                         *STATION_TANK,
-                        "border-radius: 4px; border: 2px solid #cbd5e1; background: white; position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);",
+                        "border-radius: 4px; border: 2px solid var(--color-ink-950); background: var(--color-base-100); position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);",
                         f'<div style="position: absolute; bottom: 0; left: 0; width: 100%; height: {percent}%; background-color: {metric_color}; transition: height 0.3s ease;"></div>',
                     )
                 elif style == "bubble":
@@ -617,7 +618,7 @@ class BaseMap(Map):
                     inner = station_dot_html(
                         size,
                         size,
-                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid white; opacity: 0.85; box-shadow: 0 2px 4px rgba(0,0,0,0.3);",
+                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid var(--color-ink-950); opacity: 0.85; box-shadow: 0 2px 4px rgba(0,0,0,0.3);",
                     )
                 else:
                     # plain dot; replaces L.icon.pulse, which could not
@@ -625,7 +626,7 @@ class BaseMap(Map):
                     inner = station_dot_html(
                         PULSE_PX,
                         PULSE_PX,
-                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);",
+                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid var(--color-ink-950); box-shadow: 0 0 4px rgba(0,0,0,0.3);",
                     )
                 metric_marker = self._station_icon(inner)
 
@@ -761,53 +762,6 @@ class BaseMap(Map):
             },
         ).addTo(self.map)
 
-    def set_interpolation_legend(self, legend):
-        """Draw the color scale of the interpolated surface as a gradient bar."""
-        from browser import document as doc
-
-        container = self._interpolation_legend_container
-        if container is None:
-            container = doc.createElement("div")
-            # map-ui: hidden with the other floating cards in map focus mode
-            container.className = "map-ui map-scale-legend"
-            self.map.getContainer() <= container
-            self._interpolation_legend_container = container
-            self.leaflet.DomEvent.disableClickPropagation(container)
-            self.leaflet.DomEvent.disableScrollPropagation(container)
-
-        if not legend:
-            container.html = ""
-            return
-
-        # Sizes are inline styles: Tailwind only ships classes it finds in the
-        # templates, and it never scans these Brython sources
-        bands = legend.get("bands") or []
-        chips = "".join(
-            f'<span style="flex:1 1 0;background-color:{band["color"]};"></span>'
-            for band in bands
-        )
-
-        # Labels sit at their own band edge; the end ones are pulled inside the
-        # bar so they do not overflow the legend box
-        ticks = ""
-        for tick in legend.get("ticks") or []:
-            percent = round(tick["offset"] * 100)
-            shift = "0" if percent == 0 else ("-100%" if percent >= 99 else "-50%")
-            ticks += (
-                f'<span style="position:absolute;white-space:nowrap;font-size:9px;'
-                f'color:#71717a;left:{percent}%;transform:translateX({shift});">'
-                f'{tick["value"]:g}</span>'
-            )
-
-        container.html = f"""
-        <div class="bg-white/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
-            <div style="font-size:11px;font-weight:600;color:#3f3f46;line-height:1.2;">{legend.get("title", "")}</div>
-            <div style="display:flex;height:10px;margin-top:6px;border:1px solid #d4d4d8;border-radius:3px;overflow:hidden;">{chips}</div>
-            <div style="position:relative;height:13px;margin-top:2px;">{ticks}</div>
-            <div style="font-size:9px;color:#a1a1aa;text-align:right;">{legend.get("unit", "")}</div>
-        </div>
-        """
-
     def remove_interpolation_layer(self, key):
         layer = self.interpolate_layers.pop(key, None)
         if layer:
@@ -821,80 +775,6 @@ class BaseMap(Map):
 
     async def get_metric_color(self, type_, value):
         return _get_metric_color(type_, value)
-
-    def set_legend(self, levels, title, subtitle=""):
-        """Let the caller own the legend when markers are not coloured by a
-        metric scale — the water monitor colours them by risk instead."""
-        self._legend_override = True
-        self.render_legend(levels, title, subtitle)
-
-    async def update_metric_legend(self, document_id):
-        """Draw the colour scale of the active metric on top of the map.
-
-        The bands come from `metric_infos.get_metric_levels`, which reads the
-        same `metric_colors` ranks the markers use, so the legend can never
-        describe colours the map does not actually draw.
-        """
-        if self._legend_override:
-            # A caller already put its own scale there; leave it alone
-            self.metric_legends[document_id] = True
-            return
-
-        metric_type = document_id.replace("empirical_", "").lower()
-        levels = metric_infos.get_metric_levels(metric_type)
-        if not levels:
-            self.metric_legends[document_id] = True
-            return
-
-        self.render_legend(
-            levels,
-            metric_infos.get_metric_level_title(metric_type),
-            "ระดับความปลอดภัย",
-        )
-        self.metric_legends[document_id] = True
-
-    def render_legend(self, levels, title, subtitle=""):
-        from browser import document as doc
-
-        rows = ""
-        for level in levels:
-            rows += f"""
-            <div class="flex items-center gap-2">
-                <span class="inline-block w-4 h-3 rounded-sm shrink-0 border border-ink-300" style="background-color: {level["color"]};"></span>
-                <span class="text-[11px] text-ink-700 leading-tight">{level["label"]}</span>
-                <span class="text-[10px] text-ink-400 leading-tight ml-auto pl-2 whitespace-nowrap">{level["range"]}</span>
-            </div>
-            """
-
-        container = self._metric_legend_container
-        if container is None:
-            container = doc.createElement("div")
-            # map-ui: hidden with the other floating cards in map focus mode
-            container.className = "map-ui map-legend"
-            self.map.getContainer() <= container
-            self._metric_legend_container = container
-            # Keep clicks and wheel events on the legend out of the map
-            self.leaflet.DomEvent.disableClickPropagation(container)
-            self.leaflet.DomEvent.disableScrollPropagation(container)
-
-        subtitle_html = ""
-        if subtitle:
-            subtitle_html = f'<div class="text-[9px] text-ink-400">{subtitle}</div>'
-
-        container.html = f"""
-        <div class="bg-white/95 backdrop-blur-sm border border-ink-200 rounded-xl shadow-md px-3 py-2">
-            <div class="flex items-center gap-1.5 pb-1 mb-1.5 border-b border-ink-100">
-                <i class="ph ph-palette text-brand-600 text-sm"></i>
-                <div class="leading-tight">
-                    <div class="text-[11px] font-semibold text-ink-700">{title}</div>
-                    {subtitle_html}
-                </div>
-            </div>
-            <div class="flex flex-col gap-1">
-                {rows}
-            </div>
-        </div>
-        """
 
     def marker_key(self, source, code):
         return f"{str(source).lower()}:{code}"

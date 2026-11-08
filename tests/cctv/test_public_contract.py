@@ -1,7 +1,7 @@
 import unittest
 from pydantic import ValidationError
 from sindhu.schemas.visual_feeds import PublicVisualFeed
-from tests.visual_feeds.test_service import record
+from tests.cctv.test_service import record
 
 
 class PublicContractTests(unittest.TestCase):

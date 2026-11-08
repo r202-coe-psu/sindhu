@@ -12,7 +12,7 @@ from fastapi import FastAPI
 
 from sindhu.api.routers.v1.visual_feeds import router
 from sindhu.services import visual_feeds
-from tests.visual_feeds.test_api_integration import upstream_handler
+from tests.cctv.test_api_integration import upstream_handler
 
 
 @unittest.skipUnless(

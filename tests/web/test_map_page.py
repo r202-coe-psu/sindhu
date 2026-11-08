@@ -51,6 +51,40 @@ class MapPageLayoutTests(unittest.TestCase):
             self._html("/th/monitor").lstrip().startswith("<!DOCTYPE html>")
         )
 
+    def test_site_stylesheet_loads_after_leaflet(self):
+        html = self._html("/th/monitor")
+        self.assertLess(html.index("leaflet.css"), html.index("css/app.css"))
+
+    def test_site_stylesheet_loads_after_leaflet_draw_on_the_zones_page(self):
+        class _User:
+            is_authenticated = True
+            data = {"username": "admin", "roles": ["admin"]}
+
+        with self.app.test_request_context("/th/zones/"):
+            from flask import g, render_template
+
+            g.lang_code = "th"
+            html = render_template("zones/index.html", current_user=_User())
+
+        self.assertLess(html.index("leaflet.css"), html.index("css/app.css"))
+        self.assertLess(html.index("leaflet.draw.css"), html.index("css/app.css"))
+
+    def test_leaflet_draw_icons_are_inverted_for_the_dark_toolbar(self):
+        from pathlib import Path
+
+        css = (
+            Path(__file__).resolve().parents[2]
+            / "sindhu"
+            / "web"
+            / "static"
+            / "css"
+            / "map.css"
+        ).read_text()
+        rule = re.search(r"\.leaflet-draw-toolbar a,[^{]*\{([^}]*)\}", css)
+        self.assertIsNotNone(rule)
+        self.assertIn("filter: invert(1)", rule.group(1))
+        self.assertIn("var(--color-ink-700)", rule.group(1))
+
     def test_panel_is_folded_in_the_markup(self):
         html = self._html("/th/monitor")
         panel = re.search(r'<section id="monitor_panel"[^>]*>', html).group(0)
