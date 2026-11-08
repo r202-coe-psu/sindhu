@@ -63,7 +63,7 @@ class WaterMonitor(BaseMonitor):
             return -1, None, None
 
         comparison = bank_status.compare_station(station)
-        waterlevel = bank_status.to_number(bank_status.raw_water_level(station))
+        waterlevel = bank_status.to_water_level(bank_status.raw_water_level(station))
         return comparison["risk"], waterlevel, comparison["diff"]
 
     """
@@ -488,7 +488,7 @@ class WaterMonitor(BaseMonitor):
         return metric_infos.get_risk_level(self.worst_risk_for_codes(codes))
 
     def update_zone_risks(self):
-        """Colour zones by active station alerts (warning, critical, evacuate).
+        """Colour zones by active station alerts (near or over the bank).
         Normal water levels preserve the zone's configured style."""
         for zone in self.zones or []:
             meta = zone.get("metadata") or zone.get("style") or {}
@@ -668,10 +668,7 @@ class WaterMonitor(BaseMonitor):
             if val is None:
                 continue
             # The bank comparison above replaces these for the public
-            if (
-                m_name.lower() in bank_status.RAW_WATER_LEVEL_METRICS
-                or m_name.lower() == "diff_wl_bank"
-            ):
+            if m_name.lower() in bank_status.PUBLIC_HIDDEN_METRICS:
                 continue
 
             # Label from the shared metric names so the card and the map

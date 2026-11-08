@@ -169,7 +169,7 @@ async function apiPut(path, body) {
     }
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(describeApiError(err.detail, res.status));
+        throw new Error(describeApiError(err.detail ?? err.errors, res.status));
     }
     return res;
 }
@@ -204,12 +204,31 @@ function latestWaterLevel(metrics) {
     return null;
 }
 
-function toReading(value) {
-    if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
+function toNumber(value) {
+    if (value === null || value === undefined || typeof value === "boolean") return null;
+    if (typeof value === "string" && value.trim() === "") return null;
     const number = Number(value);
-    if (!Number.isFinite(number)) return null;
+    return Number.isFinite(number) ? number : null;
+}
+
+function toReading(value) {
+    const number = toNumber(value);
+    if (number === null) return null;
     if (SENSOR_NO_DATA_VALUES.some(v => Math.abs(number - v) < 0.001)) return null;
     return number;
+}
+
+function toWaterLevel(value) {
+    const level = toReading(value);
+    return level === 0 ? null : level;
+}
+
+function roundGap(value) {
+    return Math.round(value * 100) / 100;
+}
+
+function sourceOf(station) {
+    return (station.source || "").toLowerCase();
 }
 
 function toLevel(value) {
@@ -230,21 +249,23 @@ function rawWaterLevelValue(metrics) {
 }
 
 function mslWaterLevel(station, metrics) {
-    const msl = toReading(metricValue(metrics, "waterlevel_msl"));
+    const msl = toWaterLevel(metricValue(metrics, "waterlevel_msl"));
     if (msl !== null) return msl;
-    if (MSL_WATER_LEVEL_SOURCES.includes(station.source)) return toReading(rawWaterLevelValue(metrics));
-    if (DWR_SOURCES.includes(station.source)) {
-        const stage = toReading(metricValue(metrics, "waterlevel"));
+    const source = sourceOf(station);
+    if (MSL_WATER_LEVEL_SOURCES.includes(source)) return toWaterLevel(rawWaterLevelValue(metrics));
+    if (DWR_SOURCES.includes(source)) {
+        const stage = toWaterLevel(metricValue(metrics, "waterlevel"));
         const gaugeZero = toReading((station.metadata || {}).zflowMsl);
-        if (stage !== null && gaugeZero !== null) return stage + gaugeZero;
+        if (stage !== null && gaugeZero !== null) return toWaterLevel(Math.round((stage + gaugeZero) * 10000) / 10000);
     }
     return null;
 }
 
 function etlBankLevel(station) {
     const metadata = station.metadata || {};
-    if (MSL_WATER_LEVEL_SOURCES.includes(station.source)) return toLevel(metadata.water_level_critical);
-    if (DWR_SOURCES.includes(station.source)) {
+    const source = sourceOf(station);
+    if (MSL_WATER_LEVEL_SOURCES.includes(source)) return toLevel(metadata.water_level_critical);
+    if (DWR_SOURCES.includes(source)) {
         const banks = [metadata.lbMsl, metadata.rbMsl].map(toLevel).filter(bank => bank !== null);
         return banks.length ? Math.min(...banks) : null;
     }
@@ -255,10 +276,11 @@ function etlBankGap(station, metrics) {
     const diff = toReading(metricValue(metrics, "diff_wl_bank"));
     if (diff === null) return null;
     const raw = rawWaterLevelValue(metrics);
-    if (raw !== null && Number.isFinite(Number(raw)) && toReading(raw) === null) return null;
-    if (station.source === "rid") {
+    const rawNumber = toNumber(raw);
+    if (rawNumber !== null && toWaterLevel(rawNumber) === null) return null;
+    if (sourceOf(station) === "rid") {
         const critical = toReading((station.metadata || {}).water_level_critical);
-        const water = toReading(metricValue(metrics, "waterlevel"));
+        const water = mslWaterLevel(station, metrics);
         if (critical === 0 || (water !== null && Math.abs(diff - water) < 0.005)) return null;
     }
     return diff;
@@ -272,10 +294,11 @@ function gapSource(station) {
     const metrics = metricMap(station);
     const water = mslWaterLevel(station, metrics);
     const adminBank = toLevel(station.bank_level);
-    if (adminBank !== null && water !== null && isPlausibleGap(water - adminBank)) return "admin";
-    if (isPlausibleGap(etlBankGap(station, metrics))) return "etl_diff";
+    if (adminBank !== null && water !== null && isPlausibleGap(roundGap(water - adminBank))) return "admin";
+    const diff = etlBankGap(station, metrics);
+    if (isPlausibleGap(diff)) return "etl_diff";
     const etlBank = etlBankLevel(station);
-    if (etlBank !== null && water !== null && isPlausibleGap(water - etlBank)) return "etl_bank";
+    if (etlBank !== null && water !== null && isPlausibleGap(roundGap(water - etlBank))) return "etl_bank";
     return "none";
 }
 
@@ -475,6 +498,7 @@ async function saveBankLevel(id, input) {
     bankLevelSaves.set(id, attempt);
     const isLatest = () => bankLevelSaves.get(id) === attempt;
 
+    input.disabled = true;
     try {
         await apiPut(`/v1/stations/${id}/bank-level`, { bank_level: value });
         if (!isLatest()) return;
@@ -488,6 +512,8 @@ async function saveBankLevel(id, input) {
         input.value = station.bank_level ?? "";
         showToast("บันทึกไม่สำเร็จ: " + e.message, true);
         if (e instanceof SessionExpiredError) redirectToLogin();
+    } finally {
+        input.disabled = false;
     }
 }
 

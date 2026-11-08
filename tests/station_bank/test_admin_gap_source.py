@@ -82,6 +82,38 @@ CASES = {
     ),
     "dwr without anything": ("dwr", None, {}, {"waterlevel": 3.6}),
     "msl metric": ("dwr", 12.0, {}, {"waterlevel_msl": 11.6}),
+    "water reads exactly zero": (
+        "thaiwater",
+        None,
+        {"water_level_critical": 12.0},
+        {"waterlevel": 0},
+    ),
+    "zero water with a diff built on it": (
+        "rid",
+        None,
+        {"water_level_critical": 12.0},
+        {"waterlevel": 0.0, "diff_wl_bank": -12.0},
+    ),
+    "dwr stage reads zero": ("dwr", None, DWR_METADATA, {"waterlevel": 0}),
+    "blank admin bank": (
+        "rid",
+        "  ",
+        {"water_level_critical": 12.0},
+        {"waterlevel": 11.6},
+    ),
+    "blank water reading": ("rid", 12.0, {}, {"waterlevel": " ", "diff_wl_bank": -0.3}),
+    "upper-case source": (
+        "RID",
+        None,
+        {"water_level_critical": 12.0},
+        {"waterlevel": 11.6},
+    ),
+    "rid diff equal to the msl level": (
+        "rid",
+        None,
+        {},
+        {"waterlevel_msl": 11.6, "diff_wl_bank": 11.6},
+    ),
 }
 
 

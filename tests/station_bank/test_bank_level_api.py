@@ -1,14 +1,18 @@
 import datetime
+import json
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from beanie import PydanticObjectId
+from beanie.odm.fields import ExpressionField
 from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 
 from sindhu import schemas
 from sindhu.api.core import deps
+from sindhu.api.routers.errors.validation_error import http422_error_handler
 from sindhu.api.routers.v1 import stations as stations_router
 
 STATION_ID = PydanticObjectId()
@@ -161,6 +165,115 @@ class BankLevelEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(route.methods, {"PUT"})
         calls = [d.call for d in route.dependant.dependencies]
         self.assertIn(deps.get_current_active_superuser, calls)
+
+
+def _written_fields(update_call):
+    (operator,) = update_call.args
+    return {str(field) for field in operator.query["$set"]}
+
+
+class OtherWritesKeepTheBankLevelTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        id_field = patch.object(
+            stations_router.models.Station,
+            "id",
+            ExpressionField("_id"),
+            create=True,
+        )
+        id_field.start()
+        self.addCleanup(id_field.stop)
+
+    def _found_station(self):
+        station = SimpleNamespace(
+            bank_level=12.5, update=AsyncMock(), set=AsyncMock(), save=AsyncMock()
+        )
+        return station
+
+    async def test_visibility_writes_only_its_own_fields(self):
+        selected = SimpleNamespace(count=AsyncMock(return_value=1), update=AsyncMock())
+        reloaded = SimpleNamespace(to_list=AsyncMock(return_value=[]))
+        form = schemas.stations.UpdateStationVisibility(
+            station_ids=[STATION_ID], is_visible=False
+        )
+        with (
+            patch.object(
+                stations_router.models.Station,
+                "find",
+                side_effect=[selected, reloaded],
+            ),
+            patch.object(stations_router.FastAPICache, "clear", AsyncMock()),
+        ):
+            await stations_router.update_visibility(
+                form, current_user=SimpleNamespace(roles=["admin"])
+            )
+        self.assertEqual(
+            _written_fields(selected.update.await_args),
+            {"is_visible", "updated_date"},
+        )
+
+    async def test_unknown_stations_are_404(self):
+        selected = SimpleNamespace(count=AsyncMock(return_value=0), update=AsyncMock())
+        form = schemas.stations.UpdateStationVisibility(
+            station_ids=[STATION_ID], is_visible=False
+        )
+        with patch.object(
+            stations_router.models.Station, "find", return_value=selected
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                await stations_router.update_visibility(
+                    form, current_user=SimpleNamespace(roles=["admin"])
+                )
+        self.assertEqual(caught.exception.status_code, 404)
+        selected.update.assert_not_awaited()
+
+    async def test_generic_update_does_not_write_the_bank_level(self):
+        station = self._found_station()
+        form = schemas.stations.CreateUpdateStation.model_validate(
+            {
+                key: value
+                for key, value in _station_payload().items()
+                if key not in ("_id", "status", "created_date", "updated_date")
+            }
+        )
+        with patch.object(
+            stations_router.models.Station,
+            "find_one",
+            AsyncMock(return_value=station),
+        ):
+            await stations_router.update(
+                STATION_ID, form, current_user=SimpleNamespace()
+            )
+        station.save.assert_not_awaited()
+        written = _written_fields(station.update.await_args)
+        self.assertIn("updated_date", written)
+        self.assertNotIn("bank_level", written)
+
+    async def test_delete_writes_only_the_status(self):
+        station = self._found_station()
+        with patch.object(
+            stations_router.models.Station,
+            "find_one",
+            AsyncMock(return_value=station),
+        ):
+            await stations_router.delete(STATION_ID, current_user=SimpleNamespace())
+        station.save.assert_not_awaited()
+        self.assertEqual(
+            set(station.set.await_args.args[0]), {"status", "updated_date"}
+        )
+
+
+class ValidationErrorResponseTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rejected_bank_level_comes_back_as_a_readable_422(self):
+        for value in (0.0, -9.99):
+            with self.subTest(value=value):
+                try:
+                    schemas.stations.UpdateStationBankLevel(bank_level=value)
+                except ValidationError as error:
+                    caught = RequestValidationError(error.errors())
+                response = await http422_error_handler(None, caught)
+                self.assertEqual(response.status_code, 422)
+                body = json.loads(response.body)
+                self.assertIn("ไม่", body["errors"][0]["msg"])
 
 
 if __name__ == "__main__":

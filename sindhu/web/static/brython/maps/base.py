@@ -319,7 +319,7 @@ class BaseMap(Map):
                     if not timestamp and sensor.get("timestamp"):
                         timestamp = datetime.fromisoformat(sensor["timestamp"])
 
-                    if metric_type in bank_status.RAW_WATER_LEVEL_METRICS:
+                    if metric_type.lower() in bank_status.PUBLIC_HIDDEN_METRICS:
                         continue
 
                     value = sensor.get("value")

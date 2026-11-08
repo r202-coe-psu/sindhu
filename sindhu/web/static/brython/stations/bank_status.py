@@ -12,6 +12,7 @@ STATUS_OVERFLOW = "overflow"
 STATUS_UNKNOWN = "unknown"
 
 DEFAULT_NEAR_BAND_M = 1.0
+MAX_NEAR_BAND_M = 2.0
 
 RISK_UNKNOWN = -1
 RISK_NORMAL = 0
@@ -35,6 +36,7 @@ MSL_WATER_LEVEL_SOURCES = ("thaiwater", "rid")
 DWR_SOURCES = ("dwr", "dwr_telemetry")
 CRITICAL_LEVEL_SOURCES = ("thaiwater", "rid")
 THAIWATER_GENERATED_WARNING_RATIO = 0.8
+THAIWATER_GENERATED_WARNING_TOLERANCE_M = 0.01
 
 # Raw readings the public view must not show; it shows the bank gap instead
 RAW_WATER_LEVEL_METRICS = (
@@ -43,6 +45,8 @@ RAW_WATER_LEVEL_METRICS = (
     "water_level",
     "waterlevel_m",
 )
+
+PUBLIC_HIDDEN_METRICS = RAW_WATER_LEVEL_METRICS + ("diff_wl_bank",)
 
 _LABELS = {
     STATUS_BELOW: "ต่ำกว่าตลิ่ง",
@@ -88,6 +92,13 @@ def _to_reading(value):
     return number
 
 
+def to_water_level(value):
+    level = _to_reading(value)
+    if level is None or level == 0:
+        return None
+    return level
+
+
 def _to_level(value):
     level = _to_reading(value)
     if level is None or level == 0:
@@ -129,18 +140,18 @@ def raw_water_level(station):
 def station_water_level(station):
     """Return the station's latest reading in metres above MSL, if it has one."""
     values = _metric_values(station)
-    msl = _to_reading(values.get("waterlevel_msl"))
+    msl = to_water_level(values.get("waterlevel_msl"))
     if msl is not None:
         return msl
 
     source = _source(station)
     if source in MSL_WATER_LEVEL_SOURCES:
-        return _to_reading(raw_water_level(station))
+        return to_water_level(raw_water_level(station))
     if source in DWR_SOURCES:
-        stage = _to_reading(values.get("waterlevel"))
+        stage = to_water_level(values.get("waterlevel"))
         gauge_zero = _to_reading(_metadata(station).get("zflowMsl"))
         if stage is not None and gauge_zero is not None:
-            return round(stage + gauge_zero, 4)
+            return to_water_level(round(stage + gauge_zero, 4))
     return None
 
 
@@ -162,11 +173,11 @@ def etl_bank_gap(station):
     if diff is None:
         return None
     raw_water = to_number(raw_water_level(station))
-    if raw_water is not None and _to_reading(raw_water) is None:
+    if raw_water is not None and to_water_level(raw_water) is None:
         return None
     if _source(station) == "rid":
         critical = _to_reading(_metadata(station).get("water_level_critical"))
-        water = _to_reading(values.get("waterlevel"))
+        water = station_water_level(station)
         built_on_zero_bank = critical == 0
         if built_on_zero_bank or (water is not None and abs(diff - water) < 0.005):
             return None
@@ -181,9 +192,12 @@ def near_bank_band(station):
         return DEFAULT_NEAR_BAND_M
     if _source(station) == "thaiwater":
         generated = critical * THAIWATER_GENERATED_WARNING_RATIO
-        if abs(warning - generated) < 1e-6:
+        if abs(warning - generated) <= THAIWATER_GENERATED_WARNING_TOLERANCE_M:
             return DEFAULT_NEAR_BAND_M
-    return round(critical - warning, 2)
+    band = round(critical - warning, 2)
+    if band > MAX_NEAR_BAND_M:
+        return DEFAULT_NEAR_BAND_M
+    return band
 
 
 def _result(status, detail, diff=None, side=None, show_label=True):
@@ -229,26 +243,6 @@ def status_for_gap(diff, near_band=DEFAULT_NEAR_BAND_M):
     return result
 
 
-def compare_to_bank(water_level, bank_level, near_band=DEFAULT_NEAR_BAND_M):
-    """Return the gap to the bank and its status for an MSL water level.
-
-    Negative levels are valid: coastal gauges can sit below mean sea level.
-    """
-    bank = to_number(bank_level)
-    if bank is None:
-        return _result(STATUS_UNKNOWN, "ไม่มีข้อมูลระดับตลิ่ง", show_label=False)
-
-    water = _to_reading(water_level)
-    if water is None:
-        return _result(STATUS_UNKNOWN, "ไม่มีข้อมูลระดับน้ำ", show_label=False)
-
-    # Round before banding, so the status always agrees with the number shown
-    diff = round(water - bank, 2)
-    if abs(diff) > MAX_PLAUSIBLE_DIFF_M:
-        return _result(STATUS_UNKNOWN, "ข้อมูลระดับน้ำผิดปกติ")
-    return status_for_gap(diff, near_band)
-
-
 def _plausible(diff):
     return diff is not None and abs(diff) <= MAX_PLAUSIBLE_DIFF_M
 
@@ -286,12 +280,8 @@ def compare_station(station):
             return _result(STATUS_UNKNOWN, "ไม่มีข้อมูลระดับตลิ่ง", show_label=False)
         if station_water_level(station) is None:
             return _result(STATUS_UNKNOWN, "ไม่มีข้อมูลระดับน้ำ", show_label=False)
-        return _result(STATUS_UNKNOWN, "ข้อมูลระดับน้ำผิดปกติ")
+        return _result(STATUS_UNKNOWN, "ระดับน้ำกับระดับตลิ่งห่างกันผิดปกติ")
 
     result = status_for_gap(diff, near_bank_band(station))
     result["gap_source"] = gap_source
     return result
-
-
-def station_risk(station):
-    return compare_station(station)["risk"]
