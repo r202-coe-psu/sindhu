@@ -22,29 +22,55 @@ RAW_COLOUR = re.compile(
     r"|\btext-secondary\b"
 )
 
+# Class lists: class="…" / className = "…", classList.add(…), f-strings and
+# JS template literals (which may nest quotes), then any other short quoted
+# string such as the branches of a JS ternary.
 CLASS_ATTRIBUTE = re.compile(
-    r"\bclass(?:Name)?\s*=\s*(?P<quote>[\"'`])(?P<value>.*?)(?P=quote)", re.S
+    r"\bclass(?:Name)?\s*\+?=\s*(?P<quote>[\"'`])(?P<value>.*?)(?P=quote)", re.S
 )
 PLAIN_CLASS_STRING = re.compile(
-    r"(?<!\w)f?(?P<quote>[\"'])(?P<value>[^\"'<>=\n]*)(?P=quote)"
+    r"(?<!\w)f?(?P<quote>[\"'`])(?P<value>[^\"'`<>=\n]*)(?P=quote)"
 )
-SOLID_STATUS_SURFACE = re.compile(
-    r"^(?:[a-z-]+:)*(?:btn|badge|bg|alert)-(?:info|success|warning|error|accent)$"
+CLASS_LIST_CALL = re.compile(r"\bclassList\.(?:add|toggle)\((?P<value>[^)]*)\)")
+NESTING_STRING = re.compile(
+    r"(?<!\w)f(?P<quote>[\"'])(?P<value>(?:(?!(?P=quote))[^<>=\n])*)(?P=quote)"
+    r"|`(?P<template>[^`<>]*)`"
 )
-DIM_INK_TEXT = re.compile(r"^text-ink-(?:50|100|200|300)$")
+CLASS_TOKEN_NOISE = "'\"`{}()$"
+SOLID_STATUS_SURFACE = re.compile(r"(?:btn|badge|bg|alert)-(?:info|success|warning|error|accent)")
+TINT_OPACITY_LIMIT = 50  # bg-success/15 is a tint; /50 and above reads as solid
+DIM_INK_TEXT = re.compile(r"text-ink-(?:50|100|200|300)")
 
-WHITE_COLOUR_VALUE = re.compile(
-    r"(?<![\w-])(?:color|background(?:-color)?|border(?:-[a-z]+)?|fill|stroke"
-    r"|outline(?:-color)?|box-shadow)\s*:[^;\"\n]*?(?<![\w-])'?(?:white|#fff(?:fff)?)'?"
-    r"(?![\w-])",
+# Style declarations whose value is a colour. A value may continue on
+# indented lines without a colon (multi-line box-shadow in CSS files).
+COLOUR_DECLARATION = re.compile(
+    r"(?<![\w-])(?P<property>color|background(?:-color|-image)?|border(?:-[a-z]+)*"
+    r"|fill|stroke|outline(?:-color)?|box-shadow)\s*:"
+    r"(?P<value>[^;\"<>\n]*(?:\n[ \t]+[^;\"<>\n:]*)*)",
     re.IGNORECASE,
 )
-LITERAL_BACKGROUND = re.compile(
-    r"(?<![\w-])background(?:-color)?\s*:[^;\"\n]*?(?P<hex>#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3})"
-    r"(?![0-9a-fA-F])"
+COLOUR_LITERAL = re.compile(
+    r"(?<![\w-])(?P<hex>#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{3,4}))(?![0-9a-f])"
+    r"|\brgba?\(\s*(?P<rgb>[^)]*)\)"
+    r"|(?<![\w-])(?P<name>white|whitesmoke|snow|ghostwhite)(?![\w-])",
+    re.IGNORECASE,
 )
-LIGHT_SURFACE_LUMINANCE = 0.5
+NAMED_COLOURS = {
+    "white": "#ffffff",
+    "whitesmoke": "#f5f5f5",
+    "snow": "#fffafa",
+    "ghostwhite": "#f8f8ff",
+}
+SURFACE_PROPERTY = re.compile(r"background|border|outline|box-shadow", re.IGNORECASE)
+WHITE_LUMINANCE = 0.85  # near-white in any colour property
+LIGHT_GREY_LUMINANCE = 0.35  # #a3a3a3 and lighter greys as a surface
+PALE_TINT_LUMINANCE = 0.7  # #dbeafe, #fef3c7 … as a surface
 NEUTRAL_CHANNEL_SPREAD = 0x20
+VISIBLE_ALPHA = 0.5  # rgb(255 255 255 / 0.1) is an overlay tint, not a surface
+# Literal light colours that are data, not theme, with the reason.
+LIGHT_COLOUR_ALLOWLIST = {
+    "#fef08a": "zone fill preset swatch in zones/index.html (user data colour)",
+}
 
 SEMANTIC_COLOURS = (
     "primary",
@@ -93,38 +119,93 @@ def _contrast(a, b):
     return (high + 0.05) / (low + 0.05)
 
 
-def _class_lists(source, python=False):
-    for match in CLASS_ATTRIBUTE.finditer(source):
-        yield match.start(), match.group("value").split()
-    if python:
-        for match in PLAIN_CLASS_STRING.finditer(source):
-            yield match.start(), match.group("value").split()
+def _class_lists(source):
+    """(offset, class names) for every class list in ``source``, once each."""
+    covered = []
+    for pattern in (CLASS_ATTRIBUTE, CLASS_LIST_CALL, NESTING_STRING, PLAIN_CLASS_STRING):
+        for match in pattern.finditer(source):
+            group = "template" if match.groupdict().get("template") else "value"
+            if match.group(group) is None:
+                continue
+            start, end = match.span(group)
+            if any(lo <= start and end <= hi for lo, hi in covered):
+                continue
+            covered.append((start, end))
+            yield start, re.split(r"[\s,]+", match.group(group).strip())
+
+
+def _class_parts(name):
+    """('text-white', 90) for 'hover:text-white/90'; Jinja/JS quotes dropped."""
+    name = name.strip(CLASS_TOKEN_NOISE)
+    base, _, opacity = name.rsplit(":", 1)[-1].partition("/")
+    base = base.strip(CLASS_TOKEN_NOISE)
+    return base, int(opacity) if opacity.isdigit() else None
 
 
 def _class_list_problems(classes):
     problems = []
-    if "text-white" in classes and any(
-        SOLID_STATUS_SURFACE.match(name) for name in classes
-    ):
+    parts = [_class_parts(name) for name in classes]
+    has_white_text = any(base == "text-white" for base, _ in parts)
+    on_status_surface = any(
+        SOLID_STATUS_SURFACE.fullmatch(base)
+        and (opacity is None or opacity >= TINT_OPACITY_LIMIT)
+        for base, opacity in parts
+    )
+    if has_white_text and on_status_surface:
         problems.append("text-white on a status colour; use its *-content colour")
-    is_icon = "ph" in classes or any(name.startswith("ph-") for name in classes)
-    if not is_icon and any(DIM_INK_TEXT.match(name) for name in classes):
+    is_icon = any(base == "ph" or base.startswith("ph-") for base, _ in parts)
+    if not is_icon and any(DIM_INK_TEXT.fullmatch(base) for base, _ in parts):
         problems.append("text-ink-50..300 is too dim for text; use ink-400 or above")
     return problems
 
 
-def _is_light_grey(hex_colour):
-    hex_colour = _full_hex(hex_colour)
+def _rgb_hex_and_alpha(arguments):
+    numbers = re.findall(r"[\d.]+%?", arguments)
+    if len(numbers) < 3 or any(n.endswith("%") for n in numbers[:3]):
+        return None, 1.0
+    channels = [min(255, round(float(n))) for n in numbers[:3]]
+    alpha = 1.0
+    if len(numbers) > 3:
+        raw = numbers[3]
+        alpha = float(raw[:-1]) / 100 if raw.endswith("%") else float(raw)
+    return "#" + "".join(f"{c:02x}" for c in channels), alpha
+
+
+def _colour_literal(match):
+    """(#rrggbb, alpha) of a COLOUR_LITERAL match, or (None, 1) if unknown."""
+    if match.group("name"):
+        return NAMED_COLOURS[match.group("name").lower()], 1.0
+    if match.group("rgb") is not None:
+        return _rgb_hex_and_alpha(match.group("rgb"))
+    colour = match.group("hex").lower()
+    if len(colour) in (5, 9):
+        alpha = int(colour[-2:] if len(colour) == 9 else colour[-1] * 2, 16) / 255
+        return _full_hex(colour[: len(colour) - (2 if len(colour) == 9 else 1)]), alpha
+    return _full_hex(colour), 1.0
+
+
+def _is_light_surface(hex_colour):
     channels = [int(hex_colour[i : i + 2], 16) for i in (1, 3, 5)]
     is_neutral = max(channels) - min(channels) <= NEUTRAL_CHANNEL_SPREAD
-    return is_neutral and _luminance(hex_colour) > LIGHT_SURFACE_LUMINANCE
+    limit = LIGHT_GREY_LUMINANCE if is_neutral else PALE_TINT_LUMINANCE
+    return _luminance(hex_colour) > limit
 
 
 def _style_problems(source):
-    problems = [(m.start(), m.group(0)) for m in WHITE_COLOUR_VALUE.finditer(source)]
-    for match in LITERAL_BACKGROUND.finditer(source):
-        if _is_light_grey(match.group("hex")):
-            problems.append((match.start(), match.group(0)))
+    problems = []
+    for declaration in COLOUR_DECLARATION.finditer(source):
+        is_surface = SURFACE_PROPERTY.match(declaration.group("property"))
+        for literal in COLOUR_LITERAL.finditer(declaration.group("value")):
+            colour, alpha = _colour_literal(literal)
+            if colour is None or alpha < VISIBLE_ALPHA:
+                continue
+            if colour in LIGHT_COLOUR_ALLOWLIST:
+                continue
+            if _luminance(colour) > WHITE_LUMINANCE or (
+                is_surface and _is_light_surface(colour)
+            ):
+                problems.append((declaration.start(), declaration.group(0)))
+                break
     return problems
 
 
@@ -160,7 +241,7 @@ class PaletteTests(unittest.TestCase):
         offenders = []
         for path in _source_files():
             source = path.read_text()
-            for offset, classes in _class_lists(source, python=path.suffix == ".py"):
+            for offset, classes in _class_lists(source):
                 for problem in _class_list_problems(classes):
                     offenders.append(
                         f"{path.relative_to(WEB)}:{_line(source, offset)}: {problem}"
@@ -185,6 +266,14 @@ class PaletteTests(unittest.TestCase):
             'class="btn\n    btn-error\n    text-white"',
             'className = "badge badge-warning text-white"',
             '<span class="text-ink-300">ข้อความ</span>',
+            'class="btn btn-error md:text-white"',
+            'class="bg-warning/80 text-white/90"',
+            'class="hover:text-ink-300"',
+            "class=\"badge {{ 'badge-warning' if x }} text-white\"",
+            'el.className = ok ? "a" : "badge badge-warning text-white"',
+            "el.classList.add('badge-warning', 'text-white')",
+            "f\"btn {'btn-success' if ok else 'btn-error'} text-white\"",
+            '`${ok ? "badge-warning" : ""} text-white`',
         )
         for snippet in flagged:
             with self.subTest(snippet=snippet):
@@ -198,6 +287,7 @@ class PaletteTests(unittest.TestCase):
             'class="btn btn-primary text-white"',
             'class="bg-success/15 text-white"',
             '<i class="ph ph-map-trifold text-4xl text-ink-300"></i>',
+            'el.className = ok ? "badge badge-warning" : "text-white"',
         )
         for snippet in passed:
             with self.subTest(snippet=snippet):
@@ -216,6 +306,16 @@ class PaletteTests(unittest.TestCase):
             "background: #fff;",
             "background: #e5e7eb",
             "background: conic-gradient(red 50%, #cbd5e1 0)",
+            "border: 1px solid #e5e7eb",
+            "border-top-color: white",
+            "background: linear-gradient(#1f1f1f, #f3f4f6)",
+            "color: rgba(255, 255, 255, 0.9)",
+            "background: rgb(243 244 246)",
+            "background: #ffffffcc",
+            "box-shadow:\n    0 0 0 2px white;",
+            "background: whitesmoke",
+            "background: #dbeafe",
+            "background: #a3a3a3",
         )
         for snippet in flagged:
             with self.subTest(snippet=snippet):
@@ -226,6 +326,9 @@ class PaletteTests(unittest.TestCase):
             "background: #f97316;",
             "background-color: #FEF08A;",
             "background: var(--color-ink-950);",
+            "background: rgb(255 255 255 / 0.1);",
+            "box-shadow: 0 0 0 0 rgb(122 184 255 / 0.7);",
+            "color: #fbbf24;",
         )
         for snippet in passed:
             with self.subTest(snippet=snippet):
