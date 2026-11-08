@@ -778,6 +778,16 @@
     animation: cctv-pulse 2s infinite;
   }
 
+  /* Zoomed-out map: shrink markers (class toggled on the map container) */
+  .map-zoom-far .station-dot {
+    transform: scale(0.75);
+  }
+
+  .map-zoom-far .cctv-marker-pin {
+    transform: scale(0.8);
+    transform-origin: bottom center;
+  }
+
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
   }
