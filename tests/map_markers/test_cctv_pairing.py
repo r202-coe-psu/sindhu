@@ -6,7 +6,7 @@ BRYTHON_ROOT = (
     Path(__file__).resolve().parents[2] / "sindhu" / "web" / "static" / "brython"
 )
 if str(BRYTHON_ROOT) not in sys.path:
-    sys.path.insert(0, str(BRYTHON_ROOT))
+    sys.path.append(str(BRYTHON_ROOT))
 
 from maps import cctv_pairing as cp  # noqa: E402
 from maps.marker_sizes import CCTV, HIT_BOX_PX  # noqa: E402
