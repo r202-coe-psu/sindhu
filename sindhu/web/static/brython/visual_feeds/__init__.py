@@ -8,30 +8,13 @@ water map is still loading, and CCTV coordinates are not rendered here.
 from browser import aio, document, window
 import datetime
 import json
-import math
 import time
 from urllib.parse import quote, urljoin, urlparse
 
+from maps.cctv_pairing import find_match
+
 from .labels import THAI_DAYS_SHORT, coverage_label, short_date_label
 from .map_popup import build_map_popup
-
-
-def _haversine_distance(coord1, coord2):
-    """Calculate distance in meters between two [lon, lat] coordinates."""
-    try:
-        lon1, lat1 = float(coord1[0]), float(coord1[1])
-        lon2, lat2 = float(coord2[0]), float(coord2[1])
-        r = 6371000.0
-        phi1, phi2 = math.radians(lat1), math.radians(lat2)
-        dphi = math.radians(lat2 - lat1)
-        dlam = math.radians(lon2 - lon1)
-        a = (
-            math.sin(dphi / 2) ** 2
-            + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
-        )
-        return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    except Exception:
-        return float("inf")
 
 
 POLL_INTERVAL_SECONDS = 120
@@ -385,28 +368,7 @@ class VisualFeedMonitor:
         if not stations:
             return None
 
-        c_code = str(feed.get("code") or "").strip().lower()
-        ccoord_obj = feed.get("coordinates")
-        c_coords = (
-            ccoord_obj.get("coordinates") if isinstance(ccoord_obj, dict) else None
-        )
-
-        best = None
-        min_dist = float("inf")
-        for st in stations:
-            s_code = str(st.get("code") or "").strip().lower()
-            if c_code and s_code and c_code == s_code:
-                return st
-            scoord_obj = st.get("coordinates")
-            s_coords = (
-                scoord_obj.get("coordinates") if isinstance(scoord_obj, dict) else None
-            )
-            if s_coords and c_coords and len(s_coords) >= 2 and len(c_coords) >= 2:
-                dist = _haversine_distance(s_coords, c_coords)
-                if dist <= 300 and dist < min_dist:
-                    min_dist = dist
-                    best = st
-        return best
+        return find_match(feed, stations)
 
     async def _initial_load(self):
         """Load once for map markers while the water panel remains the default."""
