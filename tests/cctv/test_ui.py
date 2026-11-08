@@ -1040,6 +1040,14 @@ class VisualFeedUiHelperTests(unittest.TestCase):
             self.assertIn(f'fill="{expected_color}"', icon_html, availability)
             expected_label = "ออนไลน์" if freshness == "fresh" else "ขาดการเชื่อมต่อ"
             self.assertIn(expected_label, marker.tooltip, availability)
+            # brand-600 / ink-500 are the badge colours; test_palette checks
+            # both are readable on the dark tooltip surface.
+            expected_text = (
+                "var(--color-brand-600)"
+                if freshness == "fresh"
+                else "var(--color-ink-500)"
+            )
+            self.assertIn(f"color:{expected_text};", marker.tooltip, availability)
             self.assertNotIn("ภาพล่าสุด", marker.tooltip, availability)
 
     def test_map_marker_does_not_show_latest_capture_time(self):

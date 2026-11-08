@@ -916,6 +916,11 @@ class Map:
         label = "ออนไลน์" if is_fresh else "ขาดการเชื่อมต่อ"
         return is_fresh, color, label
 
+    @staticmethod
+    def _feed_status_text_color(is_fresh):
+        """Status text colour on the dark tooltip; matches .cctv-status--*."""
+        return "var(--color-brand-600)" if is_fresh else "var(--color-ink-500)"
+
     def _build_cctv_icon(self, feed, shift=(0, 0)):
         """divIcon for a camera pin, moved by ``shift`` px off its station."""
         is_fresh, color, _label = self._feed_status(feed)
@@ -1025,7 +1030,8 @@ class Map:
             if lat is None or lng is None:
                 continue
 
-            _is_fresh, color, status_label = self._feed_status(feed)
+            is_fresh, _color, status_label = self._feed_status(feed)
+            status_color = self._feed_status_text_color(is_fresh)
 
             title = (
                 feed.get("title_th")
@@ -1048,7 +1054,7 @@ class Map:
             )
 
             marker.bindTooltip(
-                f"<div class='font-sans text-xs p-0.5'><div class='font-bold text-ink-900'>{title}</div><div class='font-semibold text-[11px] mt-0.5' style='color:{color};'>● {status_label}</div></div>",
+                f"<div class='font-sans text-xs p-0.5'><div class='font-bold text-ink-900'>{title}</div><div class='font-semibold text-[11px] mt-0.5' style='color:{status_color};'>● {status_label}</div></div>",
                 {"direction": "top", "offset": [0, CCTV.popup_offset_y]},
             )
 
