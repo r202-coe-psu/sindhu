@@ -68,8 +68,26 @@ class BankLevelSchemaTests(unittest.TestCase):
             schemas.stations.UpdateStationBankLevel(bank_level=-9.99)
         self.assertIn("ไม่มีข้อมูล", str(caught.exception))
 
+    def test_update_rejects_zero_which_the_map_treats_as_no_value(self):
+        with self.assertRaises(ValidationError) as caught:
+            schemas.stations.UpdateStationBankLevel(bank_level=0.0)
+        self.assertIn("ไม่มีค่า", str(caught.exception))
+
+    def test_update_rejects_booleans_and_strings(self):
+        for value in (True, False, "12.5"):
+            with self.subTest(value=value), self.assertRaises(ValidationError):
+                schemas.stations.UpdateStationBankLevel.model_validate(
+                    {"bank_level": value}
+                )
+
+    def test_update_accepts_whole_numbers_from_json(self):
+        form = schemas.stations.UpdateStationBankLevel.model_validate_json(
+            '{"bank_level": 12}'
+        )
+        self.assertEqual(form.bank_level, 12.0)
+
     def test_update_accepts_real_heights(self):
-        for value in (-1.5, 0.0, 12.34, 1200.0):
+        for value in (-1.5, 12.34, 1200.0):
             with self.subTest(value=value):
                 form = schemas.stations.UpdateStationBankLevel(bank_level=value)
                 self.assertEqual(form.bank_level, value)

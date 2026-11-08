@@ -63,7 +63,7 @@
 
         <div class="px-4 py-2 bg-base-200 border-b border-ink-100 text-xs text-ink-500 flex items-start gap-2">
             <i class="ph ph-info mt-0.5"></i>
-            <span>สถานีที่ซ่อนจะไม่แสดงบนหน้าติดตามสถานการณ์และไม่ถูกนับในสถานะโซน แต่ระบบยังดึงข้อมูลของสถานีนั้นต่อตามปกติ ป้าย "ข้อมูลน่าสงสัย" คำนวณจากค่าล่าสุดใน 24 ชม. เพื่อช่วยตัดสินใจเท่านั้น ระดับตลิ่งกรอกเป็น ม.รทก. บันทึกเมื่อออกจากช่อง และเว้นว่างเพื่อล้างค่า สถานีของกรมทรัพยากรน้ำจะยังแสดง "ไม่มีข้อมูล" เพราะระบบยังไม่ได้รับระดับน้ำเป็น ม.รทก.</span>
+            <span>สถานีที่ซ่อนจะไม่แสดงบนหน้าติดตามสถานการณ์และไม่ถูกนับในสถานะโซน แต่ระบบยังดึงข้อมูลของสถานีนั้นต่อตามปกติ ป้าย "ข้อมูลน่าสงสัย" คำนวณจากค่าล่าสุดใน 24 ชม. เพื่อช่วยตัดสินใจเท่านั้น ระดับตลิ่งกรอกเป็น ม.รทก. บันทึกเมื่อออกจากช่อง และเว้นว่างเพื่อล้างค่า ถ้าไม่กรอก ระบบใช้ส่วนต่างจากตลิ่งหรือระดับตลิ่งที่ต้นทางส่งมา (ช่อง "ใช้อยู่" บอกว่าใช้ค่าจากไหน) สถานีของกรมทรัพยากรน้ำเทียบตลิ่งได้เฉพาะสถานีที่ต้นทางส่งระดับศูนย์เสาระดับมาด้วย</span>
         </div>
 
         {# Station table #}
@@ -78,12 +78,13 @@
                         <th>แหล่งข้อมูล</th>
                         <th>ระดับน้ำล่าสุด</th>
                         <th>ระดับตลิ่ง (ม.รทก.)</th>
+                        <th>ใช้อยู่</th>
                         <th>คุณภาพข้อมูล</th>
                         <th class="text-right">แสดงบนแผนที่</th>
                     </tr>
                 </thead>
                 <tbody id="station-rows">
-                    <tr><td colspan="7" class="text-center text-ink-400 py-10">
+                    <tr><td colspan="8" class="text-center text-ink-400 py-10">
                         <span class="loading loading-spinner loading-md text-primary"></span>
                         <div class="mt-2">กำลังโหลดสถานี...</div>
                     </td></tr>
@@ -107,6 +108,17 @@ const WATER_LEVEL_TYPES = ["waterlevel_msl", "water_level", "waterlevel_m", "wat
 {# Upstream gauges report -9.99 when the sensor has no reading #}
 const SENSOR_NO_DATA = -9.99;
 const SOURCE_LABELS = { thaiwater: "สสน.", rid: "กรมชลประทาน", dwr: "กรมทรัพยากรน้ำ", dwr_telemetry: "กรมทรัพยากรน้ำ" };
+const RAW_WATER_LEVEL_TYPES = ["waterlevel_msl", "waterlevel", "water_level", "waterlevel_m"];
+const SENSOR_NO_DATA_VALUES = [-9.99, -999];
+const MAX_PLAUSIBLE_DIFF_M = 50;
+const MSL_WATER_LEVEL_SOURCES = ["thaiwater", "rid"];
+const DWR_SOURCES = ["dwr", "dwr_telemetry"];
+const GAP_SOURCE_BADGES = {
+    admin: '<span class="badge badge-sm badge-primary whitespace-nowrap">admin</span>',
+    etl_diff: '<span class="badge badge-sm badge-ghost whitespace-nowrap">ETL (diff)</span>',
+    etl_bank: '<span class="badge badge-sm badge-ghost whitespace-nowrap">ETL</span>',
+    none: '<span class="text-xs text-ink-400 whitespace-nowrap">ไม่มีข้อมูล</span>',
+};
 
 let stations = [];
 let selectedIds = new Set();
@@ -192,6 +204,91 @@ function latestWaterLevel(metrics) {
     return null;
 }
 
+function toReading(value) {
+    if (value === null || value === undefined || value === "" || typeof value === "boolean") return null;
+    const number = Number(value);
+    if (!Number.isFinite(number)) return null;
+    if (SENSOR_NO_DATA_VALUES.some(v => Math.abs(number - v) < 0.001)) return null;
+    return number;
+}
+
+function toLevel(value) {
+    const level = toReading(value);
+    if (level === null || level === 0 || level < BANK_LEVEL_MIN || level > BANK_LEVEL_MAX) return null;
+    return level;
+}
+
+function metricValue(metrics, type) {
+    return metrics[type] ? metrics[type].value : null;
+}
+
+function rawWaterLevelValue(metrics) {
+    for (const type of RAW_WATER_LEVEL_TYPES) {
+        if (metrics[type]) return metrics[type].value;
+    }
+    return null;
+}
+
+function mslWaterLevel(station, metrics) {
+    const msl = toReading(metricValue(metrics, "waterlevel_msl"));
+    if (msl !== null) return msl;
+    if (MSL_WATER_LEVEL_SOURCES.includes(station.source)) return toReading(rawWaterLevelValue(metrics));
+    if (DWR_SOURCES.includes(station.source)) {
+        const stage = toReading(metricValue(metrics, "waterlevel"));
+        const gaugeZero = toReading((station.metadata || {}).zflowMsl);
+        if (stage !== null && gaugeZero !== null) return stage + gaugeZero;
+    }
+    return null;
+}
+
+function etlBankLevel(station) {
+    const metadata = station.metadata || {};
+    if (MSL_WATER_LEVEL_SOURCES.includes(station.source)) return toLevel(metadata.water_level_critical);
+    if (DWR_SOURCES.includes(station.source)) {
+        const banks = [metadata.lbMsl, metadata.rbMsl].map(toLevel).filter(bank => bank !== null);
+        return banks.length ? Math.min(...banks) : null;
+    }
+    return null;
+}
+
+function etlBankGap(station, metrics) {
+    const diff = toReading(metricValue(metrics, "diff_wl_bank"));
+    if (diff === null) return null;
+    const raw = rawWaterLevelValue(metrics);
+    if (raw !== null && Number.isFinite(Number(raw)) && toReading(raw) === null) return null;
+    if (station.source === "rid") {
+        const critical = toReading((station.metadata || {}).water_level_critical);
+        const water = toReading(metricValue(metrics, "waterlevel"));
+        if (critical === 0 || (water !== null && Math.abs(diff - water) < 0.005)) return null;
+    }
+    return diff;
+}
+
+function isPlausibleGap(diff) {
+    return diff !== null && Math.abs(diff) <= MAX_PLAUSIBLE_DIFF_M;
+}
+
+function gapSource(station) {
+    const metrics = metricMap(station);
+    const water = mslWaterLevel(station, metrics);
+    const adminBank = toLevel(station.bank_level);
+    if (adminBank !== null && water !== null && isPlausibleGap(water - adminBank)) return "admin";
+    if (isPlausibleGap(etlBankGap(station, metrics))) return "etl_diff";
+    const etlBank = etlBankLevel(station);
+    if (etlBank !== null && water !== null && isPlausibleGap(water - etlBank)) return "etl_bank";
+    return "none";
+}
+
+function etlBankHint(station) {
+    const etlBank = etlBankLevel(station);
+    if (etlBank !== null) return `ETL: ${etlBank.toFixed(2)}`;
+    const metrics = metricMap(station);
+    const diff = etlBankGap(station, metrics);
+    const water = mslWaterLevel(station, metrics);
+    if (isPlausibleGap(diff) && water !== null) return `ประมาณ ${(water - diff).toFixed(2)} คิดจาก diff`;
+    return "";
+}
+
 {# Flags the data problems found in the upstream feeds, so an admin can spot stations worth hiding #}
 function findIssues(station) {
     const metrics = metricMap(station);
@@ -229,7 +326,7 @@ async function loadStations() {
     } catch (e) {
         console.error(e);
         document.getElementById("station-rows").innerHTML =
-            '<tr><td colspan="7" class="text-center text-error py-10">โหลดรายการสถานีไม่สำเร็จ กรุณาลองใหม่อีกครั้ง</td></tr>';
+            '<tr><td colspan="8" class="text-center text-error py-10">โหลดรายการสถานีไม่สำเร็จ กรุณาลองใหม่อีกครั้ง</td></tr>';
     }
 }
 
@@ -281,7 +378,11 @@ function renderRow(s) {
         </td>
         <td><span class="badge badge-sm badge-ghost whitespace-nowrap">${escapeHtml(SOURCE_LABELS[s.source] || s.source)}</span></td>
         <td>${levelHtml}</td>
-        <td><input type="number" step="0.01" min="${BANK_LEVEL_MIN}" max="${BANK_LEVEL_MAX}" class="input input-bordered input-xs w-24" value="${escapeHtml(bankValue)}" aria-label="ระดับตลิ่งของ ${escapeHtml(s.name_th || s.name || s.code)}" onbeforeinput="blockNonNumeric(event)" onchange="saveBankLevel('${s.id}', this)" /></td>
+        <td>
+            <input type="number" step="0.01" min="${BANK_LEVEL_MIN}" max="${BANK_LEVEL_MAX}" class="input input-bordered input-xs w-24" value="${escapeHtml(bankValue)}" aria-label="ระดับตลิ่งของ ${escapeHtml(s.name_th || s.name || s.code)}" onbeforeinput="blockNonNumeric(event)" onchange="saveBankLevel('${s.id}', this)" />
+            <div class="text-[11px] text-ink-400 mt-0.5">${escapeHtml(etlBankHint(s))}</div>
+        </td>
+        <td id="gap-source-${s.id}">${GAP_SOURCE_BADGES[gapSource(s)]}</td>
         <td><div class="flex flex-wrap gap-1">${issuesHtml}</div></td>
         <td class="text-right">
             <label class="inline-flex items-center gap-2 cursor-pointer">
@@ -299,7 +400,7 @@ function render() {
     const tbody = document.getElementById("station-rows");
     tbody.innerHTML = rows.length
         ? rows.map(renderRow).join("")
-        : '<tr><td colspan="7" class="text-center text-ink-400 py-10">ไม่พบสถานีตามเงื่อนไข</td></tr>';
+        : '<tr><td colspan="8" class="text-center text-ink-400 py-10">ไม่พบสถานีตามเงื่อนไข</td></tr>';
 
     const visibleIds = rows.map(s => s.id);
     const selectAll = document.getElementById("select-all");
@@ -376,8 +477,11 @@ async function saveBankLevel(id, input) {
 
     try {
         await apiPut(`/v1/stations/${id}/bank-level`, { bank_level: value });
+        if (!isLatest()) return;
         station.bank_level = value;
-        if (isLatest()) showToast(value === null ? "ล้างระดับตลิ่งแล้ว" : "บันทึกระดับตลิ่งแล้ว");
+        const sourceCell = document.getElementById(`gap-source-${id}`);
+        if (sourceCell) sourceCell.innerHTML = GAP_SOURCE_BADGES[gapSource(station)];
+        showToast(value === null ? "ล้างระดับตลิ่งแล้ว" : "บันทึกระดับตลิ่งแล้ว");
     } catch (e) {
         console.error(e);
         if (!isLatest()) return;

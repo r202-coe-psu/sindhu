@@ -133,7 +133,7 @@ class ZoneRiskAggregationTests(unittest.TestCase):
                 _station("normal", "rid", 0.5),
                 _station("warning", "rid", 1.5),
                 _station("critical", "rid", 2.5),
-                _station("evacuation", "rid", 3.5),
+                _station("far-over", "rid", 3.5),
             ]
         )
         zone = {
@@ -141,11 +141,11 @@ class ZoneRiskAggregationTests(unittest.TestCase):
                 {"code": "normal"},
                 {"code": "warning"},
                 {"code": "critical"},
-                {"code": "evacuation"},
+                {"code": "far-over"},
             ]
         }
 
-        self.assertEqual(monitor.zone_risk_level(zone)["risk"], 3)
+        self.assertEqual(monitor.zone_risk_level(zone)["risk"], 2)
 
     def test_station_without_fresh_metrics_does_not_recolour_zone(self):
         monitor = self.make_monitor([_station("stale", "rid", None)])
@@ -171,7 +171,7 @@ class ZoneRiskAggregationTests(unittest.TestCase):
 
         level = monitor.zone_risk_level({"stations": [{"code": "etl-bank"}]})
 
-        self.assertEqual(level["risk"], 3)
+        self.assertEqual(level["risk"], 2)
 
     def test_source_change_recomputes_zone_risk(self):
         monitor = self.make_monitor(
@@ -188,7 +188,29 @@ class ZoneRiskAggregationTests(unittest.TestCase):
         monitor.get_selected_source = lambda: "thaiwater"
         monitor.update_zone_risks()
 
-        self.assertEqual(monitor.map.updates, [("zone-1", 1), ("zone-1", 3)])
+        self.assertEqual(monitor.map.updates, [("zone-1", 1), ("zone-1", 2)])
+
+    def test_zone_risk_does_not_depend_on_station_order(self):
+        rid = _station("shared", "rid", 3.5)
+        dwr = _station("shared", "dwr", 3.5)
+        zone = {"stations": [{"code": "shared"}]}
+        for stations in ([rid, dwr], [dwr, rid]):
+            with self.subTest(order=[s["source"] for s in stations]):
+                monitor = self.make_monitor(stations)
+                self.assertEqual(monitor.zone_risk_level(zone)["risk"], 2)
+
+    def test_geojson_zone_risk_does_not_depend_on_station_order(self):
+        rid = _station("shared", "rid", 3.5)
+        dwr = _station("shared", "dwr", 3.5)
+        for stations in ([rid, dwr], [dwr, rid]):
+            with self.subTest(order=[s["source"] for s in stations]):
+                monitor = self.make_monitor(stations)
+                geojson = {"properties": {}}
+                monitor.update_zone_properties(geojson, [{"code": "shared"}])
+                self.assertEqual(
+                    geojson["properties"]["fillColor"],
+                    metric_infos.get_risk_level(2)["color"],
+                )
 
     def test_reference_boundary_is_not_sent_for_risk_update(self):
         monitor = self.make_monitor([_station("station", "rid", 3.5)])
@@ -204,7 +226,7 @@ class ZoneRiskAggregationTests(unittest.TestCase):
 
         monitor.update_zone_risks()
 
-        self.assertEqual(monitor.map.updates, [("flood", 3)])
+        self.assertEqual(monitor.map.updates, [("flood", 2)])
 
 
 class ZoneStyleTests(unittest.TestCase):
@@ -239,15 +261,14 @@ class ZoneStyleTests(unittest.TestCase):
                 self.assertEqual(style["fillColor"], fill)
                 self.assertGreater(style["fillOpacity"], 0.0)
 
-    def test_alert_colours_match_warning_critical_and_evacuation(self):
+    def test_alert_colours_match_near_and_over_the_bank(self):
         zone = {"metadata": {"fill": "#123456", "stroke": "#654321"}}
         expected_colours = {
             1: ("#f97316", "#ea580c"),
             2: ("#ef4444", "#dc2626"),
-            3: ("#9333ea", "#7e22ce"),
         }
 
-        for risk in (1, 2, 3):
+        for risk in (1, 2):
             with self.subTest(mode="outline", risk=risk):
                 level = metric_infos.get_risk_level(risk)
                 self.assertEqual(
@@ -272,7 +293,7 @@ class ZoneStyleTests(unittest.TestCase):
             "zone_kind": "reference",
             "metadata": {"fill": "#111111", "stroke": "#222222"},
         }
-        level = metric_infos.get_risk_level(3)
+        level = metric_infos.get_risk_level(2)
 
         style = self.make_map(zone, level).zone_style("zone")
 

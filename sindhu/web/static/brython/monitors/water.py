@@ -478,30 +478,34 @@ class WaterMonitor(BaseMonitor):
     def apply_marker_filters(self, zone_codes=None):
         self.map.filter_markers_by_keys(self.visible_marker_keys(zone_codes))
 
+    def stations_by_code(self):
+        selected_source = self.get_selected_source()
+        grouped = {}
+        for station in (self.latest_data or {}).get("stations") or []:
+            if not station or not station.get("code"):
+                continue
+            if not self.is_source_matched(selected_source, station.get("source")):
+                continue
+            grouped.setdefault(str(station["code"]), []).append(station)
+        return grouped
+
+    def worst_risk_for_codes(self, codes):
+        grouped = self.stations_by_code()
+        max_risk = -1
+        for code in codes:
+            for station in grouped.get(str(code), []):
+                risk, _, _ = self.calculate_risk(station)
+                max_risk = max(max_risk, risk)
+        return max_risk
+
     def zone_risk_level(self, zone):
         """Worst risk among the stations that sit in this zone."""
-        selected_source = self.get_selected_source()
-        stations_by_code = {}
-        for station in (self.latest_data or {}).get("stations") or []:
-            if station and station.get("code"):
-                if not self.is_source_matched(selected_source, station.get("source")):
-                    continue
-                # Keep the reading that can actually be judged
-                code = str(station["code"])
-                if code not in stations_by_code or self.station_has_data(station):
-                    stations_by_code[code] = station
-
-        max_risk = -1
-        for member in zone.get("stations") or []:
-            if not member:
-                continue
-            station = stations_by_code.get(str(member.get("code")))
-            if not station:
-                continue
-            risk, _, _ = self.calculate_risk(station)
-            if risk > max_risk:
-                max_risk = risk
-        return metric_infos.get_risk_level(max_risk)
+        codes = [
+            member.get("code")
+            for member in zone.get("stations") or []
+            if member and member.get("code")
+        ]
+        return metric_infos.get_risk_level(self.worst_risk_for_codes(codes))
 
     def update_zone_risks(self):
         """Colour zones by active station alerts (warning, critical, evacuate).
@@ -571,36 +575,8 @@ class WaterMonitor(BaseMonitor):
         if not self.latest_data or not nearby_stations:
             return
 
-        selected_source = self.get_selected_source()
-
-        max_risk = (
-            -1
-        )  # -1 = Unknown, 0 = Normal, 1 = Warning, 2 = Critical, 3 = Evacuation
-
-        stations_dict = {}
-        for s in self.latest_data.get("stations") or []:
-            if s and s.get("code"):
-                if not self.is_source_matched(selected_source, s.get("source")):
-                    continue
-                code = str(s["code"])
-                if code not in stations_dict or self.station_has_data(s):
-                    stations_dict[code] = s
-
-        for s in nearby_stations:
-            if not s:
-                continue
-            code = s.get("code")
-            if not code:
-                continue
-
-            db_station = stations_dict.get(str(code))
-            if db_station:
-                risk, _, _ = self.calculate_risk(db_station)
-
-                if risk > max_risk:
-                    max_risk = risk
-
-        level = metric_infos.get_risk_level(max_risk)
+        codes = [s.get("code") for s in nearby_stations if s and s.get("code")]
+        level = metric_infos.get_risk_level(self.worst_risk_for_codes(codes))
         zone_geojson["properties"]["fillColor"] = level["color"]
         zone_geojson["properties"]["color"] = level["border"]
         zone_geojson["properties"]["fillOpacity"] = level["fill_opacity"]

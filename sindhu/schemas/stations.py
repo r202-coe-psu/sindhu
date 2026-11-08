@@ -78,6 +78,7 @@ class UpdateStationBankLevel(BaseModel):
         allow_inf_nan=False,
         ge=BANK_LEVEL_MIN_M,
         le=BANK_LEVEL_MAX_M,
+        strict=True,
     )
 
     @field_validator("bank_level")
@@ -88,5 +89,9 @@ class UpdateStationBankLevel(BaseModel):
         ):
             raise ValueError(
                 f"{value} คือรหัส 'ไม่มีข้อมูล' ของเซนเซอร์ ไม่ใช่ระดับตลิ่ง"
+            )
+        if value == 0:
+            raise ValueError(
+                "ระดับตลิ่ง 0 ม. ระบบถือว่าไม่มีค่า ถ้าต้องการล้างค่าให้เว้นว่าง"
             )
         return value

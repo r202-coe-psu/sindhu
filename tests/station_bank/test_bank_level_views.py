@@ -75,11 +75,18 @@ class WaterCardTests(unittest.TestCase):
             self.assertNotIn(raw, html)
 
     def test_station_without_any_bank_is_neutral(self):
-        station = _station(bank_level=None, waterlevel=11.6, diff_wl_bank=2.0)
+        station = _station(bank_level=None, waterlevel=11.6)
         station["metadata"] = {}
         html = _chips(station)
         self.assertIn("ไม่มีข้อมูลระดับตลิ่ง", html)
         self.assertNotIn("ล้นตลิ่ง", html)
+        self.assertNotIn("11.6", html)
+
+    def test_station_with_only_the_etl_diff_shows_that_gap(self):
+        station = _station(bank_level=None, waterlevel=11.6, diff_wl_bank=-0.65)
+        station["metadata"] = {}
+        html = _chips(station)
+        self.assertIn("ใกล้ระดับตลิ่ง · ต่ำกว่าตลิ่ง 0.65 ม.", html)
         self.assertNotIn("11.6", html)
 
     def test_station_without_admin_bank_uses_the_etl_bank(self):
@@ -121,10 +128,19 @@ class RiskBadgeTests(unittest.TestCase):
         station = _station(waterlevel=11.6, diff_wl_bank=-999.0)
         self.assertEqual(self._risk(station), 1)
 
-    def test_without_admin_bank_the_etl_critical_level_is_the_bank(self):
-        station = self._with_thresholds(waterlevel=14.0, diff_wl_bank=2.0)
+    def test_without_admin_bank_the_etl_diff_comes_first(self):
+        station = self._with_thresholds(waterlevel=12.0, diff_wl_bank=1.0)
         station["bank_level"] = None
-        self.assertEqual(self._risk(station), 3)
+        self.assertEqual(self._risk(station), 2)
+
+    def test_without_admin_bank_or_diff_the_etl_critical_level_is_the_bank(self):
+        station = self._with_thresholds(waterlevel=14.0)
+        station["bank_level"] = None
+        self.assertEqual(self._risk(station), 2)
+
+    def test_there_is_no_evacuation_level(self):
+        station = self._with_thresholds(waterlevel=20.0)
+        self.assertEqual(self._risk(station), 2)
 
     def test_dwr_without_an_msl_reading_is_unknown(self):
         station = self._with_thresholds(waterlevel=14.0)
@@ -132,10 +148,30 @@ class RiskBadgeTests(unittest.TestCase):
         self.assertEqual(self._risk(station), -1)
 
     def test_risk_follows_the_gap_to_the_bank(self):
-        for reading, risk in ((10.0, 0), (11.5, 1), (12.3, 2), (12.8, 3)):
+        for reading, risk in ((10.0, 0), (10.3, 1), (11.5, 1), (12.3, 2), (12.8, 2)):
             with self.subTest(reading=reading):
                 self.assertEqual(
                     self._risk(self._with_thresholds(waterlevel=reading)), risk
+                )
+
+    def test_card_wording_matches_the_marker_level_at_every_boundary(self):
+        from stations import metric_infos
+
+        monitor = WaterMonitor.__new__(WaterMonitor)
+        for reading in (10.24, 10.25, 11.99, 12.0, 12.01, -9.99, None):
+            with self.subTest(reading=reading):
+                metrics = {} if reading is None else {"waterlevel": reading}
+                station = self._with_thresholds(**metrics)
+                risk = monitor.calculate_risk(station)[0]
+                html = _chips(station)
+                card_text = re.search(
+                    r'<span class="font-semibold">([^<]*)</span>', html
+                )
+                self.assertTrue(
+                    card_text.group(1).startswith(
+                        metric_infos.get_risk_level(risk)["label"]
+                    ),
+                    (card_text.group(1), metric_infos.get_risk_level(risk)["label"]),
                 )
 
     def test_badge_and_card_text_always_agree(self):
@@ -156,9 +192,18 @@ class TooltipSectionTests(unittest.TestCase):
         for raw in ("11.60", "12.00", "11.25", "77.77", "98.76"):
             self.assertNotIn(raw, html)
 
-    def test_watch_line_sits_where_the_risk_turns_to_watch(self):
-        html = _section(_station(waterlevel=11.6))
-        self.assertIn(f"-{bank_status.NEAR_BANK_BAND_M:.2f} ม.", html)
+    def test_watch_line_sits_at_the_agency_warning_gap(self):
+        station = _station(waterlevel=11.6)
+        station["metadata"] = {
+            "water_level_warning": 11.2,
+            "water_level_critical": 12.0,
+        }
+        self.assertIn("-0.80 ม.", _section(station))
+
+    def test_watch_line_falls_back_to_one_metre(self):
+        station = _station(waterlevel=11.6)
+        station["metadata"] = {}
+        self.assertIn("-1.00 ม.", _section(station))
 
     def test_overflow_draws_the_water_above_the_bank(self):
         html = _section(_station(waterlevel=12.5))
@@ -166,10 +211,11 @@ class TooltipSectionTests(unittest.TestCase):
         water_y = float(re.search(r'<rect x="0" y="([\d.]+)"[^>]*fill="url', html)[1])
         self.assertLess(water_y, BaseMap.SECTION_BANK_Y)
 
-    def test_etl_warning_level_does_not_move_the_watch_line(self):
+    def test_unusable_warning_does_not_move_the_watch_line(self):
         low = _station(waterlevel=11.6)
+        low["metadata"] = {}
         high = _station(waterlevel=11.6)
-        high["metadata"]["water_level_warning"] = 13.0
+        high["metadata"]["water_level_warning"] = 90.0
         self.assertEqual(_section(low), _section(high))
 
     def test_unknown_states_draw_no_water_line(self):

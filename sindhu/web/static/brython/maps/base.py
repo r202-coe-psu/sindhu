@@ -73,9 +73,9 @@ class BaseMap(Map):
         ax = self.SECTION_ARROW_X
 
         gap = abs(diff_val)
-        warn_drop = bank_status.NEAR_BANK_BAND_M
+        warn_drop = comparison["near_band"]
 
-        span = max(gap, warn_drop or 0.0, 0.2) * self.SECTION_HEADROOM
+        span = max(gap, warn_drop, 0.2) * self.SECTION_HEADROOM
         px_per_m = self.SECTION_USABLE_PX / span
 
         if diff_val > 0:
@@ -98,21 +98,18 @@ class BaseMap(Map):
                     stroke="{color}" stroke-width="2.2"/>
             """
 
-        warn_line = ""
-        warn_row = ""
-        if warn_drop is not None:
-            warn_y = bank_y + warn_drop * px_per_m
-            warn_line = f"""
-              <line x1="{ch_l - 16}" y1="{warn_y:.1f}" x2="{ch_r + 16}" y2="{warn_y:.1f}"
-                    stroke="#f97316" stroke-width="1.4" stroke-dasharray="4 3"/>
-            """
-            warn_row = f"""
-            <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:rgba(15,23,42,0.6);">
-                <span style="width:8px; height:2px; background:#f97316; flex:none;"></span>
-                <span>เฝ้าระวัง</span>
-                <b style="color:#0f172a; font-weight:600; margin-left:auto;">-{warn_drop:.2f} ม.</b>
-            </div>
-            """
+        warn_y = bank_y + warn_drop * px_per_m
+        warn_line = f"""
+          <line x1="{ch_l - 16}" y1="{warn_y:.1f}" x2="{ch_r + 16}" y2="{warn_y:.1f}"
+                stroke="#f97316" stroke-width="1.4" stroke-dasharray="4 3"/>
+        """
+        warn_row = f"""
+        <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:rgba(15,23,42,0.6);">
+            <span style="width:8px; height:2px; background:#f97316; flex:none;"></span>
+            <span>ใกล้ระดับตลิ่ง</span>
+            <b style="color:#0f172a; font-weight:600; margin-left:auto;">-{warn_drop:.2f} ม.</b>
+        </div>
+        """
 
         channel = (
             f"{ch_l} V {wall_y} C {ch_l} 132 {ch_r} 132 {ch_r} {wall_y} V {bank_y}"
@@ -788,7 +785,7 @@ class BaseMap(Map):
             rows += f"""
             <div class="flex items-center gap-2">
                 <span class="inline-block w-4 h-3 rounded-sm shrink-0 border border-ink-300" style="background-color: {level["color"]};"></span>
-                <span class="text-[11px] text-ink-700 leading-tight">{level["label"]}</span>
+                <span class="text-[11px] text-ink-700 leading-tight whitespace-nowrap">{level["label"]}</span>
                 <span class="text-[10px] text-ink-400 leading-tight ml-auto pl-2 whitespace-nowrap">{level["range"]}</span>
             </div>
             """
