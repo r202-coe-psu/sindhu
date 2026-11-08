@@ -626,7 +626,7 @@ class BaseMap(LegendMixin, Map):
                     inner = station_dot_html(
                         PULSE_PX,
                         PULSE_PX,
-                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.3);",
+                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid var(--color-ink-950); box-shadow: 0 0 4px rgba(0,0,0,0.3);",
                     )
                 metric_marker = self._station_icon(inner)
 

@@ -21,7 +21,7 @@ class _BrowserStub(dict):
 
 def _load_brython_classes():
     if str(BRYTHON_ROOT) not in sys.path:
-        sys.path.insert(0, str(BRYTHON_ROOT))
+        sys.path.append(str(BRYTHON_ROOT))
 
     browser = types.ModuleType("browser")
     for name in ("aio", "ajax", "alert", "document", "html", "timer", "window"):
