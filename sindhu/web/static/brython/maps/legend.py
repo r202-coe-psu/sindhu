@@ -152,7 +152,7 @@ class LegendMixin:
             rows += f"""
             <div class="flex items-center gap-2">
                 <span class="inline-block w-4 h-3 rounded-sm shrink-0 border border-ink-300" style="background-color: {level["color"]};"></span>
-                <span class="text-[11px] text-ink-700 leading-tight">{level["label"]}</span>
+                <span class="text-[11px] text-ink-700 leading-tight whitespace-nowrap">{level["label"]}</span>
                 <span class="text-[10px] text-ink-400 leading-tight ml-auto pl-2 whitespace-nowrap">{level["range"]}</span>
             </div>
             """

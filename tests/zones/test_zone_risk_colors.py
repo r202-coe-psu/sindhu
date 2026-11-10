@@ -110,6 +110,7 @@ def _station(code, source, water_level, warning=1.0, critical=2.0, evacuation=3.
     return {
         "code": code,
         "source": source,
+        "bank_level": critical,
         "metadata": {
             "water_level_warning": warning,
             "water_level_critical": critical,
@@ -132,7 +133,7 @@ class ZoneRiskAggregationTests(unittest.TestCase):
                 _station("normal", "rid", 0.5),
                 _station("warning", "rid", 1.5),
                 _station("critical", "rid", 2.5),
-                _station("evacuation", "rid", 3.5),
+                _station("far-over", "rid", 3.5),
             ]
         )
         zone = {
@@ -140,11 +141,11 @@ class ZoneRiskAggregationTests(unittest.TestCase):
                 {"code": "normal"},
                 {"code": "warning"},
                 {"code": "critical"},
-                {"code": "evacuation"},
+                {"code": "far-over"},
             ]
         }
 
-        self.assertEqual(monitor.zone_risk_level(zone)["risk"], 3)
+        self.assertEqual(monitor.zone_risk_level(zone)["risk"], 2)
 
     def test_station_without_fresh_metrics_does_not_recolour_zone(self):
         monitor = self.make_monitor([_station("stale", "rid", None)])
@@ -153,11 +154,30 @@ class ZoneRiskAggregationTests(unittest.TestCase):
 
         self.assertEqual(level["risk"], -1)
 
+    def test_station_without_any_bank_does_not_recolour_zone(self):
+        station = _station("no-bank", "rid", 3.5)
+        station["bank_level"] = None
+        station["metadata"] = {}
+        monitor = self.make_monitor([station])
+
+        level = monitor.zone_risk_level({"stations": [{"code": "no-bank"}]})
+
+        self.assertEqual(level["risk"], -1)
+
+    def test_station_without_admin_bank_is_rated_on_the_etl_bank(self):
+        station = _station("etl-bank", "rid", 3.5)
+        station["bank_level"] = None
+        monitor = self.make_monitor([station])
+
+        level = monitor.zone_risk_level({"stations": [{"code": "etl-bank"}]})
+
+        self.assertEqual(level["risk"], 2)
+
     def test_source_change_recomputes_zone_risk(self):
         monitor = self.make_monitor(
             [
                 _station("shared", "rid", 1.5),
-                _station("shared", "dwr", 3.5),
+                _station("shared", "thaiwater", 3.5),
             ],
             source="rid",
         )
@@ -165,10 +185,32 @@ class ZoneRiskAggregationTests(unittest.TestCase):
         monitor.map = _RiskMap()
 
         monitor.update_zone_risks()
-        monitor.get_selected_source = lambda: "dwr"
+        monitor.get_selected_source = lambda: "thaiwater"
         monitor.update_zone_risks()
 
-        self.assertEqual(monitor.map.updates, [("zone-1", 1), ("zone-1", 3)])
+        self.assertEqual(monitor.map.updates, [("zone-1", 1), ("zone-1", 2)])
+
+    def test_zone_risk_does_not_depend_on_station_order(self):
+        rid = _station("shared", "rid", 3.5)
+        dwr = _station("shared", "dwr", 3.5)
+        zone = {"stations": [{"code": "shared"}]}
+        for stations in ([rid, dwr], [dwr, rid]):
+            with self.subTest(order=[s["source"] for s in stations]):
+                monitor = self.make_monitor(stations)
+                self.assertEqual(monitor.zone_risk_level(zone)["risk"], 2)
+
+    def test_geojson_zone_risk_does_not_depend_on_station_order(self):
+        rid = _station("shared", "rid", 3.5)
+        dwr = _station("shared", "dwr", 3.5)
+        for stations in ([rid, dwr], [dwr, rid]):
+            with self.subTest(order=[s["source"] for s in stations]):
+                monitor = self.make_monitor(stations)
+                geojson = {"properties": {}}
+                monitor.update_zone_properties(geojson, [{"code": "shared"}])
+                self.assertEqual(
+                    geojson["properties"]["fillColor"],
+                    metric_infos.get_risk_level(2)["color"],
+                )
 
     def test_reference_boundary_is_not_sent_for_risk_update(self):
         monitor = self.make_monitor([_station("station", "rid", 3.5)])
@@ -184,7 +226,7 @@ class ZoneRiskAggregationTests(unittest.TestCase):
 
         monitor.update_zone_risks()
 
-        self.assertEqual(monitor.map.updates, [("flood", 3)])
+        self.assertEqual(monitor.map.updates, [("flood", 2)])
 
 
 class ZoneStyleTests(unittest.TestCase):
@@ -201,7 +243,7 @@ class ZoneStyleTests(unittest.TestCase):
 
     def test_outline_keeps_the_zone_colour_at_every_risk(self):
         zone = {"code": "songkhla-zone-1"}
-        for risk in (-1, 0, 1, 2, 3):
+        for risk in (-1, 0, 1, 2):
             with self.subTest(risk=risk):
                 level = metric_infos.get_risk_level(risk)
                 style = self.make_map(zone, level).zone_style("zone")
@@ -210,7 +252,7 @@ class ZoneStyleTests(unittest.TestCase):
 
     def test_fill_follows_the_risk_colour(self):
         zone = {"code": "songkhla-zone-1"}
-        for risk in (0, 1, 2, 3):
+        for risk in (0, 1, 2):
             with self.subTest(risk=risk):
                 level = metric_infos.get_risk_level(risk)
                 style = self.make_map(zone, level).zone_style("zone")
@@ -261,7 +303,7 @@ class ZoneStyleTests(unittest.TestCase):
             "zone_kind": "reference",
             "metadata": {"fill": "#111111", "stroke": "#222222"},
         }
-        level = metric_infos.get_risk_level(3)
+        level = metric_infos.get_risk_level(2)
 
         style = self.make_map(zone, level).zone_style("zone")
 
