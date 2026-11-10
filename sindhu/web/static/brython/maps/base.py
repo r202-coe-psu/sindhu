@@ -110,14 +110,15 @@ class BaseMap(LegendMixin, Map):
                     stroke="{color}" stroke-width="2.2"/>
             """
 
+        warn_color = metric_infos.get_risk_level(bank_status.RISK_WATCH)["color"]
         warn_y = bank_y + warn_drop * px_per_m
         warn_line = f"""
           <line x1="{ch_l - 16}" y1="{warn_y:.1f}" x2="{ch_r + 16}" y2="{warn_y:.1f}"
-                stroke="#f97316" stroke-width="1.4" stroke-dasharray="4 3"/>
+                stroke="{warn_color}" stroke-width="1.4" stroke-dasharray="4 3"/>
         """
         warn_row = f"""
         <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:var(--color-ink-500);">
-            <span style="width:8px; height:2px; background:#f97316; flex:none;"></span>
+            <span style="width:8px; height:2px; background:{warn_color}; flex:none;"></span>
             <span>เฝ้าระวัง</span>
             <b style="color:var(--color-ink-900); font-weight:600; margin-left:auto;">-{warn_drop:.2f} ม.</b>
         </div>

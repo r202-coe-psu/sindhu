@@ -94,17 +94,33 @@ class WaterCardTests(unittest.TestCase):
         station["metadata"]["water_level_critical"] = 12.0
         self.assertIn("ล้นตลิ่ง · สูงกว่าตลิ่ง 0.50 ม.", _chips(station))
 
-    def test_bank_chip_and_tooltip_badge_take_the_marker_colour(self):
+    def test_bank_chip_tooltip_badge_and_marker_share_the_risk_colour(self):
         from stations import metric_infos
 
-        for reading in (10.0, 11.5, 12.5, -9.99):
+        expected = {
+            10.0: "#22c55e",
+            11.5: "#f97316",
+            12.5: "#ef4444",
+            -9.99: "#9ca3af",
+        }
+        for reading, colour in expected.items():
             with self.subTest(reading=reading):
                 station = _station(waterlevel=reading)
-                risk = bank_status.compare_station(station)["risk"]
-                style = metric_infos.risk_badge_style(risk)
-                self.assertIn(metric_infos.get_risk_level(risk)["color"], style)
+                monitor = WaterMonitor.__new__(WaterMonitor)
+                marker_risk = monitor.calculate_risk(station)[0]
+                self.assertEqual(
+                    metric_infos.get_risk_level(marker_risk)["color"], colour
+                )
+                style = metric_infos.risk_badge_style(marker_risk)
+                self.assertIn(colour, style)
                 self.assertIn(style, _chips(station))
                 self.assertIn(style, _section(station))
+
+    def test_tooltip_marks_the_watch_line_apart_from_the_status(self):
+        html = _section(_station(waterlevel=11.6))
+        self.assertIn("<span>เฝ้าระวัง</span>", html)
+        self.assertIn("ใกล้ระดับตลิ่ง ·", html)
+        self.assertIn("background:#f97316; flex:none;", html)
 
     def test_other_metrics_still_show(self):
         html = _chips(_station(waterlevel=11.6, rain=4.5))
