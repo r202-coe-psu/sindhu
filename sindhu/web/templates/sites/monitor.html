@@ -30,22 +30,20 @@
     </div>
 
     {# Locate card #}
-    <div class="map-ui map-card map-locate-card flex flex-wrap items-center gap-2 p-1.5 max-w-[calc(100vw-2rem)] sm:max-w-sm">
-        <button id="my_locate" type="button" aria-label="ใช้ตำแหน่งปัจจุบันของฉัน"
-            class="map-ui btn btn-ghost h-auto min-h-0 px-3 py-2 flex items-center gap-2 cursor-pointer transition-colors hover:text-brand-600">
-            <i class="ph ph-map-pin text-xl font-bold" aria-hidden="true"></i>
-            <span class="hidden sm:inline font-semibold text-sm">ใช้ตำแหน่งปัจจุบันของฉัน</span>
-        </button>
-        <label class="flex flex-1 items-center gap-2 min-w-0">
-            <span class="sr-only">เลือกพื้นที่</span>
-            <i class="ph ph-map-trifold text-xl text-ink-400" aria-hidden="true"></i>
-            <select id="area_selector" aria-label="เลือกพื้นที่"
-                class="select select-bordered select-sm rounded-xl text-sm font-semibold w-full min-w-0">
-                <option value="">ทุกพื้นที่</option>
-            </select>
-        </label>
+    <button id="my_locate" type="button" aria-label="ใช้ตำแหน่งปัจจุบันของฉัน"
+        class="map-ui map-card map-locate-card btn btn-ghost h-auto min-h-0 px-3 py-2 flex items-center gap-2 cursor-pointer transition-colors hover:border-primary hover:text-brand-600">
+        <i class="ph ph-map-pin text-xl font-bold" aria-hidden="true"></i>
+        <span class="hidden sm:inline font-semibold text-sm">ใช้ตำแหน่งปัจจุบันของฉัน</span>
+    </button>
+
+    {# Area card — pick a zone or tambon; says what a pick or location found #}
+    <div id="area_card" class="map-ui map-card map-area-card p-1.5 flex flex-col gap-1.5">
+        <select id="area_selector" aria-label="เลือกพื้นที่"
+            class="select select-bordered select-sm w-full bg-base-100 text-ink-700">
+            <option value="">ทุกพื้นที่</option>
+        </select>
         <div id="area_message" role="status" aria-live="polite"
-            class="hidden w-full rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-ink-700"></div>
+            class="hidden rounded-lg border border-warning/40 bg-warning/10 px-2 py-1.5 text-xs text-ink-700"></div>
     </div>
 
     {# Data panel card — a column on the right, folded to a pill under the user card #}

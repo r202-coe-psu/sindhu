@@ -68,6 +68,13 @@
 
 .map-locate-card { top: var(--map-top); left: var(--map-gap); }
 
+/* Under the locate card, leaving the right-hand map controls clear. */
+.map-area-card {
+  top: calc(var(--map-top) + 3.5rem);
+  left: var(--map-gap);
+  width: min(16rem, calc(100vw - 5rem));
+}
+
 /* The data panel hangs on the right at every width: a column on the right
    when open, a pill under the user card when folded. */
 .monitor-panel {
