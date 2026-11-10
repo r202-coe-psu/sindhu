@@ -23,35 +23,8 @@ def _zone_label(zone):
     return zone.get("name_th") or zone.get("name") or str(zone.get("id", ""))
 
 
-def _normalize_tambon_ref(item):
-    """Tambon as {code, name_th, amphoe_th}; a legacy plain string is its own code."""
-    if isinstance(item, str):
-        return {"code": item, "name_th": item, "amphoe_th": None}
-    if not item:
-        return None
-    code = item.get("code")
-    name = item.get("name_th") or (str(code) if code else "")
-    if not code and not name:
-        return None
-    return {
-        "code": str(code if code else name),
-        "name_th": name,
-        "amphoe_th": item.get("amphoe_th") or None,
-    }
-
-
-def _zone_tambons(zone):
-    return [t for t in map(_normalize_tambon_ref, zone.get("tambons") or []) if t]
-
-
 def _unique_tambons(zones):
-    by_code = {}
-    for zone in zones or []:
-        for t in _zone_tambons(zone):
-            by_code.setdefault(t["code"], t)
-    return sorted(
-        by_code.values(), key=lambda t: (t["name_th"], t["amphoe_th"] or "", t["code"])
-    )
+    return sorted({n for zone in zones or [] for n in zone.get("tambons") or []})
 
 
 def build_area_options(zones):
@@ -68,27 +41,16 @@ def build_area_options(zones):
                 "group": "Zone",
             }
         )
-    tambons = _unique_tambons(zones)
-    name_counts = {}
-    for t in tambons:
-        if not t["amphoe_th"]:
-            name_counts[t["name_th"]] = name_counts.get(t["name_th"], 0) + 1
-    for t in tambons:
-        label = f"ต.{t['name_th']}"
-        if t["amphoe_th"]:
-            label += f" (อ.{t['amphoe_th']})"
-        elif name_counts.get(t["name_th"], 0) > 1:
-            label += f" ({t['code']})"
+    for name in _unique_tambons(zones):
         options.append(
-            {"value": f"{TAMBON_PREFIX}{t['code']}", "label": label, "group": "ตำบล"}
+            {"value": f"{TAMBON_PREFIX}{name}", "label": f"ต.{name}", "group": "ตำบล"}
         )
     return options
 
 
-def zones_for_tambon(zones, code):
-    """Zones that contain the tambon with this code."""
-    code = str(code)
-    return [z for z in zones or [] if any(t["code"] == code for t in _zone_tambons(z))]
+def zones_for_tambon(zones, name):
+    """Zones tagged with this tambon name (several when it straddles zones)."""
+    return [z for z in zones or [] if name in (z.get("tambons") or [])]
 
 
 def zone_ids_for_value(zones, value):
@@ -99,8 +61,8 @@ def zone_ids_for_value(zones, value):
         known = [str(z.get("id", "") or "") for z in zones or []]
         return [zone_id] if zone_id in known else []
     if value.startswith(TAMBON_PREFIX):
-        code = value[len(TAMBON_PREFIX) :]
-        return [str(z.get("id")) for z in zones_for_tambon(zones, code) if z.get("id")]
+        name = value[len(TAMBON_PREFIX) :]
+        return [str(z.get("id")) for z in zones_for_tambon(zones, name) if z.get("id")]
     return []
 
 
@@ -120,14 +82,10 @@ def merge_station_codes(zones):
     return codes
 
 
-def location_message(kind, zone=None, tambon=None, error=None):
+def location_message(kind, zone=None, error=None):
     if kind == MSG_IN_ZONE:
         zone_name = _zone_label(zone) if zone else ""
-        tambon_name = ""
-        if tambon:
-            tambon_name = tambon.get("name_th") or ""
-        suffix = f" (ต.{tambon_name})" if tambon_name else ""
-        return f"คุณอยู่ใน {zone_name}{suffix}"
+        return f"คุณอยู่ใน {zone_name}"
     if kind == MSG_OUTSIDE:
         return (
             "ตำแหน่งของคุณอยู่นอกพื้นที่ Zone ในเขตหาดใหญ่ "

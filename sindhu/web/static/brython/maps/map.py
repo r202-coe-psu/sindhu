@@ -1,4 +1,4 @@
-from browser import alert, window
+from browser import window
 from html import escape as escape_html
 import re
 import json

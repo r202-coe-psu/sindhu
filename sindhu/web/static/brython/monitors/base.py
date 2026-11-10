@@ -378,7 +378,6 @@ class BaseMonitor:
             data = json.loads(response.data)
 
             zone = data.get("zone", None)
-            tambon = data.get("tambon", None)
             nearby_stations = data.get("nearby_stations", [])
 
             self.map.clear_zone_display()
@@ -386,7 +385,7 @@ class BaseMonitor:
             if zone:
                 zone_name = zone.get("name_th") or zone.get("name", "")
                 zone_id = str(zone.get("id", "") or "")
-                message = location_message(MSG_IN_ZONE, zone=zone, tambon=tambon)
+                message = location_message(MSG_IN_ZONE, zone=zone)
                 # Same path for drawn and undrawn zones; an undrawn one falls
                 # back to the response's own stations (or nearby codes).
                 fallback = dict(zone)
