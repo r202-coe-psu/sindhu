@@ -13,7 +13,6 @@ __all__ = [
     "metrics",
     "stations",
     "system_settings",
-    "tambons",
     "tokens",
     "users",
     "visual_feeds",
