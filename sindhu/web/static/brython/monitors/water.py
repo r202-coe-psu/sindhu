@@ -146,6 +146,9 @@ class WaterMonitor(BaseMonitor):
                 "change", self.on_toggle_rain_interpolation
             )
 
+        if "toggle_zones_layer" in document:
+            document["toggle_zones_layer"].bind("change", self.on_toggle_zones_layer)
+
         while self.running:
             print(f"monitor: wake up {datetime.datetime.now()}")
             print(f"monitor: {self.monitor_name} monitor")
@@ -271,7 +274,7 @@ class WaterMonitor(BaseMonitor):
             return
         document["reservoir_data_list"].html = f"""
         <div class="flex flex-col items-center justify-center h-full text-center gap-2 px-4">
-            <i class="ph ph-warning-circle text-4xl text-amber-500"></i>
+            <i class="ph ph-warning-circle text-4xl text-warning"></i>
             <div class="text-sm font-medium text-ink-600">{message}</div>
         </div>
         """
@@ -281,41 +284,6 @@ class WaterMonitor(BaseMonitor):
             style = ev.target.value
             self.map.marker_style = style
             aio.run(self._update_and_filter())
-
-    def update_zone_shading_buttons(self, mode):
-        return self.sync_zone_shading_mode_ui(mode)
-
-    def sync_zone_shading_mode_ui(self, mode):
-        """Update toggle buttons styling based on current mode."""
-        if "zone_style_outline" in document and "zone_style_shaded" in document:
-            btn_outline = document["zone_style_outline"]
-            btn_shaded = document["zone_style_shaded"]
-            if mode == "outline":
-                btn_outline.classList.add(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_outline.classList.remove("text-ink-600")
-                btn_shaded.classList.remove(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_shaded.classList.add("text-ink-600")
-            else:
-                btn_shaded.classList.add(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_shaded.classList.remove("text-ink-600")
-                btn_outline.classList.remove(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_outline.classList.add("text-ink-600")
-
-    def on_zone_shading_mode_click(self, mode):
-        self.map.set_zone_shading_mode(mode)
-        self.update_zone_shading_buttons(mode)
-        try:
-            window.localStorage.setItem("sindhu_zone_shading_mode", mode)
-        except Exception:
-            pass
 
     def on_toggle_zones_layer(self, ev):
         checked = bool(ev.target.checked)
@@ -632,14 +600,14 @@ class WaterMonitor(BaseMonitor):
 
             html_content += f"""
             <div data-station-code="{station.get("code", "")}" data-station-source="{station.get("source", "")}"
-                class="bg-white border border-ink-100 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-brand-300 transition-all duration-200 cursor-pointer">
+                class="bg-base-100 border border-ink-100 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-brand-300 transition-all duration-200 cursor-pointer">
                 <div class="flex justify-between items-start mb-2">
                     <div>
                         <h3 class="font-bold text-ink-800 text-base">{name}</h3>
                         <div class="text-xs text-ink-500 mt-0.5">{location}</div>
                     </div>
                     <span class="badge gap-1 px-2 py-3 shadow-sm border border-ink-200" style="background-color: {hex_color}; color: {text_color};">
-                        <span class="w-2 h-2 rounded-full border border-ink-300" style="background-color: {'white'};"></span>{label}
+                        <span class="w-2 h-2 rounded-full border border-ink-300" style="background-color: var(--color-ink-950);"></span>{label}
                     </span>
                 </div>
                 <div class="mt-3 flex flex-wrap gap-2">

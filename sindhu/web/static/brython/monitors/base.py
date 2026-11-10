@@ -89,7 +89,8 @@ class BaseMonitor:
                 )
                 self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
                 self.map.add_focus_control()
-                self.map.load_river_basins(self.api_url)
+                # Rivers come from songkhla_basins.geojson (load_rivers below);
+                # /v1/basins holds the same 807 lines, so it is not drawn twice.
 
             await self.load_zones()
             await self.load_rivers()
@@ -118,13 +119,19 @@ class BaseMonitor:
         if not self.rivers_url:
             return
 
+        loaded = False
         try:
             response = await aio.get(self.rivers_url, cache=True)
             if response.status == 200 or response.status == 0:
                 rivers_data = json.loads(response.data)
                 self.map.set_rivers_layer(rivers_data)
+                loaded = True
+            else:
+                print(f"[Monitor] Rivers returned HTTP {response.status}")
         except Exception as e:
             print(f"[Monitor] Failed to load rivers: {e}")
+        self.map.rivers_unavailable = not loaded
+        self.map.refresh_legend()
 
     async def load_zones(self):
         """Draw active API flood zones from database."""
@@ -281,7 +288,7 @@ class BaseMonitor:
                 mark = self.map.user_mark
                 if mark and not isinstance(mark, list):
                     mark.setPopupContent(
-                        '<div class="text-sm text-amber-700 font-semibold"><i class="ph ph-warning"></i> ไม่พบลุ่มน้ำสำหรับตำแหน่งนี้</div>'
+                        '<div class="text-sm text-warning font-semibold"><i class="ph ph-warning"></i> ไม่พบลุ่มน้ำสำหรับตำแหน่งนี้</div>'
                     ).openPopup()
         except Exception as e:
             print(f"[Monitor] Locate error: {e}")

@@ -676,7 +676,7 @@ class VisualFeedMonitor:
 
         header_title = document.getElementById("panel_header_title")
         if header_title:
-            header_title.html = """<i class="ph ph-video-camera text-xl text-blue-200" aria-hidden="true"></i><span>กล้อง CCTV เฝ้าระวังน้ำท่วม</span>"""
+            header_title.html = """<i class="ph ph-video-camera text-xl text-brand-700" aria-hidden="true"></i><span>กล้อง CCTV เฝ้าระวังน้ำท่วม</span>"""
         header_subtitle = document.getElementById("panel_header_subtitle")
         if header_subtitle:
             header_subtitle.textContent = (
@@ -712,7 +712,7 @@ class VisualFeedMonitor:
 
         header_title = document.getElementById("panel_header_title")
         if header_title:
-            header_title.html = """<i class="ph ph-waves text-xl text-blue-200" aria-hidden="true"></i><span>สถานการณ์ระดับน้ำและเตือนภัย</span>"""
+            header_title.html = """<i class="ph ph-waves text-xl text-brand-700" aria-hidden="true"></i><span>สถานการณ์ระดับน้ำและเตือนภัย</span>"""
         header_subtitle = document.getElementById("panel_header_subtitle")
         if header_subtitle:
             header_subtitle.textContent = "ข้อมูลสถานีวัดน้ำและจุดเฝ้าระวัง"
@@ -927,7 +927,7 @@ class VisualFeedMonitor:
             # Grid View (2 columns, compact)
             card = _el(
                 "article",
-                "visual-feed-card cctv-list-item group relative overflow-hidden rounded-xl border border-slate-200/90 bg-white transition-shadow duration-200 flex flex-col justify-between",
+                "visual-feed-card cctv-list-item group relative overflow-hidden rounded-xl border border-ink-200/90 bg-base-100 transition-shadow duration-200 flex flex-col justify-between",
             )
             card.attrs["data-availability"] = availability
             card.attrs["data-image-freshness"] = image_freshness
@@ -936,7 +936,7 @@ class VisualFeedMonitor:
             # Image section
             img_container = _el(
                 "div",
-                "visual-feed-media relative aspect-video bg-slate-900 overflow-hidden"
+                "visual-feed-media relative aspect-video bg-black overflow-hidden"
                 + " cursor-pointer",
             )
             if image_url:
@@ -945,7 +945,7 @@ class VisualFeedMonitor:
             else:
                 img_container <= _el(
                     "div",
-                    "flex h-full w-full items-center justify-center bg-slate-800 text-[10px] text-slate-400",
+                    "flex h-full w-full items-center justify-center bg-black/80 text-[10px] text-ink-400",
                     "ไม่มีภาพ",
                 )
             img_container.bind(
@@ -963,8 +963,8 @@ class VisualFeedMonitor:
             # Title
             title_btn = _el(
                 "button",
-                "text-left text-xs font-bold leading-snug text-slate-800"
-                + " hover:text-blue-600 transition-colors cursor-pointer line-clamp-2",
+                "text-left text-xs font-bold leading-snug text-ink-800"
+                + " hover:text-brand-600 transition-colors cursor-pointer line-clamp-2",
             )
             title_btn.attrs["type"] = "button"
             title_btn.attrs["aria-label"] = f"เปิดดูกล้อง {title}"
@@ -979,18 +979,18 @@ class VisualFeedMonitor:
                 body,
                 _el(
                     "span",
-                    f"cctv-status inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold text-white {_image_freshness_status_class(image_freshness)}",
+                    f"cctv-status inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold {_image_freshness_status_class(image_freshness)}",
                     _image_freshness_label(image_freshness),
                 ),
             )
-            meta_div = _append(body, _el("div", "text-[10px] text-slate-500 truncate"))
+            meta_div = _append(body, _el("div", "text-[10px] text-ink-500 truncate"))
             meta_div.textContent = f"{coverage} · {source_lbl}"
             # Actions
             actions = _append(
                 body,
                 _el(
                     "div",
-                    "flex items-center gap-1 pt-1.5 border-t border-slate-100",
+                    "flex items-center gap-1 pt-1.5 border-t border-ink-100",
                 ),
             )
 
@@ -1014,7 +1014,7 @@ class VisualFeedMonitor:
                     actions,
                     _el(
                         "button",
-                        "btn btn-xs btn-ghost h-7 w-7 min-h-0 shrink-0 rounded-lg p-0 text-blue-600 hover:bg-blue-50 flex items-center justify-center",
+                        "btn btn-xs btn-ghost h-7 w-7 min-h-0 shrink-0 rounded-lg p-0 text-brand-600 hover:bg-brand-50 flex items-center justify-center",
                     ),
                 )
                 map_btn.attrs["type"] = "button"
@@ -1035,7 +1035,7 @@ class VisualFeedMonitor:
                     actions,
                     _el(
                         "button",
-                        "btn btn-xs btn-outline h-7 w-7 min-h-0 shrink-0 rounded-lg p-0 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 flex items-center justify-center",
+                        "btn btn-xs btn-outline h-7 w-7 min-h-0 shrink-0 rounded-lg p-0 border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 flex items-center justify-center",
                     ),
                 )
                 water_btn.attrs["type"] = "button"
@@ -1065,7 +1065,7 @@ class VisualFeedMonitor:
         # Image Container
         img_container = _el(
             "div",
-            "visual-feed-media relative aspect-video bg-slate-900 overflow-hidden rounded-xl shadow-sm"
+            "visual-feed-media relative aspect-video bg-black overflow-hidden rounded-xl shadow-sm"
             + " cursor-pointer",
         )
         if image_url:
@@ -1074,7 +1074,7 @@ class VisualFeedMonitor:
         else:
             img_container <= _el(
                 "div",
-                "flex h-full w-full items-center justify-center bg-slate-800 text-xs text-slate-400",
+                "flex h-full w-full items-center justify-center bg-black/80 text-xs text-ink-400",
                 "ไม่มีภาพตัวอย่าง",
             )
         img_container.bind(
@@ -1089,8 +1089,8 @@ class VisualFeedMonitor:
         # Title button
         title_btn = _el(
             "button",
-            "min-w-0 text-left text-sm font-bold leading-snug text-slate-900"
-            + " hover:text-blue-600 transition-colors cursor-pointer",
+            "min-w-0 text-left text-sm font-bold leading-snug text-ink-900"
+            + " hover:text-brand-600 transition-colors cursor-pointer",
         )
         title_btn.attrs["type"] = "button"
         title_btn.attrs["aria-label"] = f"เปิดดูกล้อง {title}"
@@ -1105,7 +1105,7 @@ class VisualFeedMonitor:
             body,
             _el(
                 "span",
-                f"cctv-status inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold text-white {_image_freshness_status_class(image_freshness)}",
+                f"cctv-status inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold {_image_freshness_status_class(image_freshness)}",
                 _image_freshness_label(image_freshness),
             ),
         )
@@ -1113,12 +1113,12 @@ class VisualFeedMonitor:
         if coverage and coverage != "—":
             meta_parts.append(coverage)
         meta_line = _append(
-            body, _el("p", "truncate text-[11px] font-medium text-slate-500")
+            body, _el("p", "truncate text-[11px] font-medium text-ink-500")
         )
         meta_line.textContent = " · ".join(meta_parts)
         attr = _attribution_text(feed)
         if attr:
-            attr_el = _append(body, _el("div", "text-[10px] text-slate-400"))
+            attr_el = _append(body, _el("div", "text-[10px] text-ink-400"))
             attr_el.textContent = f"ที่มา: {_text(attr)}"
 
         # Actions row
@@ -1126,7 +1126,7 @@ class VisualFeedMonitor:
             body,
             _el(
                 "div",
-                "flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-200",
+                "flex flex-wrap items-center gap-1.5 pt-2 border-t border-ink-200",
             ),
         )
 
@@ -1149,7 +1149,7 @@ class VisualFeedMonitor:
                 actions,
                 _el(
                     "button",
-                    "btn btn-sm btn-ghost h-9 min-h-0 w-9 shrink-0 rounded-lg p-0 text-blue-600 hover:bg-blue-50",
+                    "btn btn-sm btn-ghost h-9 min-h-0 w-9 shrink-0 rounded-lg p-0 text-brand-600 hover:bg-brand-50",
                 ),
             )
             map_btn.attrs["type"] = "button"
@@ -1168,7 +1168,7 @@ class VisualFeedMonitor:
                 actions,
                 _el(
                     "button",
-                    "btn btn-sm btn-outline h-9 min-h-0 shrink-0 gap-1 rounded-lg border-sky-200 bg-sky-50 px-2 text-xs text-sky-700 hover:bg-sky-100",
+                    "btn btn-sm btn-outline h-9 min-h-0 shrink-0 gap-1 rounded-lg border-brand-200 bg-brand-50 px-2 text-xs text-brand-700 hover:bg-brand-100",
                 ),
             )
             water_btn.attrs["type"] = "button"
@@ -1191,7 +1191,7 @@ class VisualFeedMonitor:
     def _image_view(self, image_url, title):
         wrapper = _el(
             "div",
-            "relative w-full aspect-video min-h-[140px] bg-slate-900 overflow-hidden flex items-center justify-center",
+            "relative w-full aspect-video min-h-[140px] bg-black overflow-hidden flex items-center justify-center",
         )
         image = _el("img", "block h-full w-full object-cover")
         # The panel is a nested scroll container; browser lazy-loading can
@@ -1205,7 +1205,7 @@ class VisualFeedMonitor:
             wrapper,
             _el(
                 "span",
-                "absolute bottom-2 left-2 rounded bg-slate-900/75 px-2 py-1 text-[10px] text-white",
+                "absolute bottom-2 left-2 rounded bg-black/70 px-2 py-1 text-[10px] text-white",
                 "กำลังโหลดภาพ...",
             ),
         )
@@ -1227,8 +1227,8 @@ class VisualFeedMonitor:
         # server's image_freshness, the one source of truth.
         image.attrs["data-image-state"] = "error"
         image.style.display = "none"
-        state.className = "flex flex-col items-center justify-center gap-1 text-slate-400 text-xs p-3 text-center"
-        state.html = """<i class="ph ph-video-camera-slash text-2xl text-slate-500"></i><span>ภาพไม่สามารถแสดงได้ในขณะนี้</span>"""
+        state.className = "flex flex-col items-center justify-center gap-1 text-ink-400 text-xs p-3 text-center"
+        state.html = """<i class="ph ph-video-camera-slash text-2xl text-ink-500"></i><span>ภาพไม่สามารถแสดงได้ในขณะนี้</span>"""
 
     def _selected_value(self, element_id):
         element = document.getElementById(element_id)
@@ -1240,7 +1240,7 @@ class VisualFeedMonitor:
             container.html = ""
             container <= _el(
                 "div",
-                "col-span-full flex min-h-32 items-center justify-center text-xs text-slate-500",
+                "col-span-full flex min-h-32 items-center justify-center text-xs text-ink-500",
                 message,
             )
 
@@ -1307,7 +1307,7 @@ class VisualFeedMonitor:
         if image_url:
             figure = _append(
                 container,
-                _el("figure", "is-entering overflow-hidden bg-slate-100"),
+                _el("figure", "is-entering overflow-hidden bg-ink-100"),
             )
             image_view = self._image_view(image_url, title)
             image_view.attrs["data-full-image-url"] = image_url
@@ -1315,7 +1315,7 @@ class VisualFeedMonitor:
         else:
             container <= _el(
                 "div",
-                "flex h-full w-full items-center justify-center bg-slate-800 text-xs text-slate-400",
+                "flex h-full w-full items-center justify-center bg-black/80 text-xs text-ink-400",
                 "ไม่มีภาพตัวอย่าง",
             )
         self._update_history_navigation()
@@ -1523,9 +1523,9 @@ class VisualFeedMonitor:
                 "button",
                 "cctv-day-card flex flex-col items-center justify-center min-w-[64px] sm:min-w-[78px] py-1.5 px-1.5 sm:px-2 rounded-xl border transition-all cursor-pointer select-none shrink-0 touch-manipulation active:scale-95"
                 + (
-                    " is-active bg-sky-50 text-sky-700 border-sky-300 ring-2 ring-sky-400/30 shadow-xs font-bold"
+                    " is-active bg-brand-50 text-brand-700 border-brand-300 ring-2 ring-brand-500/30 shadow-xs font-bold"
                     if is_active
-                    else " bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border-slate-200 shadow-2xs font-medium"
+                    else " bg-base-100 hover:bg-ink-100 text-ink-600 hover:text-ink-900 border-ink-200 shadow-2xs font-medium"
                 ),
             )
             btn.attrs["type"] = "button"
@@ -1533,10 +1533,10 @@ class VisualFeedMonitor:
             btn.attrs["data-date"] = d_iso
             btn.attrs["role"] = "tab"
             btn.attrs["aria-selected"] = "true" if is_active else "false"
-            top_color = "text-sky-600 font-bold" if is_active else "text-slate-700"
+            top_color = "text-brand-600 font-bold" if is_active else "text-ink-700"
             btn.html = (
                 f'<span class="text-[11px] leading-tight {top_color}">{top_text}</span>'
-                f'<span class="text-[10px] leading-tight text-slate-400 mt-0.5 font-mono">{bottom_text}</span>'
+                f'<span class="text-[10px] leading-tight text-ink-400 mt-0.5 font-mono">{bottom_text}</span>'
             )
             btn.bind("click", lambda ev, target_d=d_iso: self._on_select_day(target_d))
             rail <= btn
@@ -1878,7 +1878,7 @@ class VisualFeedMonitor:
             container,
             _el(
                 "div",
-                "flex h-full w-full flex-col items-center justify-center gap-3 bg-slate-50 p-6 text-center text-sm text-slate-500",
+                "flex h-full w-full flex-col items-center justify-center gap-3 bg-ink-50 p-6 text-center text-sm text-ink-500",
             ),
         )
         icon = _append(
@@ -1887,9 +1887,9 @@ class VisualFeedMonitor:
                 "i",
                 "ph "
                 + (
-                    "ph-circle-notch animate-spin text-sky-500"
+                    "ph-circle-notch animate-spin text-brand-600"
                     if loading
-                    else "ph-video-camera-slash text-slate-400"
+                    else "ph-video-camera-slash text-ink-400"
                 )
                 + " text-3xl",
             ),
@@ -1909,7 +1909,7 @@ class VisualFeedMonitor:
         container.html = ""
         figure = _append(
             container,
-            _el("figure", "is-entering overflow-hidden bg-slate-100"),
+            _el("figure", "is-entering overflow-hidden bg-ink-100"),
         )
         full_url = frame.get("image_url") or frame.get("thumbnail_url")
         image_url = full_url
@@ -2130,7 +2130,7 @@ class VisualFeedMonitor:
             else:
                 latest_container <= _el(
                     "div",
-                    "flex aspect-video items-center justify-center rounded-lg bg-slate-100 text-xs text-slate-500",
+                    "flex aspect-video items-center justify-center rounded-lg bg-ink-100 text-xs text-ink-500",
                     "ไม่มีภาพล่าสุด",
                 )
 

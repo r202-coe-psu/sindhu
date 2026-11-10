@@ -1,6 +1,6 @@
 """Opt-in read-only provider smoke check; prints sanitized summaries only.
 
-Run: .venv/bin/python -m tests.visual_feeds.live_smoke
+Run: .venv/bin/python -m tests.cctv.live_smoke
 Images are checked in memory and never saved; no Mongo/Redis writes.
 """
 
