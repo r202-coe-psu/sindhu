@@ -4,7 +4,7 @@ import datetime
 
 from .base import BaseMonitor
 from stations import metric_infos
-from maps.map import _haversine_distance
+from maps.cctv_pairing import pair_cameras
 import json
 
 
@@ -132,7 +132,7 @@ class WaterMonitor(BaseMonitor):
     """
 
     def find_matching_cctv(self, station):
-        """Find the nearest co-located CCTV camera for a given water station."""
+        """The CCTV camera linked to a water station (see pair_cameras)."""
         if (
             hasattr(self, "map")
             and self.map
@@ -142,29 +142,9 @@ class WaterMonitor(BaseMonitor):
         feeds = []
         if hasattr(self, "visual_feed_monitor") and self.visual_feed_monitor:
             feeds = getattr(self.visual_feed_monitor, "latest_feeds", [])
-        if not feeds:
-            return None
-        st_code = str(station.get("code") or "").strip().lower()
-        scoord_obj = station.get("coordinates")
-        s_coords = (
-            scoord_obj.get("coordinates") if isinstance(scoord_obj, dict) else None
-        )
-        best = None
-        min_dist = float("inf")
-        for feed in feeds:
-            c_code = str(feed.get("code") or "").strip().lower()
-            if st_code and c_code and st_code == c_code:
-                return feed
-            ccoord_obj = feed.get("coordinates")
-            c_coords = (
-                ccoord_obj.get("coordinates") if isinstance(ccoord_obj, dict) else None
-            )
-            if s_coords and c_coords and len(s_coords) >= 2 and len(c_coords) >= 2:
-                dist = _haversine_distance(s_coords, c_coords)
-                if dist <= 300 and dist < min_dist:
-                    min_dist = dist
-                    best = feed
-        return best
+        stations = (self.latest_data or {}).get("stations") or [station]
+        _station_of, camera_of = pair_cameras(feeds, stations)
+        return camera_of.get(station.get("id"))
 
     def focus_station(self, code, source=None):
         """Switch to water panel, scroll to the station card, and fly to marker."""
@@ -224,6 +204,9 @@ class WaterMonitor(BaseMonitor):
             document["toggle_rain_interpolation"].bind(
                 "change", self.on_toggle_rain_interpolation
             )
+
+        if "toggle_zones_layer" in document:
+            document["toggle_zones_layer"].bind("change", self.on_toggle_zones_layer)
 
         while self.running:
             print(f"monitor: wake up {datetime.datetime.now()}")
@@ -350,7 +333,7 @@ class WaterMonitor(BaseMonitor):
             return
         document["reservoir_data_list"].html = f"""
         <div class="flex flex-col items-center justify-center h-full text-center gap-2 px-4">
-            <i class="ph ph-warning-circle text-4xl text-amber-500"></i>
+            <i class="ph ph-warning-circle text-4xl text-warning"></i>
             <div class="text-sm font-medium text-ink-600">{message}</div>
         </div>
         """
@@ -360,41 +343,6 @@ class WaterMonitor(BaseMonitor):
             style = ev.target.value
             self.map.marker_style = style
             aio.run(self._update_and_filter())
-
-    def update_zone_shading_buttons(self, mode):
-        return self.sync_zone_shading_mode_ui(mode)
-
-    def sync_zone_shading_mode_ui(self, mode):
-        """Update toggle buttons styling based on current mode."""
-        if "zone_style_outline" in document and "zone_style_shaded" in document:
-            btn_outline = document["zone_style_outline"]
-            btn_shaded = document["zone_style_shaded"]
-            if mode == "outline":
-                btn_outline.classList.add(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_outline.classList.remove("text-ink-600")
-                btn_shaded.classList.remove(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_shaded.classList.add("text-ink-600")
-            else:
-                btn_shaded.classList.add(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_shaded.classList.remove("text-ink-600")
-                btn_outline.classList.remove(
-                    "bg-white", "shadow-sm", "text-brand-700", "font-bold"
-                )
-                btn_outline.classList.add("text-ink-600")
-
-    def on_zone_shading_mode_click(self, mode):
-        self.map.set_zone_shading_mode(mode)
-        self.update_zone_shading_buttons(mode)
-        try:
-            window.localStorage.setItem("sindhu_zone_shading_mode", mode)
-        except Exception:
-            pass
 
     def on_toggle_zones_layer(self, ev):
         checked = bool(ev.target.checked)
@@ -726,9 +674,9 @@ class WaterMonitor(BaseMonitor):
                         if v < 0:
                             display_text = f'{m_label}: <span class="font-medium text-ink-700">ต่ำกว่าตลิ่ง {abs(v):.2f} ม.</span>'
                         elif v > 0:
-                            display_text = f'{m_label}: <span class="font-medium text-red-600">ล้นตลิ่ง {v:.2f} ม.</span>'
+                            display_text = f'{m_label}: <span class="font-medium text-error">ล้นตลิ่ง {v:.2f} ม.</span>'
                         else:
-                            display_text = f'{m_label}: <span class="font-medium text-yellow-600">เสมอระดับตลิ่งพอดี</span>'
+                            display_text = f'{m_label}: <span class="font-medium text-warning">เสมอระดับตลิ่งพอดี</span>'
                     except:
                         display_text = f'{m_label}: <span class="font-medium text-ink-700">{val} ม.</span>'
                 else:
@@ -775,14 +723,14 @@ class WaterMonitor(BaseMonitor):
 
             html_content += f"""
             <div data-station-code="{station.get("code", "")}" data-station-source="{station.get("source", "")}"
-                class="bg-white border border-ink-100 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-brand-300 transition-all duration-200 cursor-pointer">
+                class="bg-base-100 border border-ink-100 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-brand-300 transition-all duration-200 cursor-pointer">
                 <div class="flex justify-between items-start mb-2">
                     <div>
                         <h3 class="font-bold text-ink-800 text-base">{name}</h3>
                         <div class="text-xs text-ink-500 mt-0.5">{location}</div>
                     </div>
                     <span class="badge gap-1 px-2 py-3 shadow-sm border border-ink-200" style="background-color: {hex_color}; color: {text_color};">
-                        <span class="w-2 h-2 rounded-full border border-ink-300" style="background-color: {'white'};"></span>{label}
+                        <span class="w-2 h-2 rounded-full border border-ink-300" style="background-color: var(--color-ink-950);"></span>{label}
                     </span>
                 </div>
                 <div class="mt-3 flex flex-wrap gap-2">
