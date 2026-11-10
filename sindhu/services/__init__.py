@@ -1,1 +1,1 @@
-from . import interpolations, metrics, tambons, visual_feeds, zones
+from . import interpolations, metrics, visual_feeds, zones

@@ -3,6 +3,18 @@ import math
 from sindhu import models
 
 
+def is_reference_zone(zone) -> bool:
+    """Reference boundaries are map context only, never flood zones.
+
+    A zone is a reference when zone_kind is "reference" or its metadata role
+    is "reference_boundary".
+    """
+    if getattr(zone, "zone_kind", None) == "reference":
+        return True
+    metadata = getattr(zone, "metadata", None) or {}
+    return metadata.get("role") == "reference_boundary"
+
+
 def _haversine(lat1, lon1, lat2, lon2):
     R = 6_371_000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
