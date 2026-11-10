@@ -524,7 +524,7 @@ class ShowAllZonesTests(unittest.TestCase):
         map_view.map = _PaneMap()
         map_view.leaflet = _ZoneLeaflet()
         map_view.zone_layers_by_id = {}
-        map_view._selected_zone_id = None
+        map_view._selected_zone_ids = []
         map_view._zone_renderer = None
         map_view.zones_visible = True
         map_view.show_all_zones(zones)

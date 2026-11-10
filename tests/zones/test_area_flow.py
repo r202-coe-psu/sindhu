@@ -207,7 +207,7 @@ class MonitorAreaFlowTests(unittest.TestCase):
                 "id": "z1",
                 "name_th": "Zone A",
                 "stations": [{"code": "S1"}, {"code": "S2"}],
-                "tambons": [{"code": "1", "name_th": "ควนรู", "amphoe_th": "X"}],
+                "tambons": ["ควนรู"],
             },
             {
                 "id": "z2",
@@ -256,7 +256,6 @@ class MonitorAreaFlowTests(unittest.TestCase):
         self._post(
             {
                 "zone": {"id": "z9", "name_th": "Undrawn", "boundary": SQUARE},
-                "tambon": None,
                 "nearby_stations": [{"code": "N1"}, {"code": "N2"}],
             }
         )
@@ -274,7 +273,6 @@ class MonitorAreaFlowTests(unittest.TestCase):
         self._post(
             {
                 "zone": {"id": "z1", "name_th": "Zone A", "boundary": SQUARE},
-                "tambon": None,
                 "nearby_stations": [],
             }
         )
@@ -288,7 +286,7 @@ class MonitorAreaFlowTests(unittest.TestCase):
 
         self.monitor.selected_zone_ids = ["z1"]
         self.monitor.selected_zone_codes = ["S1"]
-        self._post({"zone": None, "tambon": None, "nearby_stations": []})
+        self._post({"zone": None, "nearby_stations": []})
 
         asyncio.run(self.monitor.on_location_received(7.0, 100.0))
 
@@ -302,7 +300,6 @@ class MonitorAreaFlowTests(unittest.TestCase):
         self._post(
             {
                 "zone": {"id": "z1", "name_th": "Zone A", "boundary": SQUARE},
-                "tambon": {"code": "1", "name_th": "ควนรู"},
                 "nearby_stations": [],
             }
         )
@@ -311,7 +308,7 @@ class MonitorAreaFlowTests(unittest.TestCase):
 
         self.assertEqual(self.monitor.selected_zone_ids, ["z1"])
         self.assertEqual(self.monitor.selected_zone_codes, ["S1", "S2"])
-        self.assertEqual(self.messages[-1], "คุณอยู่ใน Zone A (ต.ควนรู)")
+        self.assertEqual(self.messages[-1], "คุณอยู่ใน Zone A")
 
     def test_select_area_with_two_zones_merges_codes(self):
         self.monitor.select_area(["z1", "z2"], "list")
