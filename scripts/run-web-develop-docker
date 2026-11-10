@@ -2,6 +2,9 @@
 export PATH="/venv/bin:$PATH"
 . /venv/bin/activate
 
+# image installs main deps only; watchdog/livereload are dev deps
+poetry install --no-interaction --only dev --no-root
+
 mkdir -p sindhu/web/static/brython_modules/
 poetry run brython-cli update --update-dir sindhu/web/static/brython_modules/
 
