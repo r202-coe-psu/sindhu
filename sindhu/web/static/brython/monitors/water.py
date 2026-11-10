@@ -626,7 +626,7 @@ class WaterMonitor(BaseMonitor):
     def build_metric_chips(self, station, metrics):
         comparison = bank_status.compare_station(station)
         bank_label = metric_infos.HTML_METRIC_NAMES["diff_wl_bank"]
-        chips = f"""<div class="text-xs px-2 py-1 rounded" style="color: {comparison["color"]}; background-color: {comparison["tint"]};">{bank_label}: <span class="font-semibold">{comparison["summary"]}</span></div>"""
+        chips = f"""<div class="text-xs px-2 py-1 rounded" style="{metric_infos.risk_badge_style(comparison["risk"])}">{bank_label}: <span class="font-semibold">{comparison["summary"]}</span></div>"""
 
         for om in metrics:
             m_name = om.get("metric_type")

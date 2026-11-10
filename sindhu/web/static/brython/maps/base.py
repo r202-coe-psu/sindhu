@@ -66,7 +66,7 @@ class BaseMap(LegendMixin, Map):
     def build_waterlevel_section(self, station):
         comparison = bank_status.compare_station(station)
         color = metric_infos.get_risk_level(comparison["risk"])["color"]
-        badge_style = f"color:color-mix(in oklab, {color} 55%, var(--color-ink-950)); background:color-mix(in oklab, {color} 24%, transparent);"
+        badge_style = metric_infos.risk_badge_style(comparison["risk"])
         diff_val = comparison["diff"]
 
         # Without a comparison a drawn water line would imply a reading we lack
@@ -118,7 +118,7 @@ class BaseMap(LegendMixin, Map):
         warn_row = f"""
         <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:var(--color-ink-500);">
             <span style="width:8px; height:2px; background:#f97316; flex:none;"></span>
-            <span>ใกล้ระดับตลิ่ง</span>
+            <span>เฝ้าระวัง</span>
             <b style="color:var(--color-ink-900); font-weight:600; margin-left:auto;">-{warn_drop:.2f} ม.</b>
         </div>
         """

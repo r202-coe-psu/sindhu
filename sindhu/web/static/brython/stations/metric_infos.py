@@ -552,6 +552,14 @@ RISK_LEVELS = [
 ]
 
 
+def risk_badge_style(risk):
+    color = get_risk_level(risk)["color"]
+    return (
+        f"color:color-mix(in oklab, {color} 55%, var(--color-ink-950)); "
+        f"background:color-mix(in oklab, {color} 24%, transparent);"
+    )
+
+
 def get_risk_level(risk):
     """Look up a risk level, falling back to the unknown one."""
     for level in RISK_LEVELS:

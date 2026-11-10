@@ -94,6 +94,18 @@ class WaterCardTests(unittest.TestCase):
         station["metadata"]["water_level_critical"] = 12.0
         self.assertIn("ล้นตลิ่ง · สูงกว่าตลิ่ง 0.50 ม.", _chips(station))
 
+    def test_bank_chip_and_tooltip_badge_take_the_marker_colour(self):
+        from stations import metric_infos
+
+        for reading in (10.0, 11.5, 12.5, -9.99):
+            with self.subTest(reading=reading):
+                station = _station(waterlevel=reading)
+                risk = bank_status.compare_station(station)["risk"]
+                style = metric_infos.risk_badge_style(risk)
+                self.assertIn(metric_infos.get_risk_level(risk)["color"], style)
+                self.assertIn(style, _chips(station))
+                self.assertIn(style, _section(station))
+
     def test_other_metrics_still_show(self):
         html = _chips(_station(waterlevel=11.6, rain=4.5))
         self.assertIn("4.50 มม.", html)

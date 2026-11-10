@@ -127,12 +127,6 @@ class NearBandTests(unittest.TestCase):
         self.assert_status(-0.81, 0.8, bank_status.STATUS_BELOW)
         self.assert_status(-1.7, 1.75, bank_status.STATUS_NEAR)
 
-    def test_chip_colour_follows_the_risk(self):
-        watch = bank_status.status_for_gap(-0.4)
-        overflow = bank_status.status_for_gap(1.0)
-        self.assertNotEqual(watch["color"], overflow["color"])
-        self.assertEqual(bank_status.status_for_gap(-0.5)["color"], watch["color"])
-
 
 class GapPriorityTests(unittest.TestCase):
     def gap(self, station):

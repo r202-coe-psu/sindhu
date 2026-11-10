@@ -62,14 +62,6 @@ _RISKS = {
     STATUS_UNKNOWN: RISK_UNKNOWN,
 }
 
-# (text colour, background tint)
-_COLORS = {
-    RISK_NORMAL: ("#15803d", "#dcfce7"),
-    RISK_WATCH: ("#c2410c", "#ffedd5"),
-    RISK_CRITICAL: ("#b91c1c", "#fee2e2"),
-    RISK_UNKNOWN: ("#475569", "#f1f5f9"),
-}
-
 
 def to_number(value):
     """Return `value` as a finite float, or None if it is not one."""
@@ -203,7 +195,6 @@ def near_bank_band(station):
 def _result(status, detail, diff=None, side=None, show_label=True):
     label = _LABELS[status]
     risk = _RISKS[status]
-    color, tint = _COLORS[risk]
     return {
         "status": status,
         "label": label,
@@ -212,8 +203,6 @@ def _result(status, detail, diff=None, side=None, show_label=True):
         "detail": detail,
         "summary": f"{label} · {detail}" if show_label else detail,
         "risk": risk,
-        "color": color,
-        "tint": tint,
         "gap_source": None,
         "near_band": None,
     }
