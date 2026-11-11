@@ -1286,9 +1286,13 @@ class Map:
             self.station_lines.append(line)
 
     def fly_to_user(self, on_found=None, on_error=None):
-        self.map.locate()
+        # Every bound handler fires on the next fix, so ignore repeat clicks.
+        if getattr(self, "_locating", False):
+            return
+        self._locating = True
 
         def on_location_found(e):
+            self._locating = False
             self.user_coord = (e.latlng.lat, e.latlng.lng)
 
             self.map.flyTo(self.user_coord, 16)
@@ -1325,14 +1329,16 @@ class Map:
                 on_found(self.user_coord[0], self.user_coord[1])
 
         def on_location_error(e):
+            self._locating = False
             self.map.off("locationfound", on_location_found)
             self.map.off("locationerror", on_location_error)
             if on_error:
                 on_error(e)
 
-        # ผูกเหตุการณ์
+        # Bind before locate(): Leaflet can fire locationerror synchronously.
         self.map.on("locationfound", on_location_found)
         self.map.on("locationerror", on_location_error)
+        self.map.locate()
 
     def zoom_out(self):
         self.map.zoomOut(1)

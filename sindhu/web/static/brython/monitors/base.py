@@ -15,6 +15,7 @@ from monitors.area import (
     SOURCE_LIST,
     SOURCE_LOCATION,
     SOURCE_MAP,
+    ZONE_PREFIX,
     build_area_options,
     location_message,
     merge_station_codes,
@@ -267,9 +268,17 @@ class BaseMonitor:
         if "area_selector" not in document:
             return
         select = document["area_selector"]
-        wanted = f"zone:{zone_ids[0]}" if len(zone_ids) == 1 else ALL_AREAS
+        wanted = f"{ZONE_PREFIX}{zone_ids[0]}" if len(zone_ids) == 1 else ALL_AREAS
+        # An undrawn /locate zone has no option; a missing value blanks the select.
+        if wanted not in [opt.value for opt in select.options]:
+            wanted = ALL_AREAS
         if select.value != wanted:
             select.value = wanted
+
+    def _next_area_seq(self):
+        """Mark a new area pick; an older pick still awaiting the API drops out."""
+        self._area_seq = getattr(self, "_area_seq", 0) + 1
+        return self._area_seq
 
     def select_area(self, zone_ids, source, message=None):
         """Single entry point: source is SOURCE_MAP, SOURCE_LIST or SOURCE_LOCATION."""
@@ -278,6 +287,7 @@ class BaseMonitor:
     async def _select_area(self, zone_ids, source, message=None, fallback_zone=None):
         """Select zones by id. `fallback_zone` (a /locate zone dict) is used
         when the id is not one of the drawn zones, so state stays consistent."""
+        seq = self._next_area_seq()
         ids = [str(z) for z in zone_ids or []]
         zones = [z for z in self.zones if str(z.get("id", "") or "") in ids]
         if not zones and fallback_zone:
@@ -300,6 +310,8 @@ class BaseMonitor:
             except Exception as e:
                 print(f"[Monitor] Zone stations error: {e}")
                 zone["stations"] = []
+        if seq != self._area_seq:
+            return False
 
         codes = merge_station_codes(zones)
         stations = [s for z in zones for s in (z.get("stations") or [])]
@@ -340,6 +352,7 @@ class BaseMonitor:
         self.select_area([zone.get("id")], SOURCE_MAP)
 
     def on_pin_mode_off(self):
+        self._next_area_seq()
         self.selected_zone_ids = []
         self.selected_zone_codes = None
         if "area_selector" in document:
@@ -366,6 +379,7 @@ class BaseMonitor:
         self.set_area_message(location_message(kind, error=e))
 
     async def on_location_received(self, lat, lng):
+        seq = self._next_area_seq()
         try:
             body = js.JSON.stringify({"latitude": lat, "longitude": lng})
             response = await aio.post(
@@ -373,6 +387,8 @@ class BaseMonitor:
                 data=body,
                 headers={"Content-Type": "application/json"},
             )
+            if seq != self._area_seq:
+                return
             if response.status != 0 and not 200 <= response.status < 300:
                 raise RuntimeError(f"locate returned HTTP {response.status}")
             data = json.loads(response.data)

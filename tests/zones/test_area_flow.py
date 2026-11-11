@@ -193,6 +193,29 @@ class FlyToUserTests(unittest.TestCase):
         self.assertEqual(self.map_view.map.handlers["locationfound"], [])
         self.assertEqual(self.map_view.map.handlers["locationerror"], [])
 
+    def test_repeat_clicks_while_locating_bind_one_handler_pair(self):
+        found = []
+        for _ in range(3):
+            self.map_view.fly_to_user(
+                on_found=lambda lat, lng: found.append((lat, lng)),
+                on_error=lambda e: None,
+            )
+        self.map_view.map.fire(
+            "locationfound", SimpleNamespace(latlng=SimpleNamespace(lat=1, lng=2))
+        )
+
+        self.assertEqual(self.map_view.map.located, 1)
+        self.assertEqual(found, [(1, 2)])
+
+    def test_synchronous_location_error_still_reaches_on_error(self):
+        errors = []
+        error = SimpleNamespace(code=2, message="unavailable")
+        self.map_view.map.locate = lambda: self.map_view.map.fire("locationerror", error)
+
+        self.map_view.fly_to_user(on_found=lambda a, b: None, on_error=errors.append)
+
+        self.assertEqual(errors, [error])
+
     def test_map_source_has_no_alert_call(self):
         source = MAP_SOURCE.read_text(encoding="utf-8")
         self.assertIsNone(re.search(r"\balert\s*\(", source))
@@ -317,6 +340,32 @@ class MonitorAreaFlowTests(unittest.TestCase):
         self.assertEqual(self.monitor.selected_zone_codes, ["S1", "S2", "S3"])
         filter_calls = [c for c in self.monitor.map.calls if c[0] == "filter_markers_by_codes"]
         self.assertEqual(filter_calls[-1][1], (["S1", "S2", "S3"],))
+
+    def test_slow_older_pick_does_not_overwrite_newer_pick(self):
+        self.monitor.zones[0]["stations"] = []  # zone A must fetch its stations
+        release = None
+
+        async def slow_get(url, cache=False):
+            await release.wait()
+            return _Response({"stations": [{"code": "S1"}]})
+
+        async def scenario():
+            nonlocal release
+            release = asyncio.Event()
+            sys.modules["browser"].aio.get = slow_get
+            older = asyncio.create_task(self.monitor._select_area(["z1"], SOURCE_LIST))
+            await asyncio.sleep(0)
+            await self.monitor._select_area(["z2"], SOURCE_LIST)
+            release.set()
+            return await older
+
+        try:
+            self.assertFalse(asyncio.run(scenario()))
+        finally:
+            sys.modules["browser"].aio.get = _AioStub.get
+
+        self.assertEqual(self.monitor.selected_zone_ids, ["z2"])
+        self.assertEqual(self.monitor.selected_zone_codes, ["S2", "S3"])
 
     def test_select_area_with_unknown_ids_selects_nothing(self):
         self.assertFalse(
