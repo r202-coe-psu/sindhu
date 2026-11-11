@@ -121,11 +121,19 @@ def _metric_values(station):
     return values
 
 
-def raw_water_level(station):
+def _raw_water_readings(station):
     values = _metric_values(station)
-    for metric_type in RAW_WATER_LEVEL_METRICS:
-        if values.get(metric_type) is not None:
-            return values[metric_type]
+    readings = [
+        to_number(values.get(metric_type)) for metric_type in RAW_WATER_LEVEL_METRICS
+    ]
+    return [reading for reading in readings if reading is not None]
+
+
+def raw_water_level(station):
+    for reading in _raw_water_readings(station):
+        level = to_water_level(reading)
+        if level is not None:
+            return level
     return None
 
 
@@ -138,7 +146,7 @@ def station_water_level(station):
 
     source = _source(station)
     if source in MSL_WATER_LEVEL_SOURCES:
-        return to_water_level(raw_water_level(station))
+        return raw_water_level(station)
     if source in DWR_SOURCES:
         stage = to_water_level(values.get("waterlevel"))
         gauge_zero = _to_reading(_metadata(station).get("zflowMsl"))
@@ -164,8 +172,7 @@ def etl_bank_gap(station):
     diff = _to_reading(values.get("diff_wl_bank"))
     if diff is None:
         return None
-    raw_water = to_number(raw_water_level(station))
-    if raw_water is not None and to_water_level(raw_water) is None:
+    if _raw_water_readings(station) and raw_water_level(station) is None:
         return None
     if _source(station) == "rid":
         critical = _to_reading(_metadata(station).get("water_level_critical"))
@@ -186,10 +193,7 @@ def near_bank_band(station):
         generated = critical * THAIWATER_GENERATED_WARNING_RATIO
         if abs(warning - generated) <= THAIWATER_GENERATED_WARNING_TOLERANCE_M:
             return DEFAULT_NEAR_BAND_M
-    band = round(critical - warning, 2)
-    if band > MAX_NEAR_BAND_M:
-        return DEFAULT_NEAR_BAND_M
-    return band
+    return min(round(critical - warning, 2), MAX_NEAR_BAND_M)
 
 
 def _result(status, detail, diff=None, side=None, show_label=True):

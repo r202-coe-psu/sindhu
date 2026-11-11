@@ -98,7 +98,7 @@ class WaterCardTests(unittest.TestCase):
         from stations import metric_infos
 
         expected = {
-            10.0: "#22c55e",
+            9.0: "#22c55e",
             11.5: "#f97316",
             12.5: "#ef4444",
             -9.99: "#9ca3af",

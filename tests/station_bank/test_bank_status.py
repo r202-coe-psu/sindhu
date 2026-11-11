@@ -267,6 +267,23 @@ class NoDataFilterTests(unittest.TestCase):
         for metric in bank_status.RAW_WATER_LEVEL_METRICS + ("diff_wl_bank",):
             self.assertIn(metric, bank_status.PUBLIC_HIDDEN_METRICS)
 
+    def test_unusable_msl_reading_does_not_hide_a_usable_one(self):
+        for msl in (0, -9.99):
+            with self.subTest(msl=msl):
+                station = _station(
+                    "thaiwater",
+                    metadata={"water_level_critical": 12.0},
+                    waterlevel_msl=msl,
+                    waterlevel=11.6,
+                    diff_wl_bank=-0.4,
+                )
+                self.assertEqual(bank_status.station_water_level(station), 11.6)
+                self.assertEqual(bank_status.raw_water_level(station), 11.6)
+                self.assertEqual(bank_status.etl_bank_gap(station), -0.4)
+                result = bank_status.compare_station(station)
+                self.assertEqual(result["status"], bank_status.STATUS_NEAR)
+                self.assertEqual(result["diff"], -0.4)
+
     def test_tolerates_malformed_stations(self):
         for station in ({}, {"metrics": None}, {"metrics": [None, {}]}):
             result = bank_status.compare_station(station)
@@ -289,7 +306,7 @@ class WarningBandTests(unittest.TestCase):
         self.assertEqual(self.band("rid", 11.2), 0.8)
 
     def test_unusable_warning_falls_back_to_one_metre(self):
-        for warning in (None, 12.0, 13.0, 0, -9.99, 9.99, 3.0):
+        for warning in (None, 12.0, 13.0, 0, -9.99):
             with self.subTest(warning=warning):
                 self.assertEqual(
                     self.band("rid", warning), bank_status.DEFAULT_NEAR_BAND_M
@@ -297,6 +314,24 @@ class WarningBandTests(unittest.TestCase):
 
     def test_band_up_to_the_ceiling_is_kept(self):
         self.assertEqual(self.band("rid", 10.0), bank_status.MAX_NEAR_BAND_M)
+
+    def test_wide_band_is_capped_at_the_ceiling(self):
+        for warning in (9.99, 3.0):
+            with self.subTest(warning=warning):
+                self.assertEqual(self.band("rid", warning), bank_status.MAX_NEAR_BAND_M)
+
+    def test_water_above_the_warning_inside_the_capped_band_is_near(self):
+        for warning in (10.0, 9.99, 3.0):
+            with self.subTest(warning=warning):
+                station = _station(
+                    metadata={
+                        "water_level_warning": warning,
+                        "water_level_critical": 12.0,
+                    },
+                    waterlevel=10.3,
+                )
+                result = bank_status.compare_station(station)
+                self.assertEqual(result["status"], bank_status.STATUS_NEAR)
 
     def test_thaiwater_warning_made_up_by_the_etl_is_ignored(self):
         for warning, critical in ((9.6, 12.0), (7.1, 8.88), (7.11, 8.88)):
