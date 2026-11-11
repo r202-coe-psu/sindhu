@@ -121,6 +121,20 @@ class LocateIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(zone is None or zone.zone_kind == "flood")
                 self.assertNotEqual(getattr(zone, "code", None), "hatyai-boundary")
 
+    async def test_zone_with_reference_role_is_treated_as_reference(self):
+        zone = models.Zone(
+            name="Ref by role",
+            code="ref-by-role",
+            boundary=REFERENCE,
+            zone_kind="flood",
+            status="active",
+            metadata={"role": "reference_boundary"},
+        )
+        await zone.insert()
+
+        self.assertIsNone(await zones_service.find_zone_by_location(100.4, 7.4))
+        self.assertEqual(await zones_service.find_stations_by_zone(zone), [])
+
     async def test_stored_tambon_names_round_trip(self):
         zone = await self._zone("zone-a")
         zone.tambons = ["ต.ควนรู", " คอหงส์ ", "ควนรู"]
