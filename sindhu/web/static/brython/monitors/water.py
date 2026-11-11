@@ -63,7 +63,7 @@ class WaterMonitor(BaseMonitor):
             return -1, None, None
 
         comparison = bank_status.compare_station(station)
-        waterlevel = bank_status.to_water_level(bank_status.raw_water_level(station))
+        waterlevel = bank_status.raw_water_level(station)
         return comparison["risk"], waterlevel, comparison["diff"]
 
     """

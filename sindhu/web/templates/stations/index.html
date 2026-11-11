@@ -123,6 +123,7 @@ const GAP_SOURCE_BADGES = {
 let stations = [];
 let selectedIds = new Set();
 let savingIds = new Set();
+let pendingBankLevels = new Map();
 
 function escapeHtml(value) {
     return String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -241,9 +242,16 @@ function metricValue(metrics, type) {
     return metrics[type] ? metrics[type].value : null;
 }
 
+function rawWaterReadings(metrics) {
+    return RAW_WATER_LEVEL_TYPES
+        .map(type => toNumber(metricValue(metrics, type)))
+        .filter(reading => reading !== null);
+}
+
 function rawWaterLevelValue(metrics) {
-    for (const type of RAW_WATER_LEVEL_TYPES) {
-        if (metrics[type]) return metrics[type].value;
+    for (const reading of rawWaterReadings(metrics)) {
+        const level = toWaterLevel(reading);
+        if (level !== null) return level;
     }
     return null;
 }
@@ -252,7 +260,7 @@ function mslWaterLevel(station, metrics) {
     const msl = toWaterLevel(metricValue(metrics, "waterlevel_msl"));
     if (msl !== null) return msl;
     const source = sourceOf(station);
-    if (MSL_WATER_LEVEL_SOURCES.includes(source)) return toWaterLevel(rawWaterLevelValue(metrics));
+    if (MSL_WATER_LEVEL_SOURCES.includes(source)) return rawWaterLevelValue(metrics);
     if (DWR_SOURCES.includes(source)) {
         const stage = toWaterLevel(metricValue(metrics, "waterlevel"));
         const gaugeZero = toReading((station.metadata || {}).zflowMsl);
@@ -275,9 +283,7 @@ function etlBankLevel(station) {
 function etlBankGap(station, metrics) {
     const diff = toReading(metricValue(metrics, "diff_wl_bank"));
     if (diff === null) return null;
-    const raw = rawWaterLevelValue(metrics);
-    const rawNumber = toNumber(raw);
-    if (rawNumber !== null && toWaterLevel(rawNumber) === null) return null;
+    if (rawWaterReadings(metrics).length && rawWaterLevelValue(metrics) === null) return null;
     if (sourceOf(station) === "rid") {
         const critical = toReading((station.metadata || {}).water_level_critical);
         const water = mslWaterLevel(station, metrics);
@@ -390,7 +396,8 @@ function renderRow(s) {
         ? s.issues.map(i => `<span class="badge badge-sm bg-amber-500/15 text-warning border-amber-500/40 whitespace-nowrap">${escapeHtml(i)}</span>`).join(" ")
         : '<span class="badge badge-sm bg-emerald-500/15 text-success border-emerald-500/40">ปกติ</span>';
     const saving = savingIds.has(s.id);
-    const bankValue = s.bank_level === null || s.bank_level === undefined ? "" : s.bank_level;
+    const bankSaving = pendingBankLevels.has(s.id);
+    const bankValue = (bankSaving ? pendingBankLevels.get(s.id) : s.bank_level) ?? "";
 
     return `
     <tr class="${s.is_visible ? "" : "bg-ink-50/60 text-ink-500"} hover:bg-brand-50/40">
@@ -402,7 +409,7 @@ function renderRow(s) {
         <td><span class="badge badge-sm badge-ghost whitespace-nowrap">${escapeHtml(SOURCE_LABELS[s.source] || s.source)}</span></td>
         <td>${levelHtml}</td>
         <td>
-            <input type="number" step="0.01" min="${BANK_LEVEL_MIN}" max="${BANK_LEVEL_MAX}" class="input input-bordered input-xs w-24" value="${escapeHtml(bankValue)}" aria-label="ระดับตลิ่งของ ${escapeHtml(s.name_th || s.name || s.code)}" onbeforeinput="blockNonNumeric(event)" onchange="saveBankLevel('${s.id}', this)" />
+            <input id="bank-level-${s.id}" type="number" step="0.01" min="${BANK_LEVEL_MIN}" max="${BANK_LEVEL_MAX}" class="input input-bordered input-xs w-24" value="${escapeHtml(bankValue)}" aria-label="ระดับตลิ่งของ ${escapeHtml(s.name_th || s.name || s.code)}" onbeforeinput="blockNonNumeric(event)" ${bankSaving ? "disabled" : ""} onchange="saveBankLevel('${s.id}', this)" />
             <div class="text-[11px] text-ink-400 mt-0.5">${escapeHtml(etlBankHint(s))}</div>
         </td>
         <td id="gap-source-${s.id}">${GAP_SOURCE_BADGES[gapSource(s)]}</td>
@@ -474,11 +481,9 @@ function blockNonNumeric(event) {
     if (event.data && /[^0-9.\-]/.test(event.data)) event.preventDefault();
 }
 
-const bankLevelSaves = new Map();
-
 async function saveBankLevel(id, input) {
     const station = stations.find(s => s.id === id);
-    if (!station) return;
+    if (!station || pendingBankLevels.has(id)) return;
     const previous = station.bank_level ?? null;
     const raw = input.value.trim();
     const value = raw === "" ? null : Number(raw);
@@ -494,26 +499,28 @@ async function saveBankLevel(id, input) {
         return;
     }
 
-    const attempt = (bankLevelSaves.get(id) || 0) + 1;
-    bankLevelSaves.set(id, attempt);
-    const isLatest = () => bankLevelSaves.get(id) === attempt;
-
+    const hadFocus = document.activeElement === input;
+    pendingBankLevels.set(id, value);
     input.disabled = true;
     try {
         await apiPut(`/v1/stations/${id}/bank-level`, { bank_level: value });
-        if (!isLatest()) return;
         station.bank_level = value;
         const sourceCell = document.getElementById(`gap-source-${id}`);
         if (sourceCell) sourceCell.innerHTML = GAP_SOURCE_BADGES[gapSource(station)];
         showToast(value === null ? "ล้างระดับตลิ่งแล้ว" : "บันทึกระดับตลิ่งแล้ว");
     } catch (e) {
         console.error(e);
-        if (!isLatest()) return;
-        input.value = station.bank_level ?? "";
         showToast("บันทึกไม่สำเร็จ: " + e.message, true);
         if (e instanceof SessionExpiredError) redirectToLogin();
     } finally {
-        input.disabled = false;
+        pendingBankLevels.delete(id);
+        const current = document.getElementById(`bank-level-${id}`);
+        if (current) {
+            current.value = station.bank_level ?? "";
+            current.disabled = false;
+            const focusIsFree = !document.activeElement || document.activeElement === document.body;
+            if (hadFocus && focusIsFree) current.focus();
+        }
     }
 }
 

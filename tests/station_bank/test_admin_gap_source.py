@@ -46,6 +46,18 @@ CASES = {
         {"waterlevel": 11.6},
     ),
     "nothing": ("rid", None, {}, {"waterlevel": 11.6}),
+    "dead msl beside a usable level": (
+        "thaiwater",
+        None,
+        {},
+        {"waterlevel_msl": -9.99, "waterlevel": 11.6, "diff_wl_bank": -0.4},
+    ),
+    "zero msl beside a usable level": (
+        "rid",
+        12.0,
+        {},
+        {"waterlevel_msl": 0, "waterlevel": 11.6},
+    ),
     "dead sensor with derived diff": (
         "rid",
         None,
