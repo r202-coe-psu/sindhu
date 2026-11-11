@@ -47,6 +47,9 @@ class BaseZone(BaseModel):
     @field_validator("tambons", mode="before")
     @classmethod
     def _normalize_tambons(cls, v):
+        # A bare string would otherwise be split into one tag per character.
+        if v is not None and not isinstance(v, (list, tuple)):
+            raise ValueError("tambons must be a list of names")
         return normalize_tambon_names(v)
 
 

@@ -72,6 +72,10 @@ class TambonTagTests(unittest.TestCase):
 
         self.assertEqual(form.tambons, ["คลองแห"])
 
+    def test_bare_string_is_rejected_not_split_into_letters(self):
+        with self.assertRaises(ValueError):
+            _zone_schema(tambons="คอหงส์")
+
 
 class LocateTests(unittest.IsolatedAsyncioTestCase):
     async def test_inside_zone_populates_zone_and_its_tambons(self):
