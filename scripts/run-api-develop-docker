@@ -3,6 +3,6 @@ export PATH="/venv/bin:$PATH"
 . /venv/bin/activate
 # export APP_ENV=dev
 
-APP_ENV=dev poetry run uvicorn sindhu.cmd.api:app --host 0.0.0.0 
+APP_ENV=dev poetry run uvicorn sindhu.cmd.api:app 
 
 
