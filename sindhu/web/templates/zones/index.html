@@ -64,7 +64,13 @@
             <h3 class="text-base font-bold text-ink-800 mb-3" id="form-title">สร้างลุ่มน้ำใหม่</h3>
             <form id="zone-form" class="space-y-3">
                 <input type="hidden" id="zone-id" />
-                <input type="hidden" id="zone-kind" value="flood" />
+                <div>
+                    <label class="label text-xs font-semibold text-ink-600 py-0.5">ประเภทโซน</label>
+                    <select id="zone-kind" class="select select-bordered select-sm w-full">
+                        <option value="flood">โซนน้ำท่วม (flood)</option>
+                        <option value="reference">กรอบอ้างอิง (reference) — ไม่นับเป็นโซนเฝ้าระวัง</option>
+                    </select>
+                </div>
 
                 {# Status Switch #}
                 <div class="p-3 bg-ink-50 border border-ink-200 rounded-xl flex items-center justify-between">
@@ -138,6 +144,12 @@
                     <div id="station-chips" class="flex flex-wrap gap-1 mt-2"></div>
                 </div>
                 <div>
+                    <label class="label text-xs font-semibold text-ink-600 py-0.5">ตำบลในโซน</label>
+                    <input id="tambon-input" type="text" autocomplete="off" class="input input-bordered input-sm w-full" placeholder="พิมพ์ชื่อตำบล (เช่น คอหงส์) แล้วกด Enter..." />
+                    <div id="tambon-input-error" class="text-xs text-error hidden mt-1"></div>
+                    <div id="tambon-chips" class="flex flex-wrap gap-1 mt-2"></div>
+                </div>
+                <div>
                     <label class="label text-xs font-semibold text-ink-600 py-0.5">ขอบเขต (GeoJSON) — วาดบนแผนที่ หรือวาง/แก้พิกัด</label>
                     <textarea id="zone-boundary" rows="4" class="textarea textarea-bordered textarea-sm w-full font-mono text-xs leading-tight" placeholder='{"type":"Polygon","coordinates":[[[100.5,7.0],[100.6,7.0],[100.6,7.1],[100.5,7.0]]]}'></textarea>
                     <div id="boundary-json-error" class="text-xs text-error hidden mt-1"></div>
@@ -163,7 +175,7 @@ const API_URL = "{{ api_url }}";
 const TOKEN_URL = "{{ url_for('accounts.get_token') }}";
 const HATYAI_BOUNDARY_URL = "{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}";
 let map, drawnItems, drawControl, editingZoneId = null, allZoneLayers = {}, referenceBoundaryLayer = null;
-let allStations = [], selectedStationIds = [];
+let allStations = [], selectedStationIds = [], selectedTambons = [];
 
 async function fetchStations() {
     try {
@@ -221,6 +233,46 @@ function addStation(id) {
 function removeStation(id) {
     selectedStationIds = selectedStationIds.filter(x => x !== id);
     renderStationChips();
+}
+
+function escapeHtml(v) {
+    return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function tambonLabel(name) {
+    return "ต." + name;
+}
+
+function renderTambonChips() {
+    const el = document.getElementById("tambon-chips");
+    el.innerHTML = selectedTambons.map((name, i) => `<span class="badge badge-sm badge-primary gap-1 py-2">
+            ${escapeHtml(tambonLabel(name))}
+            <button type="button" class="rounded-full px-1 hover:bg-primary-content/20" onclick="removeTambon(${i})">&times;</button>
+        </span>`).join("");
+}
+
+function showTambonInputError(msg) {
+    const el = document.getElementById("tambon-input-error");
+    if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
+    el.textContent = msg;
+    el.classList.remove("hidden");
+}
+
+/* Same rule as the API, so the chip shows what will be saved. */
+function addTambon(text) {
+    const name = (text || "").trim().replace(/^(ตำบล|ต\.)\s*/, "");
+    if (!name) {
+        showTambonInputError("กรุณาพิมพ์ชื่อตำบล");
+        return;
+    }
+    showTambonInputError(null);
+    if (!selectedTambons.includes(name)) selectedTambons.push(name);
+    renderTambonChips();
+}
+
+function removeTambon(i) {
+    selectedTambons.splice(i, 1);
+    renderTambonChips();
 }
 
 async function authHeaders() {
@@ -502,6 +554,7 @@ async function quickToggleZoneStatus(id) {
         zone_kind: z.zone_kind || "flood",
         boundary: z.boundary,
         station_ids: stationIds,
+        tambons: (z.tambons || []),
         metadata: z.metadata || {},
         status: newStatus,
     };
@@ -526,6 +579,7 @@ function renderZoneList(zones) {
         const isActive = (z.status === "active");
         const isRef = isReferenceZone(z);
         const stationCount = (z.stations || []).length;
+        const tambonNames = (z.tambons || []).map(tambonLabel);
 
         /* Quick toggle button for status */
         const statusBtn = isActive
@@ -558,6 +612,7 @@ function renderZoneList(zones) {
                             <span class="font-mono">${z.code}</span>
                             <span>•</span>
                             <span>${stationCount} สถานี</span>
+                            ${isRef ? '' : `<span>•</span><span title="${escapeHtml(tambonNames.join(', '))}">${tambonNames.length} ตำบล</span>`}
                         </div>
                         <div class="flex items-center gap-1.5 mt-2">
                             ${statusBtn}
@@ -752,6 +807,9 @@ function editZone(id) {
     document.getElementById("station-search").value = "";
     document.getElementById("station-dropdown").classList.add("hidden");
     renderStationChips();
+    selectedTambons = [...(z.tambons || [])];
+    document.getElementById("tambon-input").value = "";
+    renderTambonChips();
     setBoundaryText(z.boundary);
     showJsonError(null);
     document.getElementById("form-title").textContent = "แก้ไขลุ่มน้ำ: " + (z.name_th || z.name);
@@ -788,6 +846,9 @@ function resetForm() {
     document.getElementById("zone-boundary").value = "";
     selectedStationIds = [];
     renderStationChips();
+    selectedTambons = [];
+    document.getElementById("tambon-input").value = "";
+    renderTambonChips();
     document.getElementById("station-dropdown").classList.add("hidden");
     document.getElementById("form-title").textContent = "สร้างลุ่มน้ำใหม่";
     document.getElementById("btn-cancel").classList.add("hidden");
@@ -832,6 +893,18 @@ document.addEventListener("DOMContentLoaded", function() {
         setTimeout(() => document.getElementById("station-dropdown").classList.add("hidden"), 150);
     });
 
+    const tambonInput = document.getElementById("tambon-input");
+    tambonInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            addTambon(tambonInput.value);
+            tambonInput.value = "";
+        }
+    });
+    tambonInput.addEventListener("blur", () => {
+        if (tambonInput.value.trim()) { addTambon(tambonInput.value); tambonInput.value = ""; }
+    });
+
     document.getElementById("zone-form").addEventListener("submit", async function(e) {
         e.preventDefault();
         const boundaryRaw = document.getElementById("zone-boundary").value.trim();
@@ -861,6 +934,7 @@ document.addEventListener("DOMContentLoaded", function() {
             zone_kind: document.getElementById("zone-kind").value || "flood",
             boundary: boundaryGeom,
             station_ids: selectedStationIds,
+            tambons: selectedTambons,
             metadata: updatedMeta,
             status: status,
         };

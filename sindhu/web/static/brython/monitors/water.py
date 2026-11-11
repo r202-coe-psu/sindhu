@@ -424,6 +424,8 @@ class WaterMonitor(BaseMonitor):
         return keys
 
     def apply_marker_filters(self, zone_codes=None):
+        if zone_codes is None:
+            zone_codes = self.selected_zone_codes
         self.map.filter_markers_by_keys(self.visible_marker_keys(zone_codes))
 
     def stations_by_code(self):
@@ -530,6 +532,8 @@ class WaterMonitor(BaseMonitor):
         zone_geojson["properties"]["fillOpacity"] = level["fill_opacity"]
 
     def render_data_list(self, filter_codes=None):
+        if filter_codes is None:
+            filter_codes = self.selected_zone_codes
         if "reservoir_data_list" not in document:
             return
 
@@ -539,7 +543,8 @@ class WaterMonitor(BaseMonitor):
         stations = self.latest_data.get("stations") or []
         stations = [s for s in stations if s and isinstance(s, dict)]
         if filter_codes is not None:
-            stations = [s for s in stations if s.get("code") in filter_codes]
+            wanted = set(str(c) for c in filter_codes)
+            stations = [s for s in stations if str(s.get("code")) in wanted]
 
         selected_source = self.get_selected_source()
         stations = [

@@ -1,4 +1,4 @@
-from browser import aio, timer, document, ajax, window
+from browser import aio, timer, document, ajax, window, html
 import javascript as js
 
 import datetime
@@ -6,6 +6,21 @@ import json
 from urllib.parse import urlencode
 
 from maps.base import BaseMap
+from monitors.area import (
+    ALL_AREAS,
+    MSG_DENIED,
+    MSG_ERROR,
+    MSG_IN_ZONE,
+    MSG_OUTSIDE,
+    SOURCE_LIST,
+    SOURCE_LOCATION,
+    SOURCE_MAP,
+    ZONE_PREFIX,
+    build_area_options,
+    location_message,
+    merge_station_codes,
+    zone_ids_for_value,
+)
 
 
 class BaseMonitor:
@@ -35,6 +50,9 @@ class BaseMonitor:
 
         self.params = None
         self.zones = []
+        # Area filter: None codes means "all areas" (no filtering).
+        self.selected_zone_ids = []
+        self.selected_zone_codes = None
         self.apis = {
             "system_settings": f"{self.api_url}/v1/system_settings",
             "locate": f"{self.api_url}/v1/zones/locate",
@@ -96,7 +114,7 @@ class BaseMonitor:
             await self.load_rivers()
 
             if "my_locate" in document and not getattr(self, "_locate_bound", False):
-                document["my_locate"].bind("click", lambda ev: self.map.fly_to_user())
+                document["my_locate"].bind("click", self.on_my_locate_click)
                 self._locate_bound = True
 
             if hasattr(self, "visual_feed_monitor") and self.visual_feed_monitor:
@@ -172,6 +190,7 @@ class BaseMonitor:
 
         self.zones = flood_zones
         self.map.show_all_zones(self.zones, on_select=self.on_zone_selected)
+        self.populate_area_selector()
         await self.load_reference_boundary()
         if hasattr(self.map, "fit_to_hatyai_bounds"):
             self.map.fit_to_hatyai_bounds()
@@ -194,47 +213,178 @@ class BaseMonitor:
 
     load_default_reference_boundary = load_reference_boundary
 
-    def on_zone_selected(self, zone):
-        """Called when a user clicks a zone polygon on the map."""
-        aio.run(self.load_zone_stations(zone))
+    """
+    ===========================================================================
+    Area selection (map click, dropdown, my location)
+    ===========================================================================
+    """
 
-    async def load_zone_stations(self, zone):
+    def populate_area_selector(self):
+        if "area_selector" not in document:
+            return
+        select = document["area_selector"]
+        current = select.value
+        select.clear()
+        groups = {}
+        for opt in build_area_options(self.zones):
+            node = html.OPTION(opt["label"], value=opt["value"])
+            if opt["group"] is None:
+                select <= node
+                continue
+            if opt["group"] not in groups:
+                groups[opt["group"]] = html.OPTGROUP(label=opt["group"])
+                select <= groups[opt["group"]]
+            groups[opt["group"]] <= node
+        select.value = current
+        if not getattr(self, "_area_bound", False):
+            select.bind("change", self.on_area_change)
+            self._area_bound = True
+
+    def on_area_change(self, ev):
+        value = ev.target.value
+        if value == ALL_AREAS:
+            self.reset_area()
+            return
+        zone_ids = zone_ids_for_value(self.zones, value)
+        if zone_ids:
+            self.select_area(zone_ids, SOURCE_LIST)
+
+    def reset_area(self):
+        self.map.reset_all()
+        self.on_pin_mode_off()
+
+    def set_area_message(self, text=None):
+        if "area_message" not in document:
+            return
+        box = document["area_message"]
+        if text:
+            box.text = text
+            box.classList.remove("hidden")
+        else:
+            box.text = ""
+            box.classList.add("hidden")
+
+    def _sync_area_selector(self, zone_ids):
+        if "area_selector" not in document:
+            return
+        select = document["area_selector"]
+        wanted = f"{ZONE_PREFIX}{zone_ids[0]}" if len(zone_ids) == 1 else ALL_AREAS
+        # An undrawn /locate zone has no option; a missing value blanks the select.
+        if wanted not in [opt.value for opt in select.options]:
+            wanted = ALL_AREAS
+        if select.value != wanted:
+            select.value = wanted
+
+    def _next_area_seq(self):
+        """Mark a new area pick; an older pick still awaiting the API drops out."""
+        self._area_seq = getattr(self, "_area_seq", 0) + 1
+        return self._area_seq
+
+    def select_area(self, zone_ids, source, message=None):
+        """Single entry point: source is SOURCE_MAP, SOURCE_LIST or SOURCE_LOCATION."""
+        aio.run(self._select_area(zone_ids, source, message))
+
+    async def _select_area(
+        self, zone_ids, source, message=None, fallback_zone=None, stations=None
+    ):
+        """Select zones by id. `fallback_zone` (a /locate zone dict) is used
+        when the id is not one of the drawn zones, so state stays consistent.
+        `stations` overrides the zones' own lists, e.g. /locate's active,
+        distance-sorted stations."""
+        seq = self._next_area_seq()
+        ids = [str(z) for z in zone_ids or []]
+        zones = [z for z in self.zones if str(z.get("id", "") or "") in ids]
+        if not zones and fallback_zone:
+            zones = [fallback_zone]
+        if not zones:
+            return False
+
         # `Zone.stations` is only filled in when an admin links stations by
         # hand, so fall back to resolving the members geographically.
-        stations = zone.get("stations", []) or []
-        zone_id = str(zone.get("id", "") or "")
-
-        if not stations and zone_id:
+        for zone in zones:
+            if stations is not None or zone.get("stations"):
+                continue
+            zone_id = str(zone.get("id", "") or "")
+            if not zone_id:
+                zone["stations"] = []
+                continue
             try:
                 response = await aio.get(f"{self.apis['zones']}/{zone_id}/stations")
-                stations = json.loads(response.data).get("stations", [])
+                zone["stations"] = json.loads(response.data).get("stations", [])
             except Exception as e:
                 print(f"[Monitor] Zone stations error: {e}")
-                stations = []
+                zone["stations"] = []
+        if seq != self._area_seq:
+            return False
 
-        if stations:
-            codes = []
-            for station in stations:
-                code = station.get("code", None)
-                if code:
-                    codes.append(str(code))
-            if codes:
-                self.map.filter_markers_by_codes(codes)
+        if stations is None:
+            stations = [s for z in zones for s in (z.get("stations") or [])]
+        codes = merge_station_codes([{"stations": stations}])
+
+        self.selected_zone_ids = [str(z.get("id")) for z in zones]
+        self.selected_zone_codes = codes
+        # A location pick keeps the flyTo(user, 16) view, so only highlight.
+        highlighted = self.map.select_zones(
+            self.selected_zone_ids, fit_bounds=source == SOURCE_LIST
+        )
+        if not highlighted and fallback_zone and fallback_zone.get("boundary"):
+            zone_geojson = {
+                "type": "Feature",
+                "properties": {
+                    "name": fallback_zone.get("name_th") or fallback_zone.get("name", "")
+                },
+                "geometry": fallback_zone["boundary"],
+            }
+            if hasattr(self, "update_zone_properties"):
+                self.update_zone_properties(zone_geojson, stations)
+            self.map.show_zone(zone_geojson)
+        if source != SOURCE_LIST:
+            self._sync_area_selector(self.selected_zone_ids)
+        self.set_area_message(message)
+
+        self.map.filter_markers_by_codes(codes)
+        if codes:
             self.on_zone_stations_found(stations)
         else:
-            # Say the zone is empty rather than silently falling back to the
+            # Say the area is empty rather than silently falling back to the
             # unfiltered map, which reads as "the click did nothing".
-            self.map.filter_markers_by_codes([])
-            self.on_zone_stations_empty(zone)
+            names = ", ".join(z.get("name_th") or z.get("name") or "" for z in zones)
+            self.on_zone_stations_empty({"name_th": names})
+        return True
+
+    def on_zone_selected(self, zone):
+        """Called when a user clicks a zone polygon on the map."""
+        self.select_area([zone.get("id")], SOURCE_MAP)
 
     def on_pin_mode_off(self):
+        self._next_area_seq()
+        self.selected_zone_ids = []
+        self.selected_zone_codes = None
+        if "area_selector" in document:
+            document["area_selector"].value = ALL_AREAS
+        self.set_area_message(None)
         self.map.show_all_markers()
         self.on_zone_stations_cleared()
 
     def on_map_pinned(self, lat, lng):
         aio.run(self.on_location_received(lat, lng))
 
+    def on_my_locate_click(self, ev):
+        self.set_area_message(None)
+        self.map.fly_to_user(
+            on_found=self.on_my_location_found, on_error=self.on_my_location_error
+        )
+
+    def on_my_location_found(self, lat, lng):
+        aio.run(self.on_location_received(lat, lng))
+
+    def on_my_location_error(self, e):
+        # GeolocationPositionError.PERMISSION_DENIED == 1
+        kind = MSG_DENIED if getattr(e, "code", None) == 1 else MSG_ERROR
+        self.set_area_message(location_message(kind, error=e))
+
     async def on_location_received(self, lat, lng):
+        seq = self._next_area_seq()
         try:
             body = js.JSON.stringify({"latitude": lat, "longitude": lng})
             response = await aio.post(
@@ -242,7 +392,11 @@ class BaseMonitor:
                 data=body,
                 headers={"Content-Type": "application/json"},
             )
-            data = js.JSON.parse(response.data)
+            if seq != self._area_seq:
+                return
+            if response.status != 0 and not 200 <= response.status < 300:
+                raise RuntimeError(f"locate returned HTTP {response.status}")
+            data = json.loads(response.data)
 
             zone = data.get("zone", None)
             nearby_stations = data.get("nearby_stations", [])
@@ -251,18 +405,18 @@ class BaseMonitor:
 
             if zone:
                 zone_name = zone.get("name_th") or zone.get("name", "")
-                # The zone is already drawn by load_zones, so highlight it
-                # instead of stacking a second polygon on top of it.
                 zone_id = str(zone.get("id", "") or "")
-                if not self.map.select_zone(zone_id, fit_bounds=False):
-                    zone_geojson = {
-                        "type": "Feature",
-                        "properties": {"name": zone_name},
-                        "geometry": zone["boundary"],
-                    }
-                    if hasattr(self, "update_zone_properties"):
-                        self.update_zone_properties(zone_geojson, nearby_stations)
-                    self.map.show_zone(zone_geojson)
+                message = location_message(MSG_IN_ZONE, zone=zone)
+                # Same path for drawn and undrawn zones. The server's list is
+                # already active-only and sorted by distance, so it wins over
+                # the zone's unfiltered GET /zones stations.
+                await self._select_area(
+                    [zone_id],
+                    SOURCE_LOCATION,
+                    message,
+                    fallback_zone=dict(zone),
+                    stations=[s for s in nearby_stations or [] if s and s.get("code")],
+                )
 
                 mark = self.map.user_mark
                 if mark and not isinstance(mark, list):
@@ -272,26 +426,18 @@ class BaseMonitor:
 
                 if nearby_stations and len(nearby_stations) > 0:
                     self.map.show_station_paths((lat, lng), nearby_stations)
-                    codes = []
-                    for s in nearby_stations:
-                        code = s.get("code", None)
-                        if code:
-                            codes.append(str(code))
-                    if codes:
-                        self.map.filter_markers_by_codes(codes)
-
-                self.on_zone_stations_found(nearby_stations)
             else:
-                self.map.show_all_markers()
-                self.on_zone_stations_cleared()
+                self.on_pin_mode_off()
                 self.map.show_reset_button(False)
+                self.set_area_message(location_message(MSG_OUTSIDE))
                 mark = self.map.user_mark
                 if mark and not isinstance(mark, list):
                     mark.setPopupContent(
-                        '<div class="text-sm text-warning font-semibold"><i class="ph ph-warning"></i> ไม่พบลุ่มน้ำสำหรับตำแหน่งนี้</div>'
+                        '<div class="text-sm text-warning font-semibold"><i class="ph ph-warning"></i> นอกพื้นที่ Zone</div>'
                     ).openPopup()
         except Exception as e:
             print(f"[Monitor] Locate error: {e}")
+            self.set_area_message(location_message(MSG_ERROR, error=e))
 
         self.set_map_loading(False)
 

@@ -1,4 +1,4 @@
-from browser import alert, window
+from browser import window
 from html import escape as escape_html
 import re
 import json
@@ -147,7 +147,7 @@ class Map:
 
         self.zone_layers_by_id = {}
         self.reference_boundary_layer = None
-        self._selected_zone_id = None
+        self._selected_zone_ids = []
         self._on_zone_select = None
         self._zone_renderer = None
         self.zones_visible = True
@@ -249,7 +249,7 @@ class Map:
             return False
 
         entry["risk"] = level
-        state = "selected" if self._selected_zone_id == str(zone_id) else "normal"
+        state = "selected" if str(zone_id) in self._selected_zone_ids else "normal"
         self._apply_zone_style(str(zone_id), state)
         return True
 
@@ -587,7 +587,7 @@ class Map:
 
     def _make_zone_hover(self, zone_id, entering):
         def handler(e):
-            if self._pin_mode_active or self._selected_zone_id == zone_id:
+            if self._pin_mode_active or zone_id in self._selected_zone_ids:
                 return
             entry = self.zone_layers_by_id.get(zone_id)
             if not entry:
@@ -612,16 +612,23 @@ class Map:
         return handler
 
     def select_zone(self, zone_id, fit_bounds=True):
-        zone_id = str(zone_id)
-        entry = self.zone_layers_by_id.get(zone_id)
-        if not entry:
+        return self.select_zones([zone_id], fit_bounds)
+
+    def select_zones(self, zone_ids, fit_bounds=True):
+        """Highlight one or more zones and (optionally) fit their union bounds."""
+        ids = []
+        for zone_id in zone_ids or []:
+            zone_id = str(zone_id)
+            if zone_id in self.zone_layers_by_id and zone_id not in ids:
+                ids.append(zone_id)
+        if not ids:
             return False
 
-        self._selected_zone_id = zone_id
+        self._selected_zone_ids = ids
         # The other zones keep their normal dashed outline: they stay visible
         # and clickable so a different zone can be picked straight away.
         for key, other in self.zone_layers_by_id.items():
-            if key == zone_id:
+            if key in ids:
                 self._apply_zone_style(key, "selected")
                 if other.get("casing"):
                     other["casing"].bringToFront()
@@ -630,13 +637,20 @@ class Map:
                 self._apply_zone_style(key)
 
         if fit_bounds:
-            self.map.fitBounds(entry["layer"].getBounds(), self.fit_bounds_options())
+            bounds = None
+            for key in ids:
+                b = self.zone_layers_by_id[key]["layer"].getBounds()
+                if bounds is None:
+                    bounds = self.leaflet.latLngBounds(b.getSouthWest(), b.getNorthEast())
+                else:
+                    bounds.extend(b)
+            self.map.fitBounds(bounds, self.fit_bounds_options())
 
         self.show_reset_button()
         return True
 
     def clear_zone_selection(self):
-        self._selected_zone_id = None
+        self._selected_zone_ids = []
         for zone_id in self.zone_layers_by_id:
             self._apply_zone_style(zone_id)
 
@@ -646,7 +660,7 @@ class Map:
         for entry in self.zone_layers_by_id.values():
             self._set_zone_entry_visible(entry, False)
         self.zone_layers_by_id = {}
-        self._selected_zone_id = None
+        self._selected_zone_ids = []
 
     def __del__(self):
         self.map.remove()
@@ -1271,10 +1285,14 @@ class Map:
             ).addTo(self.map)
             self.station_lines.append(line)
 
-    def fly_to_user(self):
-        self.map.locate()
+    def fly_to_user(self, on_found=None, on_error=None):
+        # Every bound handler fires on the next fix, so ignore repeat clicks.
+        if getattr(self, "_locating", False):
+            return
+        self._locating = True
 
         def on_location_found(e):
+            self._locating = False
             self.user_coord = (e.latlng.lat, e.latlng.lng)
 
             self.map.flyTo(self.user_coord, 16)
@@ -1307,15 +1325,20 @@ class Map:
 
             self.map.off("locationfound", on_location_found)
             self.map.off("locationerror", on_location_error)
+            if on_found:
+                on_found(self.user_coord[0], self.user_coord[1])
 
         def on_location_error(e):
-            alert(f"ไม่สามารถระบุตำแหน่งได้: {e.message}")
+            self._locating = False
             self.map.off("locationfound", on_location_found)
             self.map.off("locationerror", on_location_error)
+            if on_error:
+                on_error(e)
 
-        # ผูกเหตุการณ์
+        # Bind before locate(): Leaflet can fire locationerror synchronously.
         self.map.on("locationfound", on_location_found)
         self.map.on("locationerror", on_location_error)
+        self.map.locate()
 
     def zoom_out(self):
         self.map.zoomOut(1)
