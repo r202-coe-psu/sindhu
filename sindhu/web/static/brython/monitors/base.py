@@ -284,9 +284,13 @@ class BaseMonitor:
         """Single entry point: source is SOURCE_MAP, SOURCE_LIST or SOURCE_LOCATION."""
         aio.run(self._select_area(zone_ids, source, message))
 
-    async def _select_area(self, zone_ids, source, message=None, fallback_zone=None):
+    async def _select_area(
+        self, zone_ids, source, message=None, fallback_zone=None, stations=None
+    ):
         """Select zones by id. `fallback_zone` (a /locate zone dict) is used
-        when the id is not one of the drawn zones, so state stays consistent."""
+        when the id is not one of the drawn zones, so state stays consistent.
+        `stations` overrides the zones' own lists, e.g. /locate's active,
+        distance-sorted stations."""
         seq = self._next_area_seq()
         ids = [str(z) for z in zone_ids or []]
         zones = [z for z in self.zones if str(z.get("id", "") or "") in ids]
@@ -298,7 +302,7 @@ class BaseMonitor:
         # `Zone.stations` is only filled in when an admin links stations by
         # hand, so fall back to resolving the members geographically.
         for zone in zones:
-            if zone.get("stations"):
+            if stations is not None or zone.get("stations"):
                 continue
             zone_id = str(zone.get("id", "") or "")
             if not zone_id:
@@ -313,8 +317,9 @@ class BaseMonitor:
         if seq != self._area_seq:
             return False
 
-        codes = merge_station_codes(zones)
-        stations = [s for z in zones for s in (z.get("stations") or [])]
+        if stations is None:
+            stations = [s for z in zones for s in (z.get("stations") or [])]
+        codes = merge_station_codes([{"stations": stations}])
 
         self.selected_zone_ids = [str(z.get("id")) for z in zones]
         self.selected_zone_codes = codes
@@ -402,15 +407,15 @@ class BaseMonitor:
                 zone_name = zone.get("name_th") or zone.get("name", "")
                 zone_id = str(zone.get("id", "") or "")
                 message = location_message(MSG_IN_ZONE, zone=zone)
-                # Same path for drawn and undrawn zones; an undrawn one falls
-                # back to the response's own stations (or nearby codes).
-                fallback = dict(zone)
-                if not fallback.get("stations"):
-                    fallback["stations"] = [
-                        s for s in nearby_stations or [] if s and s.get("code")
-                    ]
+                # Same path for drawn and undrawn zones. The server's list is
+                # already active-only and sorted by distance, so it wins over
+                # the zone's unfiltered GET /zones stations.
                 await self._select_area(
-                    [zone_id], SOURCE_LOCATION, message, fallback_zone=fallback
+                    [zone_id],
+                    SOURCE_LOCATION,
+                    message,
+                    fallback_zone=dict(zone),
+                    stations=[s for s in nearby_stations or [] if s and s.get("code")],
                 )
 
                 mark = self.map.user_mark

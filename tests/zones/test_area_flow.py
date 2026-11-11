@@ -319,18 +319,23 @@ class MonitorAreaFlowTests(unittest.TestCase):
         self.assertIn("show_all_markers", self.monitor.map.names())
         self.assertEqual(self.messages[-1], location_message(MSG_OUTSIDE))
 
-    def test_zone_response_selects_that_zone(self):
+    def test_zone_response_selects_that_zone_with_server_stations(self):
+        # Drawn z1 links S1 and S2; the server dropped inactive S1 and sorted
+        # by distance, so its list wins over the zone's own GET /zones list.
+        found = []
+        self.monitor.on_zone_stations_found = found.append
         self._post(
             {
                 "zone": {"id": "z1", "name_th": "Zone A", "boundary": SQUARE},
-                "nearby_stations": [],
+                "nearby_stations": [{"code": "S2", "distance": 10}],
             }
         )
 
         asyncio.run(self.monitor.on_location_received(7.05, 100.05))
 
         self.assertEqual(self.monitor.selected_zone_ids, ["z1"])
-        self.assertEqual(self.monitor.selected_zone_codes, ["S1", "S2"])
+        self.assertEqual(self.monitor.selected_zone_codes, ["S2"])
+        self.assertEqual(found, [[{"code": "S2", "distance": 10}]])
         self.assertEqual(self.messages[-1], "คุณอยู่ใน Zone A")
 
     def test_select_area_with_two_zones_merges_codes(self):
