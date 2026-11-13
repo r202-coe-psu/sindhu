@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import datetime as dt
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
 import httpx
 
@@ -18,6 +20,7 @@ from sindhu.services.cctv_catalog import (
     RID_SOURCE,
     get_camera,
 )
+from sindhu.services.cctv_providers import dwr
 from sindhu.services.cctv_sources import (
     BANGKOK,
     CctvSources,
@@ -44,8 +47,8 @@ def _response(request: httpx.Request, payload: object, status_code: int = 200):
 
 
 class CctvCatalogTests(unittest.TestCase):
-    def test_catalog_is_exactly_28_hatyai_cctv_and_two_dwr_records(self):
-        self.assertEqual(len(HATYAI_CAMERAS), 28)
+    def test_catalog_is_exactly_42_hatyai_cctv_and_two_dwr_records(self):
+        self.assertEqual(len(HATYAI_CAMERAS), 42)
         self.assertEqual(len(DWR_CAMERAS), 2)
         self.assertEqual(
             {camera["upstream_id"] for camera in DWR_CAMERAS},
@@ -94,13 +97,9 @@ class RidSourceTests(unittest.IsolatedAsyncioTestCase):
             records = await CctvSources(client, clock=lambda: NOW).latest(RID_SOURCE)
 
         self.assertEqual(len(records), len(RID_CAMERAS))
-        self.assertTrue(
-            all(record["captured_at"] is None for record in records)
-        )
+        self.assertTrue(all(record["captured_at"] is None for record in records))
         self.assertTrue(all("image_checked_at" not in record for record in records))
-        self.assertTrue(
-            all(record["history_supported"] is False for record in records)
-        )
+        self.assertTrue(all(record["history_supported"] is False for record in records))
 
 
 class HatyaiSourceTests(unittest.IsolatedAsyncioTestCase):
@@ -126,7 +125,7 @@ class HatyaiSourceTests(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(transport=transport) as client:
             records = await CctvSources(client, clock=lambda: NOW).latest(HATYAI_SOURCE)
 
-        self.assertEqual(len(records), 28)
+        self.assertEqual(len(records), 42)
         self.assertEqual(
             {record["slug"] for record in records},
             {camera["slug"] for camera in HATYAI_CAMERAS},
@@ -223,7 +222,7 @@ class HatyaiSourceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.exception.code, "invalid_catalog")
         self.assertNotIn("items", str(error.exception))
 
-    async def test_history_uses_bangkok_date_exact_limit_and_chronological_order(self):
+    async def test_history_returns_latest_photo_set_in_chronological_order(self):
         fixture = _json_fixture("hatyai_history.json")
         observed: dict[str, object] = {}
 
@@ -234,17 +233,17 @@ class HatyaiSourceTests(unittest.IsolatedAsyncioTestCase):
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             result = await CctvSources(client, clock=lambda: NOW).history(
-                HATYAI_SOURCE, "22", "2026-09-03"
+                HATYAI_SOURCE, "22"
             )
 
-        self.assertEqual(
-            observed["params"],
-            {"id": "22", "date": "2026-09-03", "items": "144", "show": "144"},
-        )
+        self.assertEqual(observed["params"], {"camId": "22"})
         self.assertFalse(result["possibly_truncated"])
+        captured = [frame["captured_at"] for frame in result["frames"]]
+        self.assertEqual(captured, sorted(captured))
+        self.assertIn("2026-09-03T03:05:00Z", captured)
         self.assertEqual(
-            [frame["captured_at"] for frame in result["frames"]],
-            ["2026-09-03T03:05:00Z", "2026-09-03T04:05:00Z"],
+            result["available_dates"],
+            sorted({_bangkok_date(value) for value in captured}),
         )
         self.assertNotIn("fixture-secret", json.dumps(result))
         self.assertTrue(
@@ -253,22 +252,23 @@ class HatyaiSourceTests(unittest.IsolatedAsyncioTestCase):
 
         async def limited_handler(request: httpx.Request) -> httpx.Response:
             photos = []
-            for minute in range(145):
+            for minute in range(105):
                 photos.append(
                     {
-                        "atDate": f"2026-09-03T08:{minute % 60:02d}:00",
+                        "atDate": f"2026-09-0{1 + minute // 50} 08:{minute % 50:02d}:00",
                         "photoUrl": f"https://photo.hatyaicityclimate.org/cctv/{minute}.jpg",
                     }
                 )
-            return _response(request, {"count": 145, "photos": photos})
+            return _response(request, {"count": 105, "photos": photos})
 
         async with httpx.AsyncClient(
             transport=httpx.MockTransport(limited_handler)
         ) as client:
             limited = await CctvSources(client, clock=lambda: NOW).history(
-                HATYAI_SOURCE, 22, dt.date(2026, 9, 3)
+                HATYAI_SOURCE, 22
             )
-        self.assertEqual(len(limited["frames"]), 144)
+        self.assertEqual(len(limited["frames"]), 100)
+        self.assertEqual(limited["available_dates"], ["2026-09-01", "2026-09-02"])
         self.assertTrue(limited["possibly_truncated"])
 
     async def test_history_empty_is_success_and_upstream_error_is_typed(self):
@@ -279,10 +279,8 @@ class HatyaiSourceTests(unittest.IsolatedAsyncioTestCase):
             transport=httpx.MockTransport(empty_handler)
         ) as client:
             self.assertEqual(
-                await CctvSources(client, clock=lambda: NOW).history(
-                    HATYAI_SOURCE, 22, "2026-09-03"
-                ),
-                {"frames": [], "possibly_truncated": False},
+                await CctvSources(client, clock=lambda: NOW).history(HATYAI_SOURCE, 22),
+                {"frames": [], "available_dates": [], "possibly_truncated": False},
             )
 
         async def error_handler(request: httpx.Request) -> httpx.Response:
@@ -292,24 +290,14 @@ class HatyaiSourceTests(unittest.IsolatedAsyncioTestCase):
             transport=httpx.MockTransport(error_handler)
         ) as client:
             with self.assertRaises(SourceError) as error:
-                await CctvSources(client, clock=lambda: NOW).history(
-                    HATYAI_SOURCE, 22, "2026-09-03"
-                )
+                await CctvSources(client, clock=lambda: NOW).history(HATYAI_SOURCE, 22)
         self.assertEqual(error.exception.code, "upstream_http_error")
         self.assertNotIn("fixture-secret", str(error.exception))
 
-    async def test_history_rejects_invalid_and_out_of_window_dates(self):
-        async def handler(request: httpx.Request) -> httpx.Response:
-            self.fail("date validation should happen before a request")
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            sources = CctvSources(client, clock=lambda: NOW)
-            with self.assertRaises(SourceError) as invalid:
-                await sources.history(HATYAI_SOURCE, 22, "2026-02-30")
-            with self.assertRaises(SourceError) as old:
-                await sources.history(HATYAI_SOURCE, 22, "2026-08-04")
-        self.assertEqual(invalid.exception.code, "invalid_history_date")
-        self.assertEqual(old.exception.code, "history_date_out_of_window")
+def _bangkok_date(value: str) -> str:
+    parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return (parsed + dt.timedelta(hours=7)).date().isoformat()
 
 
 class DwrSourceTests(unittest.IsolatedAsyncioTestCase):
@@ -360,6 +348,26 @@ class DwrSourceTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("userinfo", serialized)
         self.assertEqual(len([call for call in calls if "snapshot" in call[1]]), 1)
 
+    async def test_a_hung_snapshot_path_degrades_only_its_camera(self):
+        list_fixture = _json_fixture("dwr_list.json")
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url == httpx.URL(DWR_LIST_URL):
+                return _response(request, list_fixture)
+            await asyncio.sleep(5)
+            return _response(request, {})
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            with patch.object(dwr, "CAMERA_SNAPSHOT_BUDGET_SECONDS", 0.05):
+                records = await CctvSources(client, clock=lambda: NOW).latest(
+                    DWR_SOURCE
+                )
+
+        hung = next(record for record in records if record["upstream_id"] == DWR_ID)
+        self.assertEqual(hung["availability"], "degraded")
+        self.assertEqual(hung["provider_status"], "snapshot_unavailable")
+        self.assertIsNone(hung["image_url"])
+
     async def test_snapshot_uses_validated_path_official_proxy_and_jpeg_validation(
         self,
     ):
@@ -385,6 +393,91 @@ class DwrSourceTests(unittest.IsolatedAsyncioTestCase):
             body = await CctvSources(client, clock=lambda: NOW).snapshot(DWR_ID)
         self.assertEqual(body, jpeg)
         self.assertEqual(observed["json"], {"path": "/TA200303/2026/9/3/11_0.jpg"})
+
+    async def _path_endpoint_client(self, path_answers, observed):
+        """DWR mock whose snapshot-path endpoint answers from ``path_answers`` in order."""
+        paths = _json_fixture("dwr_snapshot_paths.json")
+        jpeg = base64.b64decode(
+            (FIXTURES / "dwr_snapshot.jpg.b64").read_text(encoding="ascii")
+        )
+        answers = list(path_answers)
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith(f"/snapshot/{DWR_ID}"):
+                observed["path_calls"] = observed.get("path_calls", 0) + 1
+                answer = answers.pop(0) if answers else answers_default
+                if answer == "ok":
+                    return _response(request, paths[DWR_ID])
+                if answer == "malformed":
+                    return _response(request, {"value": "/not/a/valid/path.jpg"})
+                return httpx.Response(answer, request=request)
+            observed["image_json"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                headers={"content-type": "image/jpeg"},
+                content=jpeg,
+                request=request,
+            )
+
+        answers_default = 404
+        return httpx.AsyncClient(transport=httpx.MockTransport(handler)), jpeg
+
+    async def test_snapshot_path_is_retried_after_a_transient_failure(self):
+        observed: dict[str, object] = {}
+        client, jpeg = await self._path_endpoint_client([404, "ok"], observed)
+        with patch("sindhu.services.cctv_providers.dwr.SNAPSHOT_PATH_RETRY_DELAY", 0):
+            async with client:
+                body = await CctvSources(client, clock=lambda: NOW).snapshot(DWR_ID)
+
+        self.assertEqual(body, jpeg)
+        self.assertEqual(observed["path_calls"], 2)
+
+    async def test_snapshot_path_gives_up_after_three_attempts(self):
+        observed: dict[str, object] = {}
+        client, _ = await self._path_endpoint_client([], observed)
+        with patch("sindhu.services.cctv_providers.dwr.SNAPSHOT_PATH_RETRY_DELAY", 0):
+            async with client:
+                with self.assertRaises(SourceError) as error:
+                    await CctvSources(client, clock=lambda: NOW).snapshot(DWR_ID)
+
+        self.assertEqual(error.exception.code, "upstream_http_error")
+        self.assertEqual(observed["path_calls"], 3)
+
+    async def test_malformed_snapshot_path_is_not_retried(self):
+        observed: dict[str, object] = {}
+        client, _ = await self._path_endpoint_client(["malformed", "ok"], observed)
+        with patch("sindhu.services.cctv_providers.dwr.SNAPSHOT_PATH_RETRY_DELAY", 0):
+            async with client:
+                with self.assertRaises(SourceError) as error:
+                    await CctvSources(client, clock=lambda: NOW).snapshot(DWR_ID)
+
+        self.assertEqual(error.exception.code, "invalid_snapshot_path")
+        self.assertEqual(observed["path_calls"], 1)
+
+    async def test_snapshot_token_is_the_validated_path_and_skips_the_lookup(self):
+        observed: dict[str, object] = {}
+        client, jpeg = await self._path_endpoint_client(["ok"], observed)
+        async with client:
+            sources = CctvSources(client, clock=lambda: NOW)
+            token = await sources.snapshot_token(DWR_ID)
+            body = await sources.snapshot(DWR_ID, token)
+
+        self.assertEqual(token, "/TA200303/2026/9/3/11_0.jpg")
+        self.assertEqual(body, jpeg)
+        self.assertEqual(observed["path_calls"], 1)
+        self.assertEqual(observed["image_json"], {"path": token})
+
+    async def test_snapshot_rejects_a_token_for_another_camera(self):
+        observed: dict[str, object] = {}
+        client, _ = await self._path_endpoint_client([], observed)
+        async with client:
+            with self.assertRaises(SourceError) as error:
+                await CctvSources(client, clock=lambda: NOW).snapshot(
+                    DWR_ID, "/TA200304/2026/9/3/11_0.jpg"
+                )
+
+        self.assertEqual(error.exception.code, "invalid_snapshot_path")
+        self.assertNotIn("image_json", observed)
 
     async def test_snapshot_rejects_redirect_mime_magic_and_size(self):
         async def redirect_handler(request: httpx.Request) -> httpx.Response:

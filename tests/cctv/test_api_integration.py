@@ -1,6 +1,7 @@
 """Real ASGI -> service -> providers; only the external HTTP servers are mocked."""
 
 import datetime as dt
+from email.utils import format_datetime
 import json
 import unittest
 from unittest.mock import patch
@@ -47,19 +48,19 @@ def upstream_handler(request, *, history_date=None, source_failure=None):
         ]
         return httpx.Response(200, json={"count": len(items), "items": items})
     if path == "/api/flood/cam":
-        requested = request.url.params.get("date", date.isoformat())
+        assert dict(request.url.params) == {"camId": "9"}
         return httpx.Response(
             200,
             json={
-                "cameraId": int(request.url.params["id"]),
+                "cameraId": int(request.url.params["camId"]),
                 "token": "fixture-secret-not-real",
                 "photos": [
                     {
-                        "atDate": f"{requested} 02:00:00",
+                        "atDate": f"{date} 02:00:00",
                         "photoUrl": "https://hatyaicityclimate.org/floodphoto/cam/2.jpg",
                     },
                     {
-                        "atDate": f"{requested} 01:00:00",
+                        "atDate": f"{date} 01:00:00",
                         "photoUrl": "https://hatyaicityclimate.org/floodphoto/cam/1.jpg",
                     },
                 ],
@@ -107,7 +108,15 @@ def upstream_handler(request, *, history_date=None, source_failure=None):
     if path.startswith("/CCTV/") and path.endswith("/image.cgi"):
         code = path.split("/")[2]
         if code in {camera["code"] for camera in RID_CAMERAS}:
-            return httpx.Response(200, content=b"GIF89a" + b"fixture")
+            # STN08 stopped writing images, like the real camera did.
+            written = (now - dt.timedelta(days=2 if code == "STN08" else 0)).astimezone(
+                dt.timezone.utc
+            )
+            return httpx.Response(
+                200,
+                content=b"GIF89a" + b"fixture",
+                headers={"last-modified": format_datetime(written, usegmt=True)},
+            )
     return httpx.Response(404)
 
 
@@ -116,7 +125,7 @@ class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
         response = await self.api.get("/v1/visual-feeds?has_coordinates=true")
         self.assertEqual(response.status_code, 200, response.text)
         feeds = response.json()["visual_feeds"]
-        self.assertEqual(len(feeds), 40)
+        self.assertEqual(len(feeds), 54)
         for feed in feeds:
             longitude, latitude = feed["coordinates"]["coordinates"]
             self.assertTrue(100 < longitude < 101)
@@ -132,7 +141,7 @@ class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
         )
         missing = await self.api.get("/v1/visual-feeds?has_coordinates=false")
         self.assertEqual(missing.json()["count"], 1)
-        self.assertEqual(missing.json()["visual_feeds"][0]["slug"], "kalyanamit")
+        self.assertEqual(missing.json()["visual_feeds"][0]["slug"], "citycam02")
         self.assertIsNone(missing.json()["visual_feeds"][0]["coordinates"])
 
     async def asyncSetUp(self):
@@ -171,12 +180,19 @@ class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.headers["cache-control"], "no-store")
         payload = response.json()
-        self.assertEqual(payload["count"], 41)
+        self.assertEqual(payload["count"], 55)
         self.assertEqual({f["media_type"] for f in payload["visual_feeds"]}, {"cctv"})
         self.assertNotIn("image_checked_at", response.text)
+        # Freshness comes from capture time alone: camera 3's photo is two
+        # hours old and RID STN08's Last-Modified is two days old.
+        stale = {("hatyai_city_climate", "3"), ("rid", "STN08")}
         for feed in payload["visual_feeds"]:
-            expected_freshness = "stale" if feed["source"] == "rid" else "fresh"
-            self.assertEqual(feed["image_freshness"], expected_freshness)
+            expected_freshness = (
+                "stale" if (feed["source"], feed["upstream_id"]) in stale else "fresh"
+            )
+            self.assertEqual(
+                feed["image_freshness"], expected_freshness, feed["upstream_id"]
+            )
         for banned in (
             "fixture-secret",
             "raw_payload",
@@ -199,7 +215,12 @@ class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(len(response.json()["frames"]), 2)
         self.assertNotIn("token", response.text)
-        for date in ("bad", "1900-01-01", "9999-12-31"):
+        old = await self.api.get(
+            "/v1/visual-feeds/hatyai_city_climate/9/history?date=1900-01-01"
+        )
+        self.assertEqual(old.status_code, 200, old.text)
+        self.assertEqual(old.json()["frames"], [])
+        for date in ("bad", "9999-12-31"):
             r = await self.api.get(
                 f"/v1/visual-feeds/hatyai_city_climate/9/history?date={date}"
             )
@@ -209,7 +230,7 @@ class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
         self.failure = "dwr"
         r = await self.api.get("/v1/visual-feeds")
         self.assertEqual(r.status_code, 200, r.text)
-        self.assertEqual(r.json()["count"], 39)
+        self.assertEqual(r.json()["count"], 53)
         self.assertEqual(
             r.json()["source_health"]["dwr"]["error"], "source_unavailable"
         )
@@ -239,6 +260,37 @@ class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
         again = await self.api.get(url, headers={"if-none-match": r.headers["etag"]})
         self.assertEqual(again.status_code, 304)
         self.assertEqual(again.content, b"")
+
+    async def test_unchanged_snapshot_answers_304_without_fetching_the_image(self):
+        url = f"/v1/visual-feeds/dwr/{DWR_IDS[0]}/snapshot"
+        first = await self.api.get(url)
+        self.assertEqual(first.status_code, 200, first.text)
+
+        def image_fetches():
+            return [c for c in self.upstream_calls if c[1].endswith("/file/image/cctv")]
+
+        def path_lookups():
+            return [c for c in self.upstream_calls if "/reportCctv/snapshot/" in c[1]]
+
+        images_before, paths_before = len(image_fetches()), len(path_lookups())
+        again = await self.api.get(
+            url, headers={"if-none-match": first.headers["etag"]}
+        )
+
+        self.assertEqual(again.status_code, 304)
+        self.assertEqual(again.headers["etag"], first.headers["etag"])
+        self.assertEqual(len(image_fetches()), images_before)
+        self.assertEqual(len(path_lookups()), paths_before + 1)
+
+    async def test_snapshot_etag_follows_the_image_path_not_the_bytes(self):
+        first = await self.api.get(f"/v1/visual-feeds/dwr/{DWR_IDS[0]}/snapshot")
+        second = await self.api.get(f"/v1/visual-feeds/dwr/{DWR_IDS[0]}/snapshot")
+        # Same JPEG bytes in the fixture, but another camera has another dated path.
+        other = await self.api.get(f"/v1/visual-feeds/dwr/{DWR_IDS[1]}/snapshot")
+
+        self.assertEqual(first.content, other.content)
+        self.assertEqual(first.headers["etag"], second.headers["etag"])
+        self.assertNotEqual(first.headers["etag"], other.headers["etag"])
 
     async def test_rid_snapshot_etag_and_content_type(self):
         url = "/v1/visual-feeds/rid/STN04/snapshot"

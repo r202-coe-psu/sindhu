@@ -1,0 +1,65 @@
+{% extends "/base/base_layout.html" %}
+
+{#
+  Layout for pages whose content is a map that fills the whole window.
+  The sidebar and header of default_page.html become small cards floating on
+  the map.  Anything marked `map-ui` is hidden while the map's ⛶ control has
+  the page in focus mode (`body.map-focus`).
+#}
+{% block body %}
+<div class="map-page">
+  {% block content %}{% endblock content %}
+
+  {# Brand card — replaces the sidebar header #}
+  <div class="map-ui map-card map-brand-card">
+    <button id="map_menu_btn" type="button" class="btn btn-square btn-ghost btn-sm text-ink-600 hover:text-brand-600 hover:bg-brand-50"
+      aria-expanded="false" aria-controls="map_menu" aria-label="เปิดเมนู">
+      <i class="ph ph-list text-xl" aria-hidden="true"></i>
+    </button>
+    <a href="{{ url_for('sites.index') }}" class="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity">
+      <img src="{{ 'images/logo.png' | static_url }}" alt="" class="w-8 h-8 shrink-0">
+      <span class="font-bold text-ink-900 whitespace-nowrap truncate">{{ config['APP_TITLE'] }}</span>
+    </a>
+  </div>
+
+  {# Menu card — the sidebar's links, opened from the brand card #}
+  <nav id="map_menu" class="map-ui map-card map-menu-card hidden" aria-label="เมนูหลัก">
+    {% include "components/main_menu.html" %}
+  </nav>
+
+  {# User card — replaces the header's login button / user dropdown #}
+  <div class="map-ui map-card map-user-card">
+    {% include "components/user_menu.html" %}
+  </div>
+
+  <div class="map-focus-hint" role="status">กด Esc หรือปุ่ม <i class="ph ph-corners-in" aria-hidden="true"></i> เพื่อแสดงเมนูกลับมา</div>
+</div>
+
+<script>
+  (function () {
+    var button = document.getElementById('map_menu_btn');
+    var menu = document.getElementById('map_menu');
+    if (!button || !menu) return;
+
+    function setOpen(open) {
+      menu.classList.toggle('hidden', !open);
+      button.setAttribute('aria-expanded', String(open));
+      button.setAttribute('aria-label', open ? 'ปิดเมนู' : 'เปิดเมนู');
+    }
+
+    button.addEventListener('click', function (event) {
+      event.stopPropagation();
+      setOpen(menu.classList.contains('hidden'));
+    });
+    document.addEventListener('click', function (event) {
+      if (!menu.classList.contains('hidden') && !menu.contains(event.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && !menu.classList.contains('hidden')) {
+        setOpen(false);
+        button.focus();
+      }
+    });
+  })();
+</script>
+{% endblock body %}

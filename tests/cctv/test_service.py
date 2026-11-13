@@ -42,8 +42,6 @@ def record(source="hatyai_city_climate", id="9", **overrides):
 class ImmediateCache:
     def __init__(self):
         self.calls = []
-        self.timestamps = {}
-        self.timestamp_calls = []
 
     async def get(self, key, loader, **kwargs):
         self.calls.append((key, kwargs))
@@ -53,14 +51,6 @@ class ImmediateCache:
             stale=False,
             error=None,
         )
-
-    async def get_timestamp(self, key):
-        return self.timestamps.get(key)
-
-    async def set_timestamp(self, key, value, *, ttl_seconds):
-        self.timestamp_calls.append((key, value, ttl_seconds))
-        self.timestamps[key] = value
-        return True
 
 
 class VisualFeedServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -127,14 +117,19 @@ class VisualFeedServiceTests(unittest.IsolatedAsyncioTestCase):
         cases = (
             (dt.timedelta(0), "https://hatyaicityclimate.org/latest.jpg", "fresh"),
             (
-                dt.timedelta(hours=24),
+                dt.timedelta(hours=1),
                 "https://hatyaicityclimate.org/latest.jpg",
                 "fresh",
             ),
             (
-                dt.timedelta(hours=24, microseconds=1),
+                dt.timedelta(hours=1, microseconds=1),
                 "https://hatyaicityclimate.org/latest.jpg",
                 "stale",
+            ),
+            (
+                dt.timedelta(minutes=-5),
+                "https://hatyaicityclimate.org/latest.jpg",
+                "fresh",
             ),
             (
                 dt.timedelta(hours=-1),
@@ -150,9 +145,7 @@ class VisualFeedServiceTests(unittest.IsolatedAsyncioTestCase):
                         captured_at=(now - age).isoformat(),
                     )
                 )
-                self.assertEqual(
-                    service.image_freshness_for(feed, now).value, expected
-                )
+                self.assertEqual(service.image_freshness_for(feed, now).value, expected)
 
         for overrides in (
             {"image_url": None},
@@ -167,62 +160,40 @@ class VisualFeedServiceTests(unittest.IsolatedAsyncioTestCase):
                     service.image_freshness_for(feed, now), ImageFreshness.STALE
                 )
 
-    def test_rid_image_freshness_uses_successful_proxy_check_not_capture_time(self):
-        now = dt.datetime(2026, 9, 3, 4, 30, tzinfo=dt.timezone.utc)
-        for age, expected in (
-            (dt.timedelta(hours=24), ImageFreshness.FRESH),
-            (dt.timedelta(hours=24, microseconds=1), ImageFreshness.STALE),
-        ):
-            feed = PublicVisualFeed.model_validate(
-                record(
-                    source="rid",
-                    id="STN04",
-                    image_url="/v1/visual-feeds/rid/STN04/snapshot",
-                    captured_at=None,
-                    image_checked_at=(now - age).isoformat(),
-                    history_supported=False,
-                )
-            )
-            self.assertEqual(service.image_freshness_for(feed, now), expected)
-
-        no_successful_check = PublicVisualFeed.model_validate(
-            record(
-                source="rid",
-                id="STN04",
-                image_url="/v1/visual-feeds/rid/STN04/snapshot",
-                captured_at=now.isoformat(),
-                image_checked_at=None,
-                history_supported=False,
-            )
-        )
-        self.assertEqual(
-            service.image_freshness_for(no_successful_check, now),
-            ImageFreshness.STALE,
-        )
-
-    async def test_successful_rid_snapshot_is_reflected_in_api_freshness(self):
-        await self.viewer.rid_snapshot("STN04")
-        key = self.viewer._rid_check_key("STN04")
-        self.assertEqual(self.cache.timestamp_calls[0][0], key)
-        self.assertEqual(
-            self.cache.timestamp_calls[0][2], service.IMAGE_CHECK_TTL_SECONDS
-        )
-
+    async def test_freshness_is_judged_when_the_provider_was_asked(self):
+        # A 29-minute-old cache entry about a photo that was 40 minutes old
+        # then: the camera was online, and cache age must not flip it.
+        now = dt.datetime.now(dt.timezone.utc)
+        fetched_at = now - dt.timedelta(minutes=29)
         self.provider.latest.return_value = [
             record(
-                source="rid",
-                id="STN04",
-                image_url="/v1/visual-feeds/rid/STN04/snapshot",
-                captured_at=None,
-                history_supported=False,
+                captured_at=(fetched_at - dt.timedelta(minutes=40)).isoformat(),
+                fetched_at=fetched_at.isoformat(),
             )
         ]
-        feeds, _ = await self.viewer._catalog(service.RID_SOURCE)
 
-        self.assertIsNotNone(feeds[0].image_checked_at)
+        feeds, _ = await self.viewer._catalog("hatyai_city_climate")
+
         self.assertEqual(feeds[0].image_freshness, ImageFreshness.FRESH)
-        self.assertIsNone(feeds[0].captured_at)
-        self.assertNotIn("image_checked_at", feeds[0].model_dump())
+
+    def test_rid_freshness_uses_capture_time_like_every_source(self):
+        now = dt.datetime(2026, 9, 3, 4, 30, tzinfo=dt.timezone.utc)
+        for captured_at, expected in (
+            (now.isoformat(), ImageFreshness.FRESH),
+            ((now - dt.timedelta(days=2)).isoformat(), ImageFreshness.STALE),
+            (None, ImageFreshness.STALE),
+        ):
+            with self.subTest(captured_at=captured_at):
+                feed = PublicVisualFeed.model_validate(
+                    record(
+                        source="rid",
+                        id="STN04",
+                        image_url="/v1/visual-feeds/rid/STN04/snapshot",
+                        captured_at=captured_at,
+                        history_supported=False,
+                    )
+                )
+                self.assertEqual(service.image_freshness_for(feed, now), expected)
 
     async def test_concurrent_rid_snapshots_wait_for_bounded_capacity(self):
         active = 0
@@ -311,8 +282,9 @@ class VisualFeedServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("secret", result.model_dump_json())
         self.assertEqual(
             self.cache.calls[0][0],
-            f"sindhu:cctv:v1:history:hatyai_city_climate:9:{today}",
+            "sindhu:cctv:v1:history:hatyai_city_climate:9",
         )
+        self.provider.history.assert_awaited_with("hatyai_city_climate", "9")
 
     async def test_empty_history_success_and_dwr_unsupported(self):
         self.provider.history.return_value = {"frames": [], "possibly_truncated": False}
@@ -325,29 +297,135 @@ class VisualFeedServiceTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(error.exception.status_code, 400)
 
-    async def test_wrong_day_history_not_silently_substituted(self):
+    async def test_history_returns_whole_photo_set_or_filters_one_day(self):
         today = dt.datetime.now(service.BANGKOK).date()
-        wrong = dt.datetime.combine(
-            today - dt.timedelta(days=1), dt.time(1), service.BANGKOK
-        )
+        yesterday = today - dt.timedelta(days=1)
+
+        def frame(day, hour):
+            return {
+                "captured_at": dt.datetime.combine(
+                    day, dt.time(hour), service.BANGKOK
+                ).isoformat(),
+                "image_url": f"https://hatyaicityclimate.org/{day}-{hour}.jpg",
+            }
+
         self.provider.history.return_value = {
-            "frames": [
-                {
-                    "captured_at": wrong.isoformat(),
-                    "image_url": "https://hatyaicityclimate.org/old.jpg",
-                }
-            ]
+            "frames": [frame(today, 1), frame(yesterday, 23), frame(yesterday, 1)],
+            "available_dates": [yesterday.isoformat(), today.isoformat()],
+            "possibly_truncated": True,
         }
-        with self.assertRaises(service.ViewerError):
-            await self.viewer.history("hatyai_city_climate", "9", today)
+        everything = await self.viewer.history("hatyai_city_climate", "9")
+        self.assertIsNone(everything.date)
+        self.assertEqual(len(everything.frames), 3)
+        self.assertEqual(everything.available_dates, [yesterday, today])
+
+        one_day = await self.viewer.history("hatyai_city_climate", "9", yesterday)
+        self.assertEqual(
+            [f.captured_at.astimezone(service.BANGKOK).hour for f in one_day.frames],
+            [1, 23],
+        )
+        self.assertEqual(one_day.available_dates, [yesterday, today])
+        # Both requests share one cached provider call per camera.
+        self.assertEqual(
+            {call[0] for call in self.cache.calls},
+            {"sindhu:cctv:v1:history:hatyai_city_climate:9"},
+        )
+
+    def _history_payload(self, days_ago, hours=(1, 13)):
+        now = dt.datetime.now(service.BANGKOK)
+        frames = [
+            {
+                "captured_at": (now - dt.timedelta(days=d, hours=-h)).isoformat(),
+                "image_url": f"https://hatyaicityclimate.org/{d}-{h}.jpg",
+            }
+            for d in days_ago
+            for h in hours
+        ]
+        frames.sort(key=lambda f: f["captured_at"])
+        dates = sorted(
+            {
+                dt.datetime.fromisoformat(f["captured_at"])
+                .astimezone(service.BANGKOK)
+                .date()
+                .isoformat()
+                for f in frames
+            }
+        )
+        return {"frames": frames, "available_dates": dates, "possibly_truncated": False}
+
+    async def test_history_reports_the_provider_range_and_is_not_stale_when_current(
+        self,
+    ):
+        self.provider.history.return_value = self._history_payload([3, 2, 1, 0], (0,))
+
+        result = await self.viewer.history("hatyai_city_climate", "9")
+
+        self.assertEqual(result.oldest_captured_at, result.frames[0].captured_at)
+        self.assertEqual(result.latest_captured_at, result.frames[-1].captured_at)
+        self.assertFalse(result.history_stale)
+
+    async def test_history_that_stopped_updating_is_flagged_stale(self):
+        self.provider.history.return_value = self._history_payload([6, 5, 4], (0,))
+
+        result = await self.viewer.history("hatyai_city_climate", "9")
+
+        self.assertTrue(result.history_stale)
+        self.assertEqual(len(result.available_dates), 3)
+
+    async def test_day_without_provider_photos_is_an_empty_success_with_the_range(
+        self,
+    ):
+        payload = self._history_payload([3, 2], (0,))
+        self.provider.history.return_value = payload
+        today = dt.datetime.now(service.BANGKOK).date()
+
+        result = await self.viewer.history("hatyai_city_climate", "9", today)
+
+        self.assertEqual(result.frames, [])
+        self.assertEqual(len(result.available_dates), 2)
+        self.assertIsNotNone(result.oldest_captured_at)
+        self.assertIsNotNone(result.latest_captured_at)
+
+    async def test_hundred_realistic_frames_fit_the_history_cache_limit(self):
+        import json
+
+        payload = self._history_payload([4, 3, 2, 1, 0], tuple(range(20)))
+        payload["frames"] = [
+            {
+                "captured_at": f["captured_at"],
+                "image_url": "https://hatyaicityclimate.org/floodphoto/cam/2026/10/"
+                f"hatyainai/20261020-{i:06d}.jpg",
+                "thumbnail_url": "https://hatyaicityclimate.org/floodphoto/thumb/"
+                f"2026/10/20/hatyainai-20261020-{i:06d}.jpg",
+            }
+            for i, f in enumerate(payload["frames"])
+        ]
+        self.assertEqual(len(payload["frames"]), 100)
+        self.provider.history.return_value = payload
+        seen = {}
+        original_get = self.cache.get
+
+        async def spy(key, loader, **kwargs):
+            result = await original_get(key, loader, **kwargs)
+            seen["value"], seen["kwargs"] = result.value, kwargs
+            return result
+
+        self.cache.get = spy
+
+        result = await self.viewer.history("hatyai_city_climate", "9")
+
+        self.assertEqual(len(result.frames), 100)
+        limit = service.CctvCache.HISTORY_MAX_BYTES
+        self.assertLess(len(json.dumps(seen["value"]).encode()), limit)
+        self.assertEqual(seen["kwargs"]["max_bytes"], limit)
+        self.assertEqual(seen["kwargs"]["fresh_seconds"], 600)
 
     def test_history_bangkok_boundary(self):
         now = dt.datetime(2026, 9, 2, 17, 1, tzinfo=dt.timezone.utc)
-        for date in [dt.date(2026, 9, 3), dt.date(2026, 8, 28)]:
+        for date in [dt.date(2026, 9, 3), dt.date(2026, 8, 1)]:
             service.validate_history_date(date, now)
-        for date in [dt.date(2026, 9, 4), dt.date(2026, 8, 27)]:
-            with self.assertRaises(service.ViewerError):
-                service.validate_history_date(date, now)
+        with self.assertRaises(service.ViewerError):
+            service.validate_history_date(dt.date(2026, 9, 4), now)
 
     def test_health_counts(self):
         feeds = [
