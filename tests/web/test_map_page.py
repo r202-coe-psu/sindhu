@@ -69,7 +69,7 @@ class MapPageLayoutTests(unittest.TestCase):
         self.assertLess(html.index("leaflet.css"), html.index("css/app.css"))
         self.assertLess(html.index("leaflet.draw.css"), html.index("css/app.css"))
 
-    def test_leaflet_draw_icons_are_inverted_for_the_dark_toolbar(self):
+    def test_leaflet_icons_are_not_inverted_on_the_light_theme(self):
         from pathlib import Path
 
         css = (
@@ -80,10 +80,8 @@ class MapPageLayoutTests(unittest.TestCase):
             / "css"
             / "map.css"
         ).read_text()
-        rule = re.search(r"\.leaflet-draw-toolbar a,[^{]*\{([^}]*)\}", css)
-        self.assertIsNotNone(rule)
-        self.assertIn("filter: invert(1)", rule.group(1))
-        self.assertIn("var(--color-ink-700)", rule.group(1))
+        self.assertNotIn(".leaflet-draw-toolbar a", css)
+        self.assertNotIn(".leaflet-control-layers-toggle", css)
 
     def test_panel_is_folded_in_the_markup(self):
         html = self._html("/th/monitor")

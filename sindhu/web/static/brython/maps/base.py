@@ -518,7 +518,7 @@ class BaseMap(LegendMixin, Map):
                     inner = station_dot_html(
                         STATION_DOT_PX,
                         STATION_DOT_PX,
-                        f"border-radius: 50%; background: conic-gradient({metric_color} {percent}%, var(--color-ink-200) 0); border: 2px solid var(--color-ink-950); box-shadow: 0 0 4px rgba(0,0,0,0.3);",
+                        f"border-radius: 50%; background: conic-gradient({metric_color} {percent}%, var(--color-ink-200) 0); border: 2px solid var(--color-base-100); box-shadow: 0 0 4px rgba(0,0,0,0.3);",
                     )
                 elif style == "drop":
                     inner = station_dot_html(
@@ -530,7 +530,7 @@ class BaseMap(LegendMixin, Map):
                 elif style == "tank":
                     inner = station_dot_html(
                         *STATION_TANK,
-                        "border-radius: 4px; border: 2px solid var(--color-ink-950); background: var(--color-base-100); position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);",
+                        "border-radius: 4px; border: 2px solid var(--color-base-100); background: var(--color-base-100); position: relative; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.3);",
                         f'<div style="position: absolute; bottom: 0; left: 0; width: 100%; height: {percent}%; background-color: {metric_color}; transition: height 0.3s ease;"></div>',
                     )
                 elif style == "bubble":
@@ -540,7 +540,7 @@ class BaseMap(LegendMixin, Map):
                     inner = station_dot_html(
                         size,
                         size,
-                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid var(--color-ink-950); opacity: 0.85; box-shadow: 0 2px 4px rgba(0,0,0,0.3);",
+                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid var(--color-base-100); opacity: 0.85; box-shadow: 0 2px 4px rgba(0,0,0,0.3);",
                     )
                 else:
                     # plain dot; replaces L.icon.pulse, which could not
@@ -548,7 +548,7 @@ class BaseMap(LegendMixin, Map):
                     inner = station_dot_html(
                         PULSE_PX,
                         PULSE_PX,
-                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid var(--color-ink-950); box-shadow: 0 0 4px rgba(0,0,0,0.3);",
+                        f"border-radius: 50%; background-color: {metric_color}; border: 2px solid var(--color-base-100); box-shadow: 0 0 4px rgba(0,0,0,0.3);",
                     )
                 metric_marker = self._station_icon(inner)
 
