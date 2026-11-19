@@ -331,8 +331,7 @@
     "{{ g.lang_code }}",
     "{{ api_url }}",
     "{{ source }}",
-    reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}",
-    rivers_url="{{ url_for('static', filename='resources/songkhla_basins.geojson') }}"
+    reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}"
     )
   visual_feeds = VisualFeedMonitor("{{ api_url }}")
   monitors.visual_feed_monitor = visual_feeds

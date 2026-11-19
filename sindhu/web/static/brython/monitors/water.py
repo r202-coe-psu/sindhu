@@ -25,7 +25,6 @@ class WaterMonitor(BaseMonitor):
         center=None,
         zoom=None,
         reference_boundary_url=None,
-        rivers_url=None,
     ):
         super().__init__(
             lang_code=lang_code,
@@ -34,7 +33,6 @@ class WaterMonitor(BaseMonitor):
             center=center,
             zoom=zoom,
             reference_boundary_url=reference_boundary_url,
-            rivers_url=rivers_url,
         )
         self.monitor_name = "water"
 

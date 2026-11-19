@@ -799,18 +799,4 @@
     background-color: var(--color-ink-300);
     border-radius: 20px;
   }
-
-  @keyframes flow {
-    to {
-      stroke-dashoffset: -20;
-    }
-  }
-  .river-line {
-    stroke-dasharray: none;
-    transition: stroke-width 0.2s, stroke 0.2s, stroke-opacity 0.2s;
-  }
-  .flowing-river {
-    stroke-dasharray: 10, 8;
-    animation: flow 1.5s linear infinite;
-  }
 }

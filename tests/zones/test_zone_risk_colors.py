@@ -494,13 +494,6 @@ class LegendTests(unittest.TestCase):
         map_view.zones_visible = False
         self.assertEqual(map_view.visible_zone_legend_entries(), [])
 
-    def test_failed_river_load_is_reported_in_the_legend(self):
-        map_view = self.make_map()
-        self.assertEqual(map_view.rivers_status_html(), "")
-        map_view.rivers_unavailable = True
-        self.assertIn("โหลดเส้นแม่น้ำไม่สำเร็จ", map_view.rivers_status_html())
-
-
 class _ShownLayers:
     def __init__(self):
         self.shown = set()
@@ -664,36 +657,6 @@ class ZoneAdminTemplateTests(unittest.TestCase):
         self.assertNotIn("form-shading-mode", source)
         self.assertNotIn("shading_mode: shadingMode", source)
         self.assertNotIn("fill: color", source)
-
-
-class RiverStyleTests(unittest.TestCase):
-    def style(self, fclass, zoom):
-        map_view = Map.__new__(Map)
-        map_view.map = _BrowserStub()
-        return map_view.river_style(fclass, zoom)
-
-    def test_main_waterways_show_at_every_zoom(self):
-        for fclass in ("river", "canal"):
-            with self.subTest(fclass=fclass):
-                self.assertGreater(self.style(fclass, 8)["weight"], 0)
-
-    def test_streams_and_drains_wait_for_detail_zoom(self):
-        for fclass in ("stream", "drain"):
-            with self.subTest(fclass=fclass):
-                self.assertEqual(
-                    self.style(fclass, Map.RIVER_DETAIL_ZOOM - 1)["weight"], 0
-                )
-                self.assertGreater(
-                    self.style(fclass, Map.RIVER_DETAIL_ZOOM)["weight"], 0
-                )
-
-    def test_rivers_are_drawn_heavier_than_canals_and_streams(self):
-        zoom = 13
-        weights = [self.style(f, zoom)["weight"] for f in ("river", "canal", "stream")]
-        self.assertEqual(weights, sorted(weights, reverse=True))
-
-    def test_unknown_class_is_drawn_like_a_stream(self):
-        self.assertEqual(self.style(None, 13), self.style("stream", 13))
 
 
 class _MutableClassList:

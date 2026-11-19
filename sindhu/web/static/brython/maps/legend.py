@@ -176,18 +176,7 @@ class LegendMixin:
                 {rows}
             </div>
             {self.zone_legend_html()}
-            {self.rivers_status_html()}
         </div>
-        """
-
-    def rivers_status_html(self):
-        if not getattr(self, "rivers_unavailable", False):
-            return ""
-        return """
-            <div class="mt-1.5 pt-1.5 border-t border-ink-100 text-[10px] text-warning flex items-center gap-1">
-                <i class="ph ph-warning text-xs" aria-hidden="true"></i>
-                <span>โหลดเส้นแม่น้ำไม่สำเร็จ</span>
-            </div>
         """
 
     def render_legend(self, levels, title, subtitle=""):

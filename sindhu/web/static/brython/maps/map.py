@@ -63,7 +63,7 @@ class Map:
             },
         )
         # Default basemap (#67): Windy-style neutral grey without labels, so
-        # the rivers, zones and markers are the only colour on the map.  Esri's
+        # the zones and markers are the only colour on the map.  Esri's
         # Light Gray Canvas needs no API key (Carto's tiles now do, and show a
         # watermark without one); the .basemap-gray filter in setup.css turns
         # its land (#efefef) into ≈ #808080 with the sea a little darker.
@@ -129,7 +129,7 @@ class Map:
         #     navi, nonavi
         # )  # set user's current location on map(success, error)
 
-        # Above the zones and rivers, below the markers, and transparent to
+        # Above the zones, below the markers, and transparent to
         # the mouse so everything underneath stays clickable.
         label_pane = self.map.createPane("placeLabels")
         label_pane.style.zIndex = "450"
@@ -181,8 +181,8 @@ class Map:
 
     # A zone shows two things at once (#67): its outline says which zone it
     # is, its fill says how risky it is.  The outline colours sit in hue gaps
-    # the risk legend leaves free (green/orange/red/purple/grey) and away from
-    # the light-cyan rivers; each zone also has its own dash pattern so the
+    # the risk legend leaves free (green/orange/red/purple/grey); each zone
+    # also has its own dash pattern so the
     # three stay apart for colour-blind users.  A dark casing under every
     # outline keeps the lighter colours visible on the grey basemap.
     ZONE_IDENTITIES = (
@@ -388,8 +388,8 @@ class Map:
         """Draw every zone boundary so users can click a zone directly.
 
         Zones live in their own pane below the overlay pane, which keeps the
-        river lines and the station markers clickable on top of them.  Their
-        name labels sit in a pane above the rivers but below the markers.
+        station markers clickable on top of them.  Their name labels sit in a
+        pane above the zones but below the markers.
         """
         self._on_zone_select = on_select
         self.clear_all_zones()
@@ -1466,167 +1466,6 @@ class Map:
             and not self.leaflet.Browser.edge
         ):
             self.geojson.bringToFront()
-
-    # Waterways from songkhla_basins.geojson, styled by OSM fclass (#67).
-    # Light cyan reads on the grey basemap (river 3.2:1 against #808080).
-    # Streams and drains are the bulk of the 807 lines, so they only appear
-    # from zoom 11, where they no longer blur into a mesh.
-    RIVER_STYLES = {
-        "river": {"color": "#a5f3fc", "weight": 3.0, "opacity": 1.0, "dash": ""},
-        "canal": {"color": "#7dd3fc", "weight": 2.0, "opacity": 1.0, "dash": ""},
-        "stream": {"color": "#7dd3fc", "weight": 1.1, "opacity": 0.75, "dash": ""},
-        "drain": {"color": "#7dd3fc", "weight": 1.0, "opacity": 0.75, "dash": "3 3"},
-    }
-    RIVER_DETAIL_ZOOM = 11
-    RIVER_HIGHLIGHT = "#ecfeff"
-
-    def river_style(self, fclass, zoom):
-        """Leaflet style for one waterway at a zoom level."""
-        spec = self.RIVER_STYLES.get(fclass) or self.RIVER_STYLES["stream"]
-        minor = fclass not in ("river", "canal")
-        if minor and (zoom or 0) < self.RIVER_DETAIL_ZOOM:
-            # Weight 0 also removes the hit area, so hidden streams can't be
-            # clicked by accident.
-            return {
-                "weight": 0,
-                "opacity": 0,
-                "fillOpacity": 0,
-                "className": "river-line",
-            }
-        scale = 1.4 if (zoom or 0) >= 14 else (1.2 if (zoom or 0) >= 12 else 1.0)
-        return {
-            "color": spec["color"],
-            "weight": round(spec["weight"] * scale, 2),
-            "opacity": spec["opacity"],
-            "dashArray": spec["dash"],
-            "fillOpacity": 0,
-            "className": "river-line",
-        }
-
-    def set_rivers_layer(self, data):
-        """Dedicated method for rendering river/waterway GeoJSON with flow animation."""
-        if not data or len(data) == 0:
-            return
-
-        # River selection state (scoped to this layer only)
-        self._selected_river = None
-        self._river_clicked = False
-
-        def get_val(obj, key_name, default_val=None):
-            if obj is None:
-                return default_val
-            if isinstance(obj, dict):
-                return obj.get(key_name, default_val)
-            return getattr(obj, key_name, default_val)
-
-        def style(feature):
-            properties = get_val(feature, "properties", {})
-            return self.river_style(
-                get_val(properties, "fclass", None), self.map.getZoom()
-            )
-
-        def _clear_river_selection(self_ref):
-            """Helper to reset the currently selected river layer."""
-            if self_ref._selected_river:
-                prev = self_ref._selected_river
-                if "rivers" in self_ref.shapes and self_ref.shapes["rivers"].hasLayer(
-                    prev
-                ):
-                    self_ref.shapes["rivers"].resetStyle(prev)
-                if hasattr(prev, "_path") and prev._path:
-                    prev._path.classList.remove("flowing-river")
-                self_ref._selected_river = None
-
-        def on_map_click(e):
-            if self._river_clicked:
-                self._river_clicked = False
-                return
-            _clear_river_selection(self)
-
-        self.map.on("click", on_map_click)
-
-        def on_each_feature(feature, layer):
-
-            def highlight_feature(e):
-                target_layer = e.target
-                feature_obj = target_layer.feature
-                props = get_val(feature_obj, "properties", {})
-                target_layer.setStyle(
-                    {"weight": 5, "color": self.RIVER_HIGHLIGHT, "opacity": 1.0}
-                )
-                if hasattr(target_layer, "_path") and target_layer._path:
-                    target_layer._path.classList.add("flowing-river")
-
-            def zoom_to_feature(e):
-                if getattr(self, "_pin_mode_active", False):
-                    return
-                target_layer = e.target
-                self._river_clicked = True
-
-                target_feature = target_layer.feature
-                geom = get_val(target_feature, "geometry", {})
-                geom_type = get_val(geom, "type", "")
-                if self.map.getZoom() < 11 and geom_type != "Point":
-                    self.map.fitBounds(target_layer.getBounds())
-
-                # Reset previous selection, then set new one
-                if self._selected_river and self._selected_river != target_layer:
-                    _clear_river_selection(self)
-                self._selected_river = target_layer
-                highlight_feature(e)
-
-            # Build popup content
-            popup_detail = ""
-            properties = get_val(feature, "properties", {})
-            name = get_val(properties, "Name", None)
-            if name:
-                display_name = name
-                if name == "Waterway":
-                    lang = getattr(self, "lang_code", "th")
-                    display_name = (
-                        "เส้นทางน้ำ (ไม่ระบุชื่อ)"
-                        if lang == "th"
-                        else "Unnamed Waterway"
-                    )
-                popup_detail += f"<div>{display_name}</div>"
-
-            if popup_detail:
-                layer.bindPopup(popup_detail)
-
-            layer.on(
-                {
-                    "click": zoom_to_feature,
-                }
-            )
-
-        if "rivers" in self.shapes and self.shapes["rivers"] is not None:
-            if self.map.hasLayer(self.shapes["rivers"]):
-                self.map.removeLayer(self.shapes["rivers"])
-            self.shapes.pop("rivers", None)
-
-        self.shapes["rivers"] = self.leaflet.geoJson(
-            data,
-            {
-                "style": style,
-                "onEachFeature": on_each_feature,
-                "renderer": self.leaflet.svg(),
-            },
-        ).addTo(self.map)
-
-        def on_zoom(_event=None):
-            rivers = self.shapes.get("rivers")
-            if not rivers:
-                return
-            rivers.setStyle(style)
-            selected = self._selected_river
-            if selected and rivers.hasLayer(selected):
-                selected.setStyle(
-                    {"weight": 5, "color": self.RIVER_HIGHLIGHT, "opacity": 1.0}
-                )
-
-        if not getattr(self, "_river_zoom_bound", False):
-            self.map.on("zoomend", on_zoom)
-            self._river_zoom_bound = True
 
     def set_shape_boundary(self, data):
         def style(feature):
