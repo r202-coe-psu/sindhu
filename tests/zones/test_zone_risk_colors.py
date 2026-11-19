@@ -233,7 +233,7 @@ class ZoneStyleTests(unittest.TestCase):
     def make_map(self, zone, risk):
         map_view = Map.__new__(Map)
         map_view.map = _BrowserStub()
-        map_view._selected_zone_id = None
+        map_view._selected_zone_ids = []
         map_view.zone_layers_by_id = {
             "zone": {"zone": zone, "risk": risk, "layer": _Layer()}
         }
@@ -566,7 +566,7 @@ class ShowAllZonesTests(unittest.TestCase):
         map_view.map = _PaneMap()
         map_view.leaflet = _ZoneLeaflet()
         map_view.zone_layers_by_id = {}
-        map_view._selected_zone_id = None
+        map_view._selected_zone_ids = []
         map_view._zone_renderer = None
         map_view.zones_visible = True
         map_view.show_all_zones(zones)

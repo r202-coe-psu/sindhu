@@ -3,6 +3,18 @@ import math
 from sindhu import models
 
 
+def is_reference_zone(zone) -> bool:
+    """Reference boundaries are map context only, never flood zones.
+
+    A zone is a reference when zone_kind is "reference" or its metadata role
+    is "reference_boundary".
+    """
+    if getattr(zone, "zone_kind", None) == "reference":
+        return True
+    metadata = getattr(zone, "metadata", None) or {}
+    return metadata.get("role") == "reference_boundary"
+
+
 def _haversine(lat1, lon1, lat2, lon2):
     R = 6_371_000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -30,13 +42,15 @@ async def find_zone_by_location(longitude: float, latitude: float):
                 {"zone_kind": "flood"},
                 {"zone_kind": {"$exists": False}},
             ],
+            # Same rule as is_reference_zone(): the metadata role counts too.
+            "metadata.role": {"$ne": "reference_boundary"},
         }
     )
     return zone
 
 
 async def find_stations_by_zone(zone, user_lng: float = 0, user_lat: float = 0) -> list:
-    if not zone or getattr(zone, "zone_kind", "flood") == "reference":
+    if not zone or is_reference_zone(zone):
         return []
 
     zone_with_links = await models.Zone.find_one(

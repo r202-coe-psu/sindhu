@@ -80,7 +80,9 @@ async def create(
             status_code=http_status.HTTP_409_CONFLICT,
             detail="This zone already exists",
         )
-    station_ids = [] if zone_form.zone_kind == "reference" else zone_form.station_ids
+    station_ids = (
+        [] if services.zones.is_reference_zone(zone_form) else zone_form.station_ids
+    )
     db_stations = await models.Station.find({"_id": {"$in": station_ids}}).to_list()
     zone = models.Zone(**zone_form.model_dump(exclude={"station_ids"}))
     zone.stations = db_stations
@@ -94,17 +96,23 @@ async def update(
     zone_form: schemas.zones.CreateUpdateZone,
     current_user: models.User = Depends(deps.get_current_user),
 ) -> schemas.zones.ZoneWithStations:
-    db_zone = await models.Zone.find_one(models.Zone.id == zone_id)
+    db_zone = await models.Zone.find_one(models.Zone.id == zone_id, fetch_links=True)
     if not db_zone:
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found zone",
         )
-    station_ids = [] if zone_form.zone_kind == "reference" else zone_form.station_ids
-    db_stations = await models.Station.find({"_id": {"$in": station_ids}}).to_list()
-    for key, value in zone_form.model_dump(exclude={"station_ids"}).items():
+    update_data = zone_form.model_dump(exclude_unset=True, exclude={"station_ids"})
+    # exclude_unset: a field missing from the request keeps its stored value
+    # instead of being reset to the schema default (e.g. tambons).
+    for key, value in update_data.items():
         setattr(db_zone, key, value)
-    db_zone.stations = db_stations
+    if services.zones.is_reference_zone(db_zone):
+        db_zone.stations = []
+    elif "station_ids" in zone_form.model_fields_set:
+        db_zone.stations = await models.Station.find(
+            {"_id": {"$in": zone_form.station_ids}}
+        ).to_list()
     db_zone.updated_date = datetime.datetime.now()
     await db_zone.save()
     return db_zone

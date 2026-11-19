@@ -70,7 +70,7 @@ class DbFloodZoneTests(unittest.TestCase):
         self.map_view.reference_boundary_layer = None
         self.map_view.reference_boundary_visible = True
         self.map_view.zones_visible = True
-        self.map_view._selected_zone_id = None
+        self.map_view._selected_zone_ids = []
         self.map_view.ZONE_STYLE = {"color": "#6366f1", "fillColor": "transparent"}
 
     def test_load_zones_filters_inactive_and_reference_zones(self):
