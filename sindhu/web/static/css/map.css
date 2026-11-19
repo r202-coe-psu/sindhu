@@ -34,7 +34,7 @@
   backdrop-filter: blur(6px);
   border: 1px solid var(--color-ink-200);
   border-radius: 1rem;
-  box-shadow: 0 6px 20px rgb(0 0 0 / 0.45);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.2);
 }
 
 .map-brand-card {
@@ -200,10 +200,10 @@ body.map-focus .map-focus-hint {
 }
 
 /*
- * Leaflet's own controls, popups and tooltips in the dark theme.  Station
+ * Leaflet's own controls, popups and tooltips in the site theme.  Station
  * tooltips (.tooltip-marker) draw their own card and stay transparent.
  */
-.leaflet-container { background: var(--color-base-200); font-family: inherit; }
+.leaflet-container { background: #6b6b6b; font-family: inherit; }
 .leaflet-bar,
 .leaflet-touch .leaflet-bar,
 .leaflet-touch .leaflet-control-layers { border-color: var(--color-ink-200); }
@@ -216,16 +216,7 @@ body.map-focus .map-focus-hint {
 }
 .leaflet-bar a:hover { background-color: var(--color-ink-100); }
 .leaflet-bar a.leaflet-disabled { background-color: var(--color-ink-50); color: var(--color-ink-300); }
-.leaflet-draw-toolbar a,
-.leaflet-draw-toolbar a:focus {
-  background-color: var(--color-ink-700);
-  border-bottom-color: var(--color-ink-600);
-  filter: invert(1);
-}
-.leaflet-draw-toolbar a:hover { background-color: var(--color-ink-600); }
-.leaflet-draw-toolbar a.leaflet-disabled { background-color: var(--color-ink-800); }
 .leaflet-control-layers { background: var(--color-base-100); color: var(--color-ink-800); }
-.leaflet-control-layers-toggle { filter: invert(0.9); }
 .leaflet-control-layers-separator { border-top-color: var(--color-ink-200); }
 .leaflet-popup-content-wrapper,
 .leaflet-popup-tip { background: var(--color-base-100); color: var(--color-ink-900); }
@@ -245,3 +236,4 @@ body.map-focus .map-focus-hint {
   color: var(--color-ink-500);
 }
 .leaflet-control-attribution a { color: var(--color-brand-600); }
+

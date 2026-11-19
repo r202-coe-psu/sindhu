@@ -607,7 +607,7 @@ class WaterMonitor(BaseMonitor):
                         <div class="text-xs text-ink-500 mt-0.5">{location}</div>
                     </div>
                     <span class="badge gap-1 px-2 py-3 shadow-sm border border-ink-200" style="background-color: {hex_color}; color: {text_color};">
-                        <span class="w-2 h-2 rounded-full border border-ink-300" style="background-color: var(--color-ink-950);"></span>{label}
+                        <span class="w-2 h-2 rounded-full border border-ink-300" style="background-color: var(--color-base-100);"></span>{label}
                     </span>
                 </div>
                 <div class="mt-3 flex flex-wrap gap-2">
