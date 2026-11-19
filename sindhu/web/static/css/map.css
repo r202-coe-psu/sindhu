@@ -185,18 +185,30 @@ body.map-focus .map-focus-hint {
 /*
  * Map layers (#67).  The default basemap is Esri's Light Gray Canvas
  * turned Windy grey: land #efefef → ≈ #808080, water a little darker.  The zone name
- * labels are chips coloured with each zone's outline colour (maps/map.py).
+ * labels are white chips edged with each zone's outline colour (maps/map.py).
  */
 .basemap-gray { filter: grayscale(1) brightness(0.535); }
 .zone-chip {
-  display: inline-block;
-  padding: 0.125rem 0.625rem;
-  border: 1.5px solid;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.625rem 0.125rem 0.5rem;
+  border: 2px solid var(--zone-color);
   border-radius: 9999px;
-  background: rgb(20 20 20 / 0.85);
+  background: color-mix(in oklab, var(--color-base-100) 94%, transparent);
+  color: var(--color-ink-900);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.3);
   font-size: 0.8125rem;
   font-weight: 700;
   white-space: nowrap;
+}
+.zone-chip::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: var(--zone-color);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.35);
 }
 
 /*

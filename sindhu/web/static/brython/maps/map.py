@@ -468,8 +468,8 @@ class Map:
             entry["layer"] = layer
             if name:
                 layer.bindTooltip(
-                    f'<span class="zone-chip" style="color:{identity["color"]};'
-                    f'border-color:{identity["color"]};">{escape_html(name)}</span>',
+                    f'<span class="zone-chip" style="--zone-color:{identity["color"]};">'
+                    f"{escape_html(name)}</span>",
                     {
                         "permanent": True,
                         "direction": "center",
