@@ -520,6 +520,14 @@ class _PaneMap(_ShownLayers):
     def __init__(self):
         super().__init__()
         self.panes = {}
+        self.container = types.SimpleNamespace(
+            classList=types.SimpleNamespace(
+                add=lambda name: None, remove=lambda name: None
+            )
+        )
+
+    def getContainer(self):
+        return self.container
 
     def getPane(self, name):
         return self.panes.get(name)
@@ -551,6 +559,9 @@ class _ZoneLeaflet:
 
     def geoJson(self, feature, options):
         return _GeoJson(feature, options)
+
+    def layerGroup(self):
+        return _GeoJson(None, {})
 
 
 class ShowAllZonesTests(unittest.TestCase):
@@ -832,3 +843,12 @@ class MapFitPaddingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_upstream_arrows_sit_above_the_zones_and_below_the_station_markers(self):
+        map_view = self.draw([self.zone(1)])
+        pane = map_view.map.panes["zoneArrows"]
+        self.assertGreater(
+            int(pane.style.zIndex), int(map_view.map.panes["zones"].style.zIndex)
+        )
+        self.assertLess(int(pane.style.zIndex), 600)
+        self.assertEqual(pane.style.pointerEvents, "none")
