@@ -138,6 +138,15 @@ def arrow_color(corridor, selected):
     return CORRIDORS[corridor]["color"] if corridor == selected else WATERWAY_COLOR
 
 
+def fits_without_zooming_out(bounds_zoom, current_zoom):
+    """Whether fitting a system keeps the map at its zoom or closer.
+
+    A system bigger than the view (Sadao runs 140 km to the border) is shown
+    by panning to its label instead, so a click never throws the user out.
+    """
+    return bounds_zoom >= current_zoom
+
+
 def screen_bearing(x1, y1, x2, y2):
     """Degrees clockwise from north of the vector (x1, y1) -> (x2, y2)."""
     return math.degrees(math.atan2(x2 - x1, y1 - y2)) % 360
@@ -328,11 +337,15 @@ class FlowLayer:
             self.select(None)
         else:
             self.select(system)
-            self.fit_system(system)
+            self.show_system(system, source)
 
-    def fit_system(self, system):
+    def show_system(self, system, source):
         bounds = self.leaflet.latLngBounds(self.system_bounds[system])
-        self.map.fitBounds(bounds, {**self.fit_options(), "maxZoom": 15})
+        current = self.map.getZoom()
+        if fits_without_zooming_out(self.map.getBoundsZoom(bounds), current):
+            self.map.fitBounds(bounds, {**self.fit_options(), "maxZoom": 15})
+        else:
+            self.map.flyTo([source["lat"], source["lng"]], current)
 
     def set_visible(self, visible):
         self.visible = visible

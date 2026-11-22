@@ -219,6 +219,15 @@ class WaterwayStyleTests(unittest.TestCase):
         )
 
 
+class SystemFitTests(unittest.TestCase):
+    def test_a_system_that_fits_at_this_zoom_or_closer_is_fitted(self):
+        self.assertTrue(flow.fits_without_zooming_out(13, 12))
+        self.assertTrue(flow.fits_without_zooming_out(12, 12))
+
+    def test_a_system_bigger_than_the_view_is_not_fitted(self):
+        self.assertFalse(flow.fits_without_zooming_out(9, 11))
+
+
 class FlowDataTests(unittest.TestCase):
     def test_every_corridor_has_a_thai_name_and_a_colour_readable_under_white_text(
         self,
