@@ -12,11 +12,13 @@ import math
 
 from browser import html, window
 
+# Kept clear of red, orange, yellow and green: the map legend uses those for
+# water level, so a system colour must not read as a warning.
 CORRIDORS = {
     "utapao": {"name": "คลองอู่ตะเภา", "color": "#1d4ed8"},
-    "khuanlang": {"name": "คลองวาด → คลอง ร.1", "color": "#be123c"},
-    "khohong": {"name": "คลองเรียน / คลอง ร.3-ร.6 → คลองเตย", "color": "#15803d"},
-    "lake": {"name": "ทางน้ำออกทะเลสาบ", "color": "#7e22ce"},
+    "khuanlang": {"name": "คลองวาด → คลอง ร.1", "color": "#a21caf"},
+    "khohong": {"name": "คลองเรียน / คลอง ร.3-ร.6 → คลองเตย", "color": "#0f766e"},
+    "lake": {"name": "ทางน้ำออกทะเลสาบ", "color": "#6d28d9"},
 }
 
 # route: where the water heads.  angle: degrees clockwise from north of the
