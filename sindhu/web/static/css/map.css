@@ -249,3 +249,43 @@ body.map-focus .map-focus-hint {
 }
 .leaflet-control-attribution a { color: var(--color-brand-600); }
 
+
+/* Drainage corridors (maps/flow.py) */
+.flow-arrow svg {
+  stroke: var(--color-base-100);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+
+/* Sits on the map container, not in a pane, so it stays put while panning;
+   only the label itself takes pointer events and dragging elsewhere is
+   untouched. */
+.flow-label {
+  position: absolute;
+  z-index: 650;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: calc(100% - 1rem);
+  padding: 0.5rem 0.875rem 0.5rem 0.625rem;
+  transform: translate(-50%, -50%);
+  border: 2px solid var(--color-base-100);
+  border-radius: 999px;
+  color: var(--color-base-100);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.3);
+}
+.flow-label:hover { filter: brightness(1.12); }
+.flow-label:focus-visible { outline: 3px solid var(--color-ink-900); outline-offset: 2px; }
+.flow-label-arrow {
+  display: inline-flex;
+  flex: none;
+  transition: transform 150ms ease-out;
+}
+.flow-label-text { display: flex; flex-direction: column; line-height: 1.2; }
+.flow-label-title { font-size: 1rem; font-weight: 700; }
+.flow-label-route { font-size: 0.8125rem; }
+.flow-label.is-pinned { opacity: 0.95; }
