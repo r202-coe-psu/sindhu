@@ -11,12 +11,9 @@ import math
 from browser import html, window
 
 CORRIDORS = {
-    "utapao-main": {"name": "คลองอู่ตะเภา (สายหลัก)", "color": "#1d4ed8"},
-    "khlong-r1": {"name": "คลอง ร.1 (ผันน้ำเลี่ยงเมือง)", "color": "#be123c"},
-    "khlong-toei": {"name": "คลองเตย", "color": "#15803d"},
-    "kho-hong": {"name": "คอหงส์ / คลอง ร.3-ร.6", "color": "#b45309"},
-    "khlong-non": {"name": "คลองวาด (ควนลัง)", "color": "#7e22ce"},
-    "phawong": {"name": "คลองสำโรง (พะวง)", "color": "#0e7490"},
+    "utapao": {"name": "คลองอู่ตะเภา", "color": "#1d4ed8"},
+    "khuanlang": {"name": "คลองวาด → คลอง ร.1", "color": "#be123c"},
+    "khohong": {"name": "คลองเรียน / คลอง ร.3-ร.6 → คลองเตย", "color": "#15803d"},
 }
 
 # route: where the water heads.  angle: degrees clockwise from north of the
@@ -31,7 +28,7 @@ FLOW_SOURCES = [
         "dest_lat": 7.15,
         "dest_lng": 100.465,
         "angle": 0,
-        "color": CORRIDORS["utapao-main"]["color"],
+        "color": CORRIDORS["utapao"]["color"],
     },
     {
         "id": "khuanlang",
@@ -42,7 +39,7 @@ FLOW_SOURCES = [
         "dest_lat": 7.15,
         "dest_lng": 100.465,
         "angle": 65,
-        "color": CORRIDORS["khlong-r1"]["color"],
+        "color": CORRIDORS["khuanlang"]["color"],
     },
     {
         "id": "khohong",
@@ -53,7 +50,7 @@ FLOW_SOURCES = [
         "dest_lat": 7.15,
         "dest_lng": 100.465,
         "angle": 295,
-        "color": CORRIDORS["khlong-toei"]["color"],
+        "color": CORRIDORS["khohong"]["color"],
     },
     {
         "id": "lake",

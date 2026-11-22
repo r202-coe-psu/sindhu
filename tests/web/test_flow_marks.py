@@ -1,3 +1,4 @@
+import json
 import math
 import sys
 import types
@@ -183,7 +184,13 @@ class FlowDataTests(unittest.TestCase):
                 )
             return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
 
-        self.assertEqual(len(flow.CORRIDORS), 6)
+        data = json.loads(
+            (
+                BRYTHON_ROOT.parent / "resources" / "hatyai_flow_corridors.geojson"
+            ).read_text(encoding="utf-8")
+        )
+        drawn = {f["properties"]["corridor"] for f in data["features"]}
+        self.assertEqual(set(flow.CORRIDORS), drawn)
         for corridor, info in flow.CORRIDORS.items():
             with self.subTest(corridor=corridor):
                 self.assertTrue(info["name"])

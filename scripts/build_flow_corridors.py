@@ -18,8 +18,12 @@ OUTPUT = (
     ROOT / "sindhu" / "web" / "static" / "resources" / "hatyai_flow_corridors.geojson"
 )
 
+# One drainage system per "water comes from" label on the map: Sadao water
+# runs down Khlong U-Taphao; Khuan Lang water runs down Khlong Wat into the
+# Khlong R.1 bypass; Kho Hong water runs down Khlong Rian and the R.3-R.6
+# canals into Khlong Toei.
 CORRIDOR_LINES = {
-    "utapao-main": [
+    "utapao": [
         "321674114",
         "453743011",
         "453743013",
@@ -29,8 +33,22 @@ CORRIDOR_LINES = {
         "1504011383",
         "1504011384",
     ],
-    "khlong-r1": ["125942385"],
-    "khlong-toei": [
+    "khuanlang": ["154729158", "125942385"],
+    "khohong": [
+        "127078194",
+        "127078223",
+        "127078306",
+        "243187986",
+        "243187987",
+        "243314049",
+        "243314054",
+        "243314055",
+        "243314057",
+        "1453266366",
+        "1453266367",
+        "1453266368",
+        "1453266369",
+        "1453266370",
         "155690223",
         "155690226",
         "155690230",
@@ -59,20 +77,6 @@ CORRIDOR_LINES = {
         "1453828248",
         "1453828249",
     ],
-    "kho-hong": [
-        "127078194",
-        "127078223",
-        "127078306",
-        "243187986",
-        "243187987",
-        "243314049",
-        "243314054",
-        "243314055",
-        "243314057",
-        "1453266366",
-    ],
-    "khlong-non": ["154729158"],
-    "phawong": ["449329363"],
 }
 
 
