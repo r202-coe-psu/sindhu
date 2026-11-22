@@ -226,6 +226,21 @@ class WaterwayStyleTests(unittest.TestCase):
         )
 
 
+class SystemColourTests(unittest.TestCase):
+    WATER_LEVEL_HUES = ((0, 65), (75, 165), (340, 360))
+
+    def test_no_system_colour_uses_a_water_level_hue(self):
+        import colorsys
+
+        for system, info in flow.CORRIDORS.items():
+            r, g, b = (int(info["color"][i : i + 2], 16) / 255 for i in (1, 3, 5))
+            hue = colorsys.rgb_to_hls(r, g, b)[0] * 360
+            with self.subTest(system=system, hue=round(hue)):
+                self.assertFalse(
+                    any(low <= hue <= high for low, high in self.WATER_LEVEL_HUES)
+                )
+
+
 class SystemFitTests(unittest.TestCase):
     def test_a_system_that_fits_at_this_zoom_or_closer_is_fitted(self):
         self.assertTrue(flow.fits_without_zooming_out(13, 12))
