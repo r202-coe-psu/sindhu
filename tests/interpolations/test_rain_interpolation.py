@@ -47,8 +47,8 @@ class RainSurfaceStaysInMeasuredRangeTest(unittest.TestCase):
                 self.assertLessEqual(_highest_band_start(geojson), values.max())
 
 
-class RainSurfaceCoversHatYaiTest(unittest.TestCase):
-    def test_bands_stay_inside_the_district_and_fill_it(self):
+class RainSurfaceIsACircleAroundHatYaiTest(unittest.TestCase):
+    def test_bands_fill_a_circle_that_encloses_the_district(self):
         lons, lats, values = _snapshot_points()
 
         geojson, _ = interpolations.interpolate_rain_contours(lons, lats, values)
@@ -56,9 +56,13 @@ class RainSurfaceCoversHatYaiTest(unittest.TestCase):
         surface = shapely.union_all(
             [shapely.geometry.shape(f["geometry"]) for f in geojson["features"]]
         )
-        district = interpolations.RAIN_AREA
-        self.assertTrue(district.buffer(1e-4).contains(surface))
-        self.assertGreater(surface.area / district.area, 0.99)
+        circle = interpolations.RAIN_AREA
+        district = shapely.geometry.shape(
+            json.loads(interpolations.HATYAI_BOUNDARY_PATH.read_text())
+        )
+        self.assertTrue(circle.buffer(1e-4).contains(district))
+        self.assertTrue(circle.buffer(1e-4).contains(surface))
+        self.assertGreater(surface.area / circle.area, 0.99)
 
 
 class MergeColocatedPointsTest(unittest.TestCase):

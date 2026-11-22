@@ -103,6 +103,8 @@ COLOCATED_TOLERANCE_DEG = 0.001  # ~100 m
 # How far an estimate may stray past the readings before it counts as broken
 MEASURED_RANGE_MARGIN_MM = 5
 
+RAIN_AREA_MARGIN_DEG = 0.005  # ~500 m
+
 HATYAI_BOUNDARY_PATH = (
     pathlib.Path(__file__).resolve().parent.parent
     / "web"
@@ -113,9 +115,13 @@ HATYAI_BOUNDARY_PATH = (
 
 
 def load_rain_area():
-    """The rain surface covers Hat Yai district, the outline drawn on the map."""
+    """The rain surface is the smallest circle that encloses Hat Yai district."""
     with HATYAI_BOUNDARY_PATH.open("r", encoding="utf-8") as f:
-        area = shapely.geometry.shape(json.load(f))
+        district = shapely.geometry.shape(json.load(f))
+    center = shapely.minimum_bounding_circle(district).centroid
+    radius = shapely.minimum_bounding_radius(district)
+    # Fine segments keep the polygon's chords from cutting off the district's tips
+    area = center.buffer(radius + RAIN_AREA_MARGIN_DEG, quad_segs=64)
     shapely.prepare(area)
     return area
 
@@ -200,7 +206,7 @@ def stays_in_measured_range(zi, values):
 
 
 def clip_to_rain_area(features):
-    """Cut each band along the district line so its edge matches the outline."""
+    """Cut each band along the circle so the surface ends in a clean round edge."""
     clipped = []
     for feature in features:
         geometry = shapely.intersection(
