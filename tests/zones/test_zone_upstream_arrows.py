@@ -287,6 +287,27 @@ class ZoneUpstreamArrowMapTests(unittest.TestCase):
 
         self.assertEqual(len(self.arrows.layers), 2)
 
+    def test_each_arrow_wears_its_upstream_zone_colour(self):
+        self.map_view.zone_layers_by_id["south"]["identity"] = {
+            "color": "#fef08a",
+            "dash": "",
+        }
+        self.map_view.zone_layers_by_id["west"]["identity"] = {
+            "color": "#ff2bd6",
+            "dash": "10 6",
+        }
+
+        self.map_view.select_zone("middle", fit_bounds=False)
+
+        fills = {
+            (round(arrow.latlng[0], 3), round(arrow.latlng[1], 3)): arrow.options[
+                "icon"
+            ]["html"]
+            for arrow in self.arrows.layers
+        }
+        self.assertIn("fill:#fef08a", fills[(1.0, 2.0)])
+        self.assertIn("fill:#ff2bd6", fills[(1.5, 0.0)])
+
     def test_arrows_are_non_interactive_markers(self):
         self.map_view.select_zone("middle", fit_bounds=False)
 

@@ -331,7 +331,13 @@ body.map-focus .map-focus-hint {
 /* Arrows into the selected zone (maps/map.py); the waterway labels and their
    arrows step back so only one set of big arrows reads, and stop catching
    clicks meant for the zone underneath. */
-.zone-upstream-arrow svg { filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.4)); }
+/* Zone colours can be pale (zone 1 is lemon), so the outline is dark like the
+   zone casing rather than the white used on the waterway arrows. */
+.zone-upstream-arrow svg {
+  stroke: var(--color-ink-900);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.4));
+}
 .flow-label,
 .flow-source-arrow { transition: opacity 150ms ease-out; }
 .flow-faded .flow-label,

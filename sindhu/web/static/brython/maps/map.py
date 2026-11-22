@@ -721,10 +721,13 @@ class Map:
         selected_rings = zone_rings(selected.get("boundary"))
         if not selected_rings:
             return
-        color = self.ZONE_UPSTREAM_STYLE["color"]
         width, height = SOURCE_ARROW_SIZE_PX
         for upstream_id in upstream_ids:
-            boundary = self.zone_layers_by_id[upstream_id]["zone"].get("boundary")
+            entry = self.zone_layers_by_id[upstream_id]
+            # The arrow wears the upstream zone's own colour (set per zone in
+            # /zones and shown in the legend), so it says where water comes from.
+            color = (entry.get("identity") or self.zone_identity(entry["zone"]))["color"]
+            boundary = entry["zone"].get("boundary")
             upstream_rings = zone_rings(boundary)
             if not upstream_rings:
                 continue
