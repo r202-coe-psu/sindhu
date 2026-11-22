@@ -6,6 +6,7 @@ import json
 from maps.cctv_pairing import feed_key as visual_feed_key
 from maps.cctv_pairing import pair_cameras, pin_shift
 from maps.marker_sizes import CCTV, MY_LOCATION, USER, hit_box_html, is_far_zoom
+from maps.zone_roles import is_reference_zone
 
 
 VISUAL_FEED_POPUP_OPTIONS = {"minWidth": 240, "maxWidth": 280, "autoPanPadding": [24, 24]}
@@ -198,19 +199,6 @@ class Map:
     ZONE_CODE_NUMBER = re.compile(r"zone[-_ ]?([0-9]+)", re.IGNORECASE)
 
     @staticmethod
-    def _is_reference_zone(zone, style=None):
-        style = style or zone.get("style") or zone.get("metadata") or {}
-        code = str(zone.get("code") or "").lower()
-        return (
-            zone.get("zone_kind") == "reference"
-            or style.get("role") == "reference_boundary"
-            or code in ("hatyai-boundary", "hatyai")
-            or ("hatyai" in code and "zone" not in code)
-            or zone.get("name") in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
-            or zone.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
-        )
-
-    @staticmethod
     def zone_number(zone):
         meta = zone.get("metadata") or {}
         number = meta.get("zone_number")
@@ -262,7 +250,7 @@ class Map:
 
         # Reference boundaries are geographic context, not a risk zone.
         # Keep them as a plain outline without fill and never recolour them.
-        if self._is_reference_zone(zone, custom_style):
+        if is_reference_zone(zone, custom_style):
             ref_color = (
                 custom_style.get("stroke")
                 or (
@@ -423,7 +411,7 @@ class Map:
         for zone in zones:
             if zone.get("status") == "inactive" or not zone.get("boundary"):
                 continue
-            if not str(zone.get("id", "")) or self._is_reference_zone(zone):
+            if not str(zone.get("id", "")) or is_reference_zone(zone):
                 continue
             flood_zones.append(zone)
         flood_zones.sort(key=self._zone_order_key)

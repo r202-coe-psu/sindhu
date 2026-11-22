@@ -66,3 +66,36 @@ class ZoneRoleTests(unittest.TestCase):
 
     def test_reference_boundary_code_constant_is_gone(self):
         self.assertFalse(hasattr(zone_service, "REFERENCE_BOUNDARY_CODE"))
+
+
+class ClientServerRuleParityTests(unittest.TestCase):
+    CASES = [
+        {"zone_kind": "reference"},
+        {"metadata": {"role": "reference_boundary"}},
+        {"zone_kind": "flood", "name_th": "หาดใหญ่", "code": "hatyai"},
+        {"name": "Hat Yai Boundary", "code": "hatyai-boundary"},
+        {"zone_kind": "flood", "metadata": {"role": "x"}},
+        {},
+    ]
+
+    def test_brython_rule_matches_the_server_rule(self):
+        import importlib.util
+        from pathlib import Path
+
+        path = (
+            Path(__file__).resolve().parents[2]
+            / "sindhu/web/static/brython/maps/zone_roles.py"
+        )
+        spec = importlib.util.spec_from_file_location("zone_roles", path)
+        client = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(client)
+
+        for case in self.CASES:
+            with self.subTest(case=case):
+                server_zone = SimpleNamespace(
+                    zone_kind=case.get("zone_kind"), metadata=case.get("metadata")
+                )
+                self.assertEqual(
+                    client.is_reference_zone(case),
+                    zone_service.is_reference_zone(server_zone),
+                )

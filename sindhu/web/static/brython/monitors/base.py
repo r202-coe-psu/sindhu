@@ -6,6 +6,7 @@ import json
 from urllib.parse import urlencode
 
 from maps.base import BaseMap
+from maps.zone_roles import is_reference_zone
 from monitors.area import (
     ALL_AREAS,
     MSG_DENIED,
@@ -168,22 +169,9 @@ class BaseMonitor:
         for z in db_zones:
             if z.get("status") == "inactive":
                 continue
-            meta = z.get("metadata") or z.get("style") or {}
-            is_ref = (
-                z.get("zone_kind") == "reference"
-                or meta.get("role") == "reference_boundary"
-                or z.get("code") in ("hatyai-boundary", "hatyai")
-                or (
-                    z.get("code")
-                    and "hatyai" in str(z.get("code")).lower()
-                    and "zone" not in str(z.get("code")).lower()
-                )
-                or z.get("name")
-                in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
-                or z.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
-            )
-            if is_ref:
+            if is_reference_zone(z):
                 continue
+            meta = z.get("metadata") or z.get("style") or {}
             if not z.get("style"):
                 z["style"] = meta
             flood_zones.append(z)

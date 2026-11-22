@@ -405,16 +405,10 @@ const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const DASH_PATTERN = /^[0-9][0-9 ,.]*$/;
 const ZONE_CODE_NUMBER = /zone[-_ ]?([0-9]+)/i;
 
+// Same rule as sindhu.services.zones.is_reference_zone.
 function isReferenceZone(z) {
     const meta = z.metadata || {};
-    const code = (z.code || "").toLowerCase();
-    return z.zone_kind === "reference"
-        || meta.role === "reference_boundary"
-        || code === "hatyai-boundary"
-        || code === "hatyai"
-        || (code.includes("hatyai") && !code.includes("zone"))
-        || ["Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่"].includes(z.name)
-        || ["หาดใหญ่", "กรอบพื้นที่หาดใหญ่"].includes(z.name_th);
+    return z.zone_kind === "reference" || meta.role === "reference_boundary";
 }
 
 function zoneNumber(z) {
