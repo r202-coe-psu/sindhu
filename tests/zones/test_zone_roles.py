@@ -52,6 +52,7 @@ class ZoneRoleTests(unittest.TestCase):
     def test_missing_metadata_is_flood(self):
         zone = fake_zone("f", square(0, 0), zone_kind=None, metadata=None)
 
+        self.assertFalse(zone_service.is_reference_zone(zone))
 
     def test_code_001_alone_is_not_reference(self):
         zone = fake_zone("f", square(0, 0), zone_kind=None, metadata=None, code="001")
@@ -61,6 +62,7 @@ class ZoneRoleTests(unittest.TestCase):
     def test_other_role_is_flood(self):
         zone = fake_zone("f", square(0, 0), zone_kind="flood", metadata={"role": "x"})
 
+        self.assertFalse(zone_service.is_reference_zone(zone))
 
     def test_reference_boundary_code_constant_is_gone(self):
         self.assertFalse(hasattr(zone_service, "REFERENCE_BOUNDARY_CODE"))
