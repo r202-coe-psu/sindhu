@@ -72,6 +72,12 @@ LABEL_FLY_MIN_ZOOM = 13
 # Between overlayPane (400) and markerPane (600): above the zone fills and
 # below the station markers.
 LINES_PANE = ("flowLines", "420")
+CONTEXT_PANE = ("flowContext", "410")
+# The rest of the waterway network: thin and faint so the corridors stay the
+# story, and only from city zoom, where it no longer clutters the map.
+CONTEXT_MIN_ZOOM = 12
+CONTEXT_COLOR = "#0369a1"
+CONTEXT_WEIGHT_PX = {"river": 2.0, "canal": 1.5, "stream": 1.0, "drain": 1.0}
 ARROWS_PANE = ("flowArrows", "425")
 FALLBACK_LABEL_SIZE = (180, 56)
 LABEL_EDGE_GAP_PX = 8
@@ -185,13 +191,17 @@ class FlowLayer:
         self.labels = []
         self._marks_by_zoom = None
 
+        self._create_pane(*CONTEXT_PANE)
         self._create_pane(*LINES_PANE)
         self._create_pane(*ARROWS_PANE)
         self.line_renderer = self.leaflet.svg({"pane": LINES_PANE[0]})
+        self.context_renderer = self.leaflet.svg({"pane": CONTEXT_PANE[0]})
+        self.context_layer = self.leaflet.layerGroup()
         self.arrow_layer = self.leaflet.layerGroup().addTo(self.map)
 
         self._create_labels()
         self.map.on("zoomend moveend", lambda e: self.refresh_arrows())
+        self.map.on("zoomend", lambda e: self.refresh_context())
         self.map.on("move zoom resize", lambda e: self.place_labels())
         self.place_labels()
 
@@ -234,6 +244,42 @@ class FlowLayer:
             layer.addTo(self.map)
             self.line_layers.append(layer)
         self.refresh_arrows()
+
+    def set_context(self, geojson):
+        self.context_layer.clearLayers()
+        by_class = {}
+        for feature in geojson.get("features", []):
+            coordinates = (feature.get("geometry") or {}).get("coordinates") or []
+            if len(coordinates) < 2:
+                continue
+            fclass = (feature.get("properties") or {}).get("fclass")
+            by_class.setdefault(fclass, []).append(
+                [[lat, lng] for lng, lat in coordinates]
+            )
+        for fclass, parts in by_class.items():
+            self.context_layer.addLayer(
+                self.leaflet.polyline(
+                    parts,
+                    {
+                        "pane": CONTEXT_PANE[0],
+                        "renderer": self.context_renderer,
+                        "interactive": False,
+                        "color": CONTEXT_COLOR,
+                        "weight": CONTEXT_WEIGHT_PX.get(fclass, 1.0),
+                        "opacity": 0.6,
+                        "lineCap": "round",
+                        "lineJoin": "round",
+                    },
+                )
+            )
+        self.refresh_context()
+
+    def refresh_context(self):
+        show = self.map.getZoom() >= CONTEXT_MIN_ZOOM
+        if show and not self.map.hasLayer(self.context_layer):
+            self.context_layer.addTo(self.map)
+        elif not show and self.map.hasLayer(self.context_layer):
+            self.map.removeLayer(self.context_layer)
 
     def _marks_at(self, zoom):
         """Arrow marks of every line at ``zoom``, in world pixels.

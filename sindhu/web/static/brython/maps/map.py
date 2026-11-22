@@ -649,10 +649,16 @@ class Map:
         self.zone_layers_by_id = {}
         self._selected_zone_id = None
 
-    def set_flow_corridors(self, geojson):
+    def _flow_layer(self):
         if getattr(self, "flow_layer", None) is None:
             self.flow_layer = FlowLayer(self.map)
-        self.flow_layer.set_corridors(geojson)
+        return self.flow_layer
+
+    def set_flow_corridors(self, geojson):
+        self._flow_layer().set_corridors(geojson)
+
+    def set_flow_context(self, geojson):
+        self._flow_layer().set_context(geojson)
 
     def __del__(self):
         self.map.remove()

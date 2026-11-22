@@ -14,11 +14,32 @@ _spec.loader.exec_module(build_flow_corridors)
 class FlowCorridorDataTests(unittest.TestCase):
     def test_committed_file_matches_the_build_script(self):
         source = json.loads(build_flow_corridors.SOURCE.read_text(encoding="utf-8"))
-        expected = build_flow_corridors.render(build_flow_corridors.build(source))
+        for path, build in (
+            (build_flow_corridors.OUTPUT, build_flow_corridors.build),
+            (build_flow_corridors.CONTEXT_OUTPUT, build_flow_corridors.build_context),
+        ):
+            with self.subTest(path=path.name):
+                self.assertEqual(
+                    path.read_text(encoding="utf-8"),
+                    build_flow_corridors.render(build(source)),
+                    "rerun scripts/build_flow_corridors.py",
+                )
+
+    def test_context_holds_every_source_line_that_is_not_a_corridor(self):
+        source = json.loads(build_flow_corridors.SOURCE.read_text(encoding="utf-8"))
+        corridors = json.loads(build_flow_corridors.OUTPUT.read_text(encoding="utf-8"))
+        context = json.loads(
+            build_flow_corridors.CONTEXT_OUTPUT.read_text(encoding="utf-8")
+        )
         self.assertEqual(
-            build_flow_corridors.OUTPUT.read_text(encoding="utf-8"),
-            expected,
-            "rerun scripts/build_flow_corridors.py",
+            len(context["features"]) + len(corridors["features"]),
+            len(source["features"]),
+        )
+
+    def test_simplify_keeps_the_ends_and_the_bends(self):
+        line = [[0, 0], [1, 0.00001], [2, 0], [2, 1], [2, 2]]
+        self.assertEqual(
+            build_flow_corridors.simplify(line, 0.001), [[0, 0], [2, 0], [2, 2]]
         )
 
     def test_every_corridor_has_drawable_lines(self):

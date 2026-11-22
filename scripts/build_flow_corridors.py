@@ -3,13 +3,15 @@
 The source is an OSM waterway export.  OSM draws a waterway in the direction
 the water flows, so the vertex order of each line is its flow direction.
 
-Only the lines listed in CORRIDOR_LINES are kept: drawing all 807 source lines
-cluttered the map.
+The lines listed in CORRIDOR_LINES become the corridors, drawn bold with
+arrows.  Every other line goes to a simplified context file drawn thin and
+faint: drawing all 807 source lines at full weight cluttered the map.
 
     python scripts/build_flow_corridors.py
 """
 
 import json
+import math
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -17,6 +19,10 @@ SOURCE = ROOT / "fixtures" / "waterways" / "songkhla_waterways_osm.geojson"
 OUTPUT = (
     ROOT / "sindhu" / "web" / "static" / "resources" / "hatyai_flow_corridors.geojson"
 )
+CONTEXT_OUTPUT = OUTPUT.with_name("hatyai_waterways_context.geojson")
+# About 9 m: below a pixel at the zoom the context lines appear.
+CONTEXT_TOLERANCE_DEG = 0.00008
+CONTEXT_DECIMALS = 5
 
 # One drainage system per "water comes from" label on the map: Sadao water
 # runs down Khlong U-Taphao; Khuan Lang water runs down Khlong Wat into the
@@ -107,14 +113,62 @@ def build(source):
     return {"type": "FeatureCollection", "features": features}
 
 
+def simplify(points, tolerance):
+    """Douglas-Peucker: drop vertices closer than ``tolerance`` to the chord."""
+    if len(points) < 3:
+        return list(points)
+    (x1, y1), (x2, y2) = points[0], points[-1]
+    chord = math.hypot(x2 - x1, y2 - y1)
+    worst, worst_at = -1.0, 0
+    for i in range(1, len(points) - 1):
+        x, y = points[i]
+        if chord == 0:
+            distance = math.hypot(x - x1, y - y1)
+        else:
+            distance = abs((x2 - x1) * (y1 - y) - (x1 - x) * (y2 - y1)) / chord
+        if distance > worst:
+            worst, worst_at = distance, i
+    if worst <= tolerance:
+        return [points[0], points[-1]]
+    head = simplify(points[: worst_at + 1], tolerance)
+    return head[:-1] + simplify(points[worst_at:], tolerance)
+
+
+def build_context(source):
+    corridor_ids = {osm_id for osm_ids in CORRIDOR_LINES.values() for osm_id in osm_ids}
+    features = []
+    for feature in source["features"]:
+        if feature["properties"]["osm_id"] in corridor_ids:
+            continue
+        points = simplify(feature["geometry"]["coordinates"], CONTEXT_TOLERANCE_DEG)
+        features.append(
+            {
+                "type": "Feature",
+                "properties": {"fclass": feature["properties"]["fclass"]},
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [
+                        [round(x, CONTEXT_DECIMALS), round(y, CONTEXT_DECIMALS)]
+                        for x, y in points
+                    ],
+                },
+            }
+        )
+    return {"type": "FeatureCollection", "features": features}
+
+
 def render(collection):
     return json.dumps(collection, ensure_ascii=False, separators=(",", ":")) + "\n"
 
 
 def main():
     source = json.loads(SOURCE.read_text(encoding="utf-8"))
-    OUTPUT.write_text(render(build(source)), encoding="utf-8")
-    print(f"wrote {OUTPUT.relative_to(ROOT)}")
+    for path, collection in (
+        (OUTPUT, build(source)),
+        (CONTEXT_OUTPUT, build_context(source)),
+    ):
+        path.write_text(render(collection), encoding="utf-8")
+        print(f"wrote {path.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":
