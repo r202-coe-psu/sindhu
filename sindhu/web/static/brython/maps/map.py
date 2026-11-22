@@ -5,8 +5,9 @@ import json
 
 from maps.cctv_pairing import feed_key as visual_feed_key
 from maps.cctv_pairing import pair_cameras, pin_shift
-from maps.flow import FlowLayer
+from maps.flow import SOURCE_ARROW_SIZE_PX, SOURCE_ARROW_SVG, FlowLayer
 from maps.marker_sizes import CCTV, MY_LOCATION, USER, hit_box_html, is_far_zoom
+from maps.zone_flow import upstream_arrow, zone_rings
 
 
 VISUAL_FEED_POPUP_OPTIONS = {"minWidth": 240, "maxWidth": 280, "autoPanPadding": [24, 24]}
@@ -30,6 +31,7 @@ class Map:
     # level so a Map without a selection reads as "nothing upstream".
     _upstream_zone_ids = frozenset()
     _upstream_label = None
+    _zone_arrow_layer = None
 
     def __init__(self, center, zoom, min_zoom):
         self.center = center
@@ -257,6 +259,10 @@ class Map:
         "opacity": 1.0,
         "dashArray": "10, 6",
     }
+    # Above the waterway arrows (425), below the station markers (600).
+    ZONE_ARROW_PANE_Z_INDEX = "430"
+    # CSS fades the waterway labels and their big arrows while it is set.
+    FLOW_FADED_CLASS = "flow-faded"
 
     def set_zone_risk(self, zone_id, level):
         """Fill a zone with the worst risk among its stations."""
@@ -438,6 +444,14 @@ class Map:
             casing_pane = self.map.createPane("zoneCasings")
             casing_pane.style.zIndex = "349"
             casing_pane.style.pointerEvents = "none"
+
+        arrow_pane = self.map.getPane("zoneArrows")
+        if not arrow_pane:
+            arrow_pane = self.map.createPane("zoneArrows")
+            arrow_pane.style.zIndex = self.ZONE_ARROW_PANE_Z_INDEX
+            arrow_pane.style.pointerEvents = "none"
+        if self._zone_arrow_layer is None:
+            self._zone_arrow_layer = self.leaflet.layerGroup().addTo(self.map)
 
         if self._zone_renderer is None:
             self._zone_renderer = self.leaflet.svg({"pane": "zones"})
@@ -663,6 +677,9 @@ class Map:
                     other["casing"].bringToFront()
                 other["layer"].bringToFront()
 
+        self._draw_upstream_arrows(zone_id, upstream_ids)
+        self.map.getContainer().classList.add(self.FLOW_FADED_CLASS)
+
         names = [self._zone_display_name(upstream_id) for upstream_id in upstream_ids]
         self._show_upstream_label(
             "น้ำไหลมาจาก: " + ", ".join(names) if names else "ไม่มีข้อมูลต้นน้ำ"
@@ -695,6 +712,50 @@ class Map:
         self._upstream_label.text = text
         self._upstream_label.style.display = "block"
 
+    def _draw_upstream_arrows(self, zone_id, upstream_ids):
+        """One arrow per upstream zone, pointing into the selected zone."""
+        self._clear_upstream_arrows()
+        if self._zone_arrow_layer is None:
+            return
+        selected = self.zone_layers_by_id[zone_id]["zone"]
+        selected_rings = zone_rings(selected.get("boundary"))
+        if not selected_rings:
+            return
+        color = self.ZONE_UPSTREAM_STYLE["color"]
+        width, height = SOURCE_ARROW_SIZE_PX
+        for upstream_id in upstream_ids:
+            boundary = self.zone_layers_by_id[upstream_id]["zone"].get("boundary")
+            upstream_rings = zone_rings(boundary)
+            if not upstream_rings:
+                continue
+            arrow = upstream_arrow(upstream_rings, selected_rings)
+            icon = self.leaflet.divIcon(
+                {
+                    "className": "zone-upstream-arrow",
+                    "html": (
+                        f'<div style="transform:rotate({round(arrow["angle"], 1)}deg)">'
+                        f"{SOURCE_ARROW_SVG.format(color=color)}</div>"
+                    ),
+                    "iconSize": [width, height],
+                    "iconAnchor": [width / 2, height / 2],
+                }
+            )
+            self._zone_arrow_layer.addLayer(
+                self.leaflet.marker(
+                    [arrow["lat"], arrow["lng"]],
+                    {
+                        "icon": icon,
+                        "pane": "zoneArrows",
+                        "interactive": False,
+                        "keyboard": False,
+                    },
+                )
+            )
+
+    def _clear_upstream_arrows(self):
+        if self._zone_arrow_layer is not None:
+            self._zone_arrow_layer.clearLayers()
+
     def _hide_upstream_label(self):
         if self._upstream_label is not None:
             self._upstream_label.style.display = "none"
@@ -703,6 +764,8 @@ class Map:
         self._selected_zone_id = None
         self._upstream_zone_ids = frozenset()
         self._hide_upstream_label()
+        self._clear_upstream_arrows()
+        self.map.getContainer().classList.remove(self.FLOW_FADED_CLASS)
         for zone_id in self.zone_layers_by_id:
             self._apply_zone_style(zone_id)
 
@@ -715,6 +778,8 @@ class Map:
         self._selected_zone_id = None
         self._upstream_zone_ids = frozenset()
         self._hide_upstream_label()
+        self._clear_upstream_arrows()
+        self.map.getContainer().classList.remove(self.FLOW_FADED_CLASS)
 
     def _flow_layer(self):
         if getattr(self, "flow_layer", None) is None:

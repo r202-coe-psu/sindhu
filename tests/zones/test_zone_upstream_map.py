@@ -63,9 +63,24 @@ class _Element:
         self.style = types.SimpleNamespace(display="")
 
 
+class _ClassList:
+    def __init__(self):
+        self.names = set()
+
+    def add(self, name):
+        self.names.add(name)
+
+    def remove(self, name):
+        self.names.discard(name)
+
+    def contains(self, name):
+        return name in self.names
+
+
 class _Container:
     def __init__(self):
         self.children = []
+        self.classList = _ClassList()
 
     def appendChild(self, child):
         self.children.append(child)
