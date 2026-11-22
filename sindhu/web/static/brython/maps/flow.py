@@ -68,7 +68,7 @@ FLOW_SOURCES = [
         "dest_lng": 100.465,
         "angle": 0,
         "system": None,
-        "color": "#0c4a6e",
+        "color": "#7e22ce",
     },
 ]
 
