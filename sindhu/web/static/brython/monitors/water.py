@@ -147,6 +147,13 @@ class WaterMonitor(BaseMonitor):
         if "toggle_zones_layer" in document:
             document["toggle_zones_layer"].bind("change", self.on_toggle_zones_layer)
 
+        if "toggle_waterways_layer" in document:
+            toggle = document["toggle_waterways_layer"]
+            toggle.bind("change", self.on_toggle_waterways_layer)
+            # A reload can restore the checkbox unchecked while the layer
+            # starts drawn.
+            self.map.set_waterways_visible(bool(toggle.checked))
+
         while self.running:
             print(f"monitor: wake up {datetime.datetime.now()}")
             print(f"monitor: {self.monitor_name} monitor")
@@ -292,6 +299,9 @@ class WaterMonitor(BaseMonitor):
             for el_id in (f"toggle_zone_{zid}", f"toggle_zone_{zcode}"):
                 if el_id in document:
                     document[el_id].checked = checked
+
+    def on_toggle_waterways_layer(self, ev):
+        self.map.set_waterways_visible(bool(ev.target.checked))
 
     def on_toggle_single_zone(self, zone_key, ev):
         checked = bool(ev.target.checked)

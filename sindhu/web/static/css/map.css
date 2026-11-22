@@ -249,3 +249,80 @@ body.map-focus .map-focus-hint {
 }
 .leaflet-control-attribution a { color: var(--color-brand-600); }
 
+
+/* Drainage corridors (maps/flow.py) */
+.flow-arrow svg {
+  stroke: var(--color-base-100);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+
+/* Sits on the map container, not in a pane, so it stays put while panning;
+   only the label and its big arrow take pointer events and dragging
+   elsewhere is untouched. */
+.flow-label {
+  position: absolute;
+  z-index: 650;
+  max-width: calc(100% - 1rem);
+  padding: 0;
+  transform: translate(-50%, -50%);
+  border: 0;
+  background: none;
+  color: var(--color-base-100);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.flow-label:focus-visible { outline: 3px solid var(--color-ink-900); outline-offset: 2px; }
+
+/* Source on screen: a two-line tag, with the big arrow drawn beside it. */
+.flow-label-tag { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.flow-label-tag-title,
+.flow-label-tag-route {
+  background: var(--flow-color);
+  border: 1px solid var(--color-base-100);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.25);
+}
+.flow-label-tag-title { padding: 0.25rem 0.75rem; font-size: 1rem; font-weight: 700; }
+.flow-label-tag-route { padding: 0.125rem 0.5rem; font-size: 0.8125rem; font-weight: 600; }
+.flow-label:hover .flow-label-tag-title,
+.flow-label:hover .flow-label-tag-route,
+.flow-label:hover .flow-label-chip { filter: brightness(1.12); }
+
+/* Source off screen: a compact chip pinned to the map edge. */
+.flow-label-chip {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem 0.375rem 0.5rem;
+  background: var(--flow-color);
+  border: 1px solid var(--color-base-100);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.3);
+}
+.flow-label.is-pinned .flow-label-chip { display: flex; }
+.flow-label.is-pinned .flow-label-tag { display: none; }
+.flow-label-arrow {
+  display: inline-flex;
+  flex: none;
+  transition: transform 150ms ease-out;
+}
+.flow-label-text { display: flex; flex-direction: column; line-height: 1.2; }
+.flow-label-title { font-size: 0.9375rem; font-weight: 700; }
+.flow-label-route { font-size: 0.75rem; }
+
+.flow-source-arrow {
+  position: absolute;
+  z-index: 640;
+  cursor: pointer;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
+}
+.flow-source-arrow svg {
+  display: block;
+  stroke: var(--color-base-100);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  overflow: visible;
+}

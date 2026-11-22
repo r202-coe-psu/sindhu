@@ -5,6 +5,7 @@ import json
 
 from maps.cctv_pairing import feed_key as visual_feed_key
 from maps.cctv_pairing import pair_cameras, pin_shift
+from maps.flow import FlowLayer
 from maps.marker_sizes import CCTV, MY_LOCATION, USER, hit_box_html, is_far_zoom
 
 
@@ -647,6 +648,17 @@ class Map:
             self._set_zone_entry_visible(entry, False)
         self.zone_layers_by_id = {}
         self._selected_zone_id = None
+
+    def _flow_layer(self):
+        if getattr(self, "flow_layer", None) is None:
+            self.flow_layer = FlowLayer(self.map, self.fit_bounds_options)
+        return self.flow_layer
+
+    def set_waterways(self, geojson):
+        self._flow_layer().set_waterways(geojson)
+
+    def set_waterways_visible(self, visible):
+        self._flow_layer().set_visible(visible)
 
     def __del__(self):
         self.map.remove()
