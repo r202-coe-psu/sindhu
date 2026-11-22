@@ -357,16 +357,23 @@ class BaseMonitor:
     def on_map_pinned(self, lat, lng):
         aio.run(self.on_location_received(lat, lng))
 
+    def set_locate_busy(self, busy):
+        if "my_locate" in document:
+            document["my_locate"].disabled = busy
+
     def on_my_locate_click(self, ev):
         self.set_area_message(None)
+        self.set_locate_busy(True)
         self.map.fly_to_user(
             on_found=self.on_my_location_found, on_error=self.on_my_location_error
         )
 
     def on_my_location_found(self, lat, lng):
+        self.set_locate_busy(False)
         aio.run(self.on_location_received(lat, lng))
 
     def on_my_location_error(self, e):
+        self.set_locate_busy(False)
         # GeolocationPositionError.PERMISSION_DENIED == 1
         kind = MSG_DENIED if getattr(e, "code", None) == 1 else MSG_ERROR
         self.set_area_message(location_message(kind, error=e))

@@ -132,6 +132,9 @@ class FakeLeafletMap:
     def locate(self):
         self.located += 1
 
+    def stopLocate(self):
+        self.stopped = True
+
     def flyTo(self, coord, zoom):
         self.fly.append((coord, zoom))
 
@@ -144,11 +147,68 @@ class FakeLeafletMap:
             handler(payload)
 
 
+class FakeWindow:
+    def __init__(self):
+        self.timers = {}
+        self._next = 0
+
+    def setTimeout(self, callback, ms):
+        self._next += 1
+        self.timers[self._next] = callback
+        return self._next
+
+    def clearTimeout(self, timer_id):
+        self.timers.pop(timer_id, None)
+
+    def run_timers(self):
+        for timer_id in list(self.timers):
+            self.timers.pop(timer_id)()
+
+
 class FlyToUserTests(unittest.TestCase):
     def setUp(self):
         self.map_view = Map.__new__(Map)
         self.map_view.leaflet = _BrowserStub()
         self.map_view.map = FakeLeafletMap()
+        self.window = FakeWindow()
+        patcher = patch.object(sys.modules["maps.map"], "window", self.window)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_unanswered_prompt_times_out_and_frees_the_button(self):
+        errors = []
+        self.map_view.fly_to_user(on_found=lambda a, b: None, on_error=errors.append)
+
+        self.window.run_timers()
+
+        self.assertEqual([e.code for e in errors], [3])
+        self.assertTrue(self.map_view.map.stopped)
+        self.assertEqual(self.map_view.map.handlers["locationfound"], [])
+        self.map_view.fly_to_user(on_found=lambda a, b: None, on_error=errors.append)
+        self.assertEqual(self.map_view.map.located, 2)
+
+    def test_a_fix_cancels_the_timeout(self):
+        errors = []
+        self.map_view.fly_to_user(on_found=lambda a, b: None, on_error=errors.append)
+        self.map_view.map.fire(
+            "locationfound", SimpleNamespace(latlng=SimpleNamespace(lat=1, lng=2))
+        )
+
+        self.assertEqual(self.window.timers, {})
+        self.assertEqual(errors, [])
+
+    def test_crash_while_drawing_the_pin_still_unbinds_handlers(self):
+        self.map_view._pin_icon = Mock(side_effect=RuntimeError("icon"))
+        self.map_view.fly_to_user(on_found=lambda a, b: None, on_error=lambda e: None)
+
+        with self.assertRaises(RuntimeError):
+            self.map_view.map.fire(
+                "locationfound", SimpleNamespace(latlng=SimpleNamespace(lat=1, lng=2))
+            )
+
+        self.assertEqual(self.map_view.map.handlers["locationfound"], [])
+        self.assertEqual(self.map_view.map.handlers["locationerror"], [])
+        self.assertFalse(self.map_view._locating)
 
     def test_location_found_calls_on_found_and_never_alerts(self):
         found, errors = [], []

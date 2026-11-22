@@ -19,6 +19,13 @@ def _open_unless_popup(marker, feed, on_feed_click):
         on_feed_click(feed)
 
 
+class LocateTimeout:
+    """Stands in for a GeolocationPositionError when no answer ever came."""
+
+    code = 3  # GeolocationPositionError.TIMEOUT
+    message = "หมดเวลารอตำแหน่ง"
+
+
 class Map:
     # The open camera popup as (marker key, build_content).  It follows the
     # camera, not one marker object, because markers are rebuilt on every poll,
@@ -192,6 +199,7 @@ class Map:
         {"color": "#4f7cff", "dash": "2 6 10 6"},  # zone 3: vivid blue, dash-dot
     )
     ZONE_CASING_COLOR = "#141414"
+    LOCATE_TIMEOUT_MS = 20000
     ZONE_WEIGHT = 2.6
     ZONE_RISK_FILL_OPACITY = 0.28
     HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -1278,55 +1286,73 @@ class Map:
         if getattr(self, "_locating", False):
             return
         self._locating = True
+        attempt = {"pending": True, "timer": None}
 
-        def on_location_found(e):
+        def settle():
+            attempt["pending"] = False
             self._locating = False
-            self.user_coord = (e.latlng.lat, e.latlng.lng)
-
-            self.map.flyTo(self.user_coord, 16)
-
-            my_location_icon = self._pin_icon(
-                MY_LOCATION,
-                f'<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><i class="ph-fill ph-map-pin text-brand-600 block" style="font-size: {MY_LOCATION.pin[1]}px; line-height: 1;"></i></div>',
-            )
-
-            if (
-                hasattr(self, "user_mark")
-                and self.user_mark
-                and not isinstance(self.user_mark, list)
-            ):
-                self.user_mark.setLatLng(self.user_coord)
-                self.user_mark.setIcon(my_location_icon)
-                self.user_mark.setPopupContent("ตำแหน่งของคุณ")
-            else:
-                self.user_mark = (
-                    self.leaflet.marker(
-                        self.user_coord,
-                        {
-                            "icon": my_location_icon,
-                            "zIndexOffset": 1000,
-                        },
-                    )
-                    .addTo(self.map)
-                    .bindPopup("ตำแหน่งของคุณ")
-                )
-
             self.map.off("locationfound", on_location_found)
             self.map.off("locationerror", on_location_error)
+            if attempt["timer"] is not None:
+                window.clearTimeout(attempt["timer"])
+
+        def on_location_found(e):
+            try:
+                self.user_coord = (e.latlng.lat, e.latlng.lng)
+
+                self.map.flyTo(self.user_coord, 16)
+
+                my_location_icon = self._pin_icon(
+                    MY_LOCATION,
+                    f'<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><i class="ph-fill ph-map-pin text-brand-600 block" style="font-size: {MY_LOCATION.pin[1]}px; line-height: 1;"></i></div>',
+                )
+
+                if (
+                    hasattr(self, "user_mark")
+                    and self.user_mark
+                    and not isinstance(self.user_mark, list)
+                ):
+                    self.user_mark.setLatLng(self.user_coord)
+                    self.user_mark.setIcon(my_location_icon)
+                    self.user_mark.setPopupContent("ตำแหน่งของคุณ")
+                else:
+                    self.user_mark = (
+                        self.leaflet.marker(
+                            self.user_coord,
+                            {
+                                "icon": my_location_icon,
+                                "zIndexOffset": 1000,
+                            },
+                        )
+                        .addTo(self.map)
+                        .bindPopup("ตำแหน่งของคุณ")
+                    )
+            finally:
+                settle()
             if on_found:
                 on_found(self.user_coord[0], self.user_coord[1])
 
         def on_location_error(e):
-            self._locating = False
-            self.map.off("locationfound", on_location_found)
-            self.map.off("locationerror", on_location_error)
+            if not attempt["pending"]:
+                return
+            settle()
             if on_error:
                 on_error(e)
+
+        def on_timeout():
+            # A dismissed permission prompt may never call back at all.
+            if attempt["pending"]:
+                self.map.stopLocate()
+                on_location_error(LocateTimeout())
 
         # Bind before locate(): Leaflet can fire locationerror synchronously.
         self.map.on("locationfound", on_location_found)
         self.map.on("locationerror", on_location_error)
-        self.map.locate()
+        attempt["timer"] = window.setTimeout(on_timeout, self.LOCATE_TIMEOUT_MS)
+        try:
+            self.map.locate()
+        except Exception as e:
+            on_location_error(e)
 
     def zoom_out(self):
         self.map.zoomOut(1)
