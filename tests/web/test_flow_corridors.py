@@ -36,9 +36,10 @@ class WaterwayDataTests(unittest.TestCase):
 
     def test_only_the_listed_lines_carry_a_system(self):
         counts = Counter(
-            f["properties"].get("corridor") for f in _committed()["features"]
+            system
+            for f in _committed()["features"]
+            for system in f["properties"].get("systems", [])
         )
-        counts.pop(None)
         self.assertEqual(
             counts,
             {

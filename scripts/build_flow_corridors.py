@@ -6,8 +6,9 @@ waterway in the direction the water flows, so the vertex order of each line is
 its flow direction.
 
 Every line is written simplified, with its fclass.  The lines listed in
-CORRIDOR_LINES also carry their drainage system as ``corridor``: the map draws
-direction arrows on them and highlights a system when its label is picked.
+CORRIDOR_LINES also carry the drainage systems they belong to as ``systems``
+(a line can feed one system and be another's outlet): the map draws direction
+arrows on them and highlights a system when its label is picked.
 
     python scripts/build_flow_corridors.py
 """
@@ -91,6 +92,9 @@ CORRIDOR_LINES = {
         "1453828248",
         "1453828249",
     ],
+    # Where the water leaves for the lake: U-Taphao from the Khlong R.1 split
+    # to its mouth, Khlong R.1 and Khlong R.3.
+    "lake": ["453743013", "125942385", "243187986"],
 }
 
 
@@ -127,13 +131,12 @@ def simplify(points, tolerance):
 
 
 def build(source):
-    corridor_of = {
-        osm_id: corridor
-        for corridor, osm_ids in CORRIDOR_LINES.items()
-        for osm_id in osm_ids
-    }
+    systems_of = {}
+    for system, osm_ids in CORRIDOR_LINES.items():
+        for osm_id in osm_ids:
+            systems_of.setdefault(osm_id, []).append(system)
     missing = sorted(
-        set(corridor_of) - {f["properties"]["osm_id"] for f in source["features"]}
+        set(systems_of) - {f["properties"]["osm_id"] for f in source["features"]}
     )
     if missing:
         raise SystemExit(f"osm_id not in source: {', '.join(missing)}")
@@ -141,9 +144,9 @@ def build(source):
     features = []
     for feature in source["features"]:
         properties = {"fclass": feature["properties"]["fclass"]}
-        corridor = corridor_of.get(feature["properties"]["osm_id"])
-        if corridor:
-            properties["corridor"] = corridor
+        systems = systems_of.get(feature["properties"]["osm_id"])
+        if systems:
+            properties["systems"] = sorted(systems)
         points = simplify(feature["geometry"]["coordinates"], SIMPLIFY_TOLERANCE_DEG)
         features.append(
             {

@@ -174,7 +174,7 @@ class SourceArrowPlacementTests(unittest.TestCase):
 class WaterwayStyleTests(unittest.TestCase):
     def test_every_class_is_blue_and_thicker_for_bigger_waterways(self):
         styles = {
-            fclass: flow.waterway_style(fclass, None, None)
+            fclass: flow.waterway_style(fclass, (), None)
             for fclass in ("river", "canal", "stream", "drain")
         }
         self.assertEqual({s["color"] for s in styles.values()}, {flow.WATERWAY_COLOR})
@@ -184,8 +184,8 @@ class WaterwayStyleTests(unittest.TestCase):
 
     def test_an_unknown_class_is_drawn_like_a_stream(self):
         self.assertEqual(
-            flow.waterway_style("ditch", None, None),
-            flow.waterway_style("stream", None, None),
+            flow.waterway_style("ditch", (), None),
+            flow.waterway_style("stream", (), None),
         )
 
     def test_a_corridor_line_looks_like_any_other_line_until_selected(self):
@@ -193,24 +193,31 @@ class WaterwayStyleTests(unittest.TestCase):
             for selected in (None, *(set(flow.CORRIDORS) - {system})):
                 with self.subTest(system=system, selected=selected):
                     self.assertEqual(
-                        flow.waterway_style("canal", system, selected),
-                        flow.waterway_style("canal", None, selected),
+                        flow.waterway_style("canal", (system,), selected),
+                        flow.waterway_style("canal", (), selected),
                     )
 
     def test_the_selected_system_takes_its_colour_and_a_heavier_line(self):
         for system, info in flow.CORRIDORS.items():
             for fclass in ("river", "canal", "stream", "drain"):
                 with self.subTest(system=system, fclass=fclass):
-                    base = flow.waterway_style(fclass, None, system)
-                    picked = flow.waterway_style(fclass, system, system)
+                    base = flow.waterway_style(fclass, (), system)
+                    picked = flow.waterway_style(fclass, (system,), system)
                     self.assertEqual(picked["color"], info["color"])
                     self.assertGreater(picked["weight"], base["weight"])
 
+    def test_a_line_in_two_systems_lights_up_for_either(self):
+        for selected in ("khuanlang", "lake"):
+            with self.subTest(selected=selected):
+                style = flow.waterway_style("canal", ("khuanlang", "lake"), selected)
+                self.assertEqual(style["color"], flow.CORRIDORS[selected]["color"])
+
     def test_arrows_are_blue_until_their_system_is_selected(self):
-        self.assertEqual(flow.arrow_color("khohong", None), flow.WATERWAY_COLOR)
-        self.assertEqual(flow.arrow_color("khohong", "utapao"), flow.WATERWAY_COLOR)
+        self.assertEqual(flow.arrow_color(("khohong",), None), flow.WATERWAY_COLOR)
+        self.assertEqual(flow.arrow_color(("khohong",), "utapao"), flow.WATERWAY_COLOR)
         self.assertEqual(
-            flow.arrow_color("khohong", "khohong"), flow.CORRIDORS["khohong"]["color"]
+            flow.arrow_color(("khohong",), "khohong"),
+            flow.CORRIDORS["khohong"]["color"],
         )
 
     def test_the_base_blue_is_not_any_system_colour(self):
@@ -247,9 +254,9 @@ class FlowDataTests(unittest.TestCase):
             )
         )
         drawn = {
-            f["properties"]["corridor"]
+            system
             for f in data["features"]
-            if "corridor" in f["properties"]
+            for system in f["properties"].get("systems", [])
         }
         self.assertEqual(set(flow.CORRIDORS), drawn)
         for corridor, info in flow.CORRIDORS.items():
@@ -259,7 +266,7 @@ class FlowDataTests(unittest.TestCase):
         colours = [info["color"] for info in flow.CORRIDORS.values()]
         self.assertEqual(len(set(colours)), len(colours))
 
-    def test_each_source_selects_its_own_system_and_the_lake_selects_none(self):
+    def test_each_source_selects_its_own_system(self):
         systems = {s["id"]: s["system"] for s in flow.FLOW_SOURCES}
         self.assertEqual(
             systems,
@@ -267,7 +274,7 @@ class FlowDataTests(unittest.TestCase):
                 "sadao": "utapao",
                 "khuanlang": "khuanlang",
                 "khohong": "khohong",
-                "lake": None,
+                "lake": "lake",
             },
         )
         for source in flow.FLOW_SOURCES:

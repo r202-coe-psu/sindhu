@@ -16,6 +16,7 @@ CORRIDORS = {
     "utapao": {"name": "คลองอู่ตะเภา", "color": "#1d4ed8"},
     "khuanlang": {"name": "คลองวาด → คลอง ร.1", "color": "#be123c"},
     "khohong": {"name": "คลองเรียน / คลอง ร.3-ร.6 → คลองเตย", "color": "#15803d"},
+    "lake": {"name": "ทางน้ำออกทะเลสาบ", "color": "#7e22ce"},
 }
 
 # route: where the water heads.  angle: degrees clockwise from north of the
@@ -67,8 +68,8 @@ FLOW_SOURCES = [
         "dest_lat": 7.25,
         "dest_lng": 100.465,
         "angle": 0,
-        "system": None,
-        "color": "#7e22ce",
+        "system": "lake",
+        "color": CORRIDORS["lake"]["color"],
     },
 ]
 
@@ -79,7 +80,6 @@ OSM_ATTRIBUTION = (
 )
 ARROW_SPACING_PX = 100
 ARROW_SIZE_PX = 18
-LABEL_FLY_MIN_ZOOM = 13
 # Panes sit between overlayPane (400) and markerPane (600): above the zone
 # fills and below the station markers.  Corridor lines get their own pane above
 # the rest of the network so a selected system draws over the lines it crosses.
@@ -114,16 +114,16 @@ ARROW_SVG = (
 )
 
 
-def waterway_style(fclass, corridor, selected):
+def waterway_style(fclass, systems, selected):
     """Leaflet style of one waterway line.
 
-    A line of the ``selected`` system takes that system's colour and a heavier
-    weight; every other line, corridor or not, is drawn as a plain waterway of
-    its fclass.
+    A line in the ``selected`` system takes that system's colour and a heavier
+    weight; every other line, in a system or not, is drawn as a plain waterway
+    of its fclass.
     """
-    if corridor is not None and corridor == selected:
+    if selected in systems:
         color, weight, opacity = (
-            CORRIDORS[corridor]["color"],
+            CORRIDORS[selected]["color"],
             SELECTED_WEIGHT_PX,
             SELECTED_OPACITY,
         )
@@ -134,8 +134,8 @@ def waterway_style(fclass, corridor, selected):
     return {"color": color, "weight": weight, "opacity": opacity}
 
 
-def arrow_color(corridor, selected):
-    return CORRIDORS[corridor]["color"] if corridor == selected else WATERWAY_COLOR
+def arrow_color(systems, selected):
+    return CORRIDORS[selected]["color"] if selected in systems else WATERWAY_COLOR
 
 
 def fits_without_zooming_out(bounds_zoom, current_zoom):
@@ -279,17 +279,18 @@ class FlowLayer:
             coordinates = (feature.get("geometry") or {}).get("coordinates") or []
             if len(coordinates) < 2:
                 continue
-            corridor = properties.get("corridor")
-            if corridor not in CORRIDORS:
-                corridor = None
+            systems = tuple(
+                s for s in properties.get("systems") or [] if s in CORRIDORS
+            )
             latlngs = [[lat, lng] for lng, lat in coordinates]
-            grouped.setdefault((corridor, properties.get("fclass")), []).append(latlngs)
-            if corridor:
-                self.features.append((corridor, latlngs))
-                self.system_bounds.setdefault(corridor, []).extend(latlngs)
+            grouped.setdefault((systems, properties.get("fclass")), []).append(latlngs)
+            if systems:
+                self.features.append((systems, latlngs))
+                for system in systems:
+                    self.system_bounds.setdefault(system, []).extend(latlngs)
 
-        for (corridor, fclass), parts in grouped.items():
-            pane = CORRIDOR_PANE if corridor else NETWORK_PANE
+        for (systems, fclass), parts in grouped.items():
+            pane = CORRIDOR_PANE if systems else NETWORK_PANE
             layer = self.leaflet.polyline(
                 parts,
                 {
@@ -298,11 +299,11 @@ class FlowLayer:
                     "interactive": False,
                     "lineCap": "round",
                     "lineJoin": "round",
-                    **waterway_style(fclass, corridor, self.selected),
+                    **waterway_style(fclass, systems, self.selected),
                 },
             )
             self.line_layer.addLayer(layer)
-            self.line_groups.append((corridor, fclass, layer))
+            self.line_groups.append((systems, fclass, layer))
         self.refresh_arrows()
 
     def _on_map_click(self, e):
@@ -316,9 +317,9 @@ class FlowLayer:
         if system == self.selected:
             return
         self.selected = system
-        for corridor, fclass, layer in self.line_groups:
-            layer.setStyle(waterway_style(fclass, corridor, system))
-            if corridor and corridor == system:
+        for systems, fclass, layer in self.line_groups:
+            layer.setStyle(waterway_style(fclass, systems, system))
+            if system in systems:
                 layer.bringToFront()
         for source, label, _arrow, _big_arrow in self.labels:
             label.setAttribute(
@@ -327,13 +328,9 @@ class FlowLayer:
         self.refresh_arrows()
 
     def on_source_click(self, source):
-        """Pick a label's system again to clear it; a label with no system
-        flies to its point and clears the selection."""
+        """Pick a label's system again to clear it."""
         system = source["system"]
-        if system is None:
-            self.select(None)
-            self.fly_to_source(source)
-        elif system == self.selected:
+        if system == self.selected:
             self.select(None)
         else:
             self.select(system)
@@ -367,7 +364,7 @@ class FlowLayer:
         if self._marks_by_zoom and self._marks_by_zoom[0] == zoom:
             return self._marks_by_zoom[1]
         lines = []
-        for corridor, latlngs in self.features:
+        for systems, latlngs in self.features:
             points = []
             for latlng in latlngs:
                 point = self.map.project(latlng, zoom)
@@ -375,7 +372,7 @@ class FlowLayer:
             xs = [x for x, _ in points]
             ys = [y for _, y in points]
             bounds = (min(xs), min(ys), max(xs), max(ys))
-            lines.append((corridor, bounds, arrow_marks(points, ARROW_SPACING_PX)))
+            lines.append((systems, bounds, arrow_marks(points, ARROW_SPACING_PX)))
         self._marks_by_zoom = (zoom, lines)
         return lines
 
@@ -389,10 +386,10 @@ class FlowLayer:
         left, top = view.min.x - pad, view.min.y - pad
         right, bottom = view.max.x + pad, view.max.y + pad
 
-        for corridor, (min_x, min_y, max_x, max_y), marks in self._marks_at(zoom):
+        for systems, (min_x, min_y, max_x, max_y), marks in self._marks_at(zoom):
             if max_x < left or min_x > right or max_y < top or min_y > bottom:
                 continue
-            color = arrow_color(corridor, self.selected)
+            color = arrow_color(systems, self.selected)
             for x, y, angle in marks:
                 if left <= x <= right and top <= y <= bottom:
                     self.arrow_layer.addLayer(
@@ -466,10 +463,6 @@ class FlowLayer:
             container.appendChild(big_arrow)
             container.appendChild(label)
             self.labels.append((source, label, arrow, big_arrow))
-
-    def fly_to_source(self, source):
-        zoom = max(self.map.getZoom(), LABEL_FLY_MIN_ZOOM)
-        self.map.flyTo([source["lat"], source["lng"]], zoom)
 
     def place_labels(self):
         for _source, label, _arrow, big_arrow in self.labels:
