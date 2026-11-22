@@ -19,13 +19,13 @@ CORRIDORS = {
     "phawong": {"name": "คลองสำโรง (พะวง)", "color": "#0e7490"},
 }
 
-# angle: degrees clockwise from north for the label arrow while the source is
-# on screen.
+# route: where the water heads.  angle: degrees clockwise from north of the
+# big arrow drawn beside the label while the source is on screen.
 FLOW_SOURCES = [
     {
         "id": "sadao",
         "title": "น้ำจากสะเดา",
-        "route": "ไหลสู่ทะเลสาบสงขลา",
+        "route": "ทะเลสาบสงขลา",
         "lat": 6.84,
         "lng": 100.4706,
         "dest_lat": 7.15,
@@ -58,7 +58,7 @@ FLOW_SOURCES = [
     {
         "id": "lake",
         "title": "น้ำออกทะเลสาบ",
-        "route": "ระบายลงทะเลสาบสงขลา",
+        "route": "ทะเลสาบสงขลา",
         "lat": 7.135,
         "lng": 100.465,
         "dest_lat": 7.25,
@@ -81,6 +81,14 @@ LABEL_EDGE_GAP_PX = 8
 # (left, top, right, bottom) px of the map that pinned labels keep clear: the
 # brand, locate and panel cards across the top and the zoom controls down the right.
 PIN_INSETS = (0, 112, 56, 0)
+
+# The on-screen arrow sits upstream of its label and points at it.
+SOURCE_ARROW_SIZE_PX = (28, 96)
+SOURCE_ARROW_GAP_PX = 18
+SOURCE_ARROW_SVG = (
+    '<svg viewBox="-14 -48 28 96" width="28" height="96" style="fill:{color}">'
+    '<path d="M0 -46 L13 -22 L4 -22 L4 46 L-4 46 L-4 -22 L-13 -22 Z"/></svg>'
+)
 
 ARROW_SVG = (
     '<svg viewBox="-8 -8 16 16" width="{size}" height="{size}" '
@@ -131,6 +139,24 @@ def pin_to_edge(x, y, width, height, margin):
     clamped_x = min(max(x, margin), width - margin)
     clamped_y = min(max(y, margin), height - margin)
     return clamped_x, clamped_y, edge if amount > 0 else None
+
+
+def upstream_offset(angle, distance):
+    """(dx, dy) on screen from a label to the point ``distance`` px behind it
+    along a flow heading ``angle`` (clockwise from north)."""
+    radians = math.radians(angle)
+    return -math.sin(radians) * distance, math.cos(radians) * distance
+
+
+def box_reach(width, height, angle):
+    """Distance from a box's centre to its edge along heading ``angle``."""
+    dx, dy = upstream_offset(angle, 1)
+    reaches = []
+    if abs(dx) > 1e-9:
+        reaches.append(width / 2 / abs(dx))
+    if abs(dy) > 1e-9:
+        reaches.append(height / 2 / abs(dy))
+    return min(reaches)
 
 
 def spread_along_edge(centres, sizes, low, high):
@@ -279,21 +305,41 @@ class FlowLayer:
             arrow.innerHTML = ARROW_SVG.format(
                 size=ARROW_SIZE_PX + 4, color="currentColor", angle=0
             )
-            text = html.SPAN(
+            chip = html.SPAN(
                 [
-                    html.SPAN(source["title"], Class="flow-label-title"),
-                    html.SPAN(source["route"], Class="flow-label-route"),
+                    arrow,
+                    html.SPAN(
+                        [
+                            html.SPAN(source["title"], Class="flow-label-title"),
+                            html.SPAN(
+                                f"ไหลมุ่งสู่ {source['route']}",
+                                Class="flow-label-route",
+                            ),
+                        ],
+                        Class="flow-label-text",
+                    ),
                 ],
-                Class="flow-label-text",
+                Class="flow-label-chip",
             )
-            label = html.BUTTON([arrow, text], Class="flow-label", type="button")
-            label.style.background = source["color"]
+            tag = html.SPAN(
+                [
+                    html.SPAN(source["title"], Class="flow-label-tag-title"),
+                    html.SPAN(f"→ {source['route']}", Class="flow-label-tag-route"),
+                ],
+                Class="flow-label-tag",
+            )
+            label = html.BUTTON([chip, tag], Class="flow-label", type="button")
+            label.style.setProperty("--flow-color", source["color"])
             label.bind("click", lambda ev, s=source: self.fly_to_source(s))
             # The label sits inside the map container; without this the click
             # also reaches the map and drops a pin while pin mode is on.
             self.leaflet.DomEvent.disableClickPropagation(label)
+
+            big_arrow = html.DIV(Class="flow-source-arrow")
+            big_arrow.innerHTML = SOURCE_ARROW_SVG.format(color=source["color"])
+            container.appendChild(big_arrow)
             container.appendChild(label)
-            self.labels.append((source, label, arrow))
+            self.labels.append((source, label, arrow, big_arrow))
 
     def fly_to_source(self, source):
         zoom = max(self.map.getZoom(), LABEL_FLY_MIN_ZOOM)
@@ -303,7 +349,7 @@ class FlowLayer:
         size = self.map.getSize()
         left, top, right, bottom = PIN_INSETS
         placed = []
-        for source, label, arrow in self.labels:
+        for source, label, arrow, big_arrow in self.labels:
             width = label.offsetWidth or FALLBACK_LABEL_SIZE[0]
             height = label.offsetHeight or FALLBACK_LABEL_SIZE[1]
             # Pin the label's centre inside a box inset by half its own size,
@@ -320,6 +366,7 @@ class FlowLayer:
                     "source": source,
                     "label": label,
                     "arrow": arrow,
+                    "big_arrow": big_arrow,
                     "x": x + min_x,
                     "y": y + min_y,
                     "width": width + LABEL_EDGE_GAP_PX,
@@ -361,3 +408,20 @@ class FlowLayer:
             p["label"].style.top = f"{p['y']}px"
             p["arrow"].style.transform = f"rotate({round(angle, 1)}deg)"
             p["label"].classList.toggle("is-pinned", bool(p["edge"]))
+
+            big_arrow = p["big_arrow"]
+            if p["edge"]:
+                big_arrow.style.display = "none"
+                continue
+            reach = (
+                box_reach(p["width"], p["height"], angle)
+                + SOURCE_ARROW_SIZE_PX[1] / 2
+                + SOURCE_ARROW_GAP_PX
+            )
+            dx, dy = upstream_offset(angle, reach)
+            big_arrow.style.display = "block"
+            big_arrow.style.left = f"{p['x'] + dx}px"
+            big_arrow.style.top = f"{p['y'] + dy}px"
+            big_arrow.style.transform = (
+                f"translate(-50%, -50%) rotate({round(angle, 1)}deg)"
+            )

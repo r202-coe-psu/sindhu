@@ -155,6 +155,21 @@ class ScreenBearingTests(unittest.TestCase):
         self.assertAlmostEqual(flow.screen_bearing(100, 100, 50, 100), 270, places=6)
 
 
+class SourceArrowPlacementTests(unittest.TestCase):
+    def test_arrow_sits_on_the_side_the_water_comes_from(self):
+        for angle, expected in ((0, (0, 10)), (90, (-10, 0)), (180, (0, -10))):
+            dx, dy = flow.upstream_offset(angle, 10)
+            self.assertAlmostEqual(dx, expected[0], places=6, msg=angle)
+            self.assertAlmostEqual(dy, expected[1], places=6, msg=angle)
+
+    def test_box_reach_is_half_the_side_the_heading_crosses(self):
+        self.assertAlmostEqual(flow.box_reach(200, 60, 0), 30)
+        self.assertAlmostEqual(flow.box_reach(200, 60, 90), 100)
+
+    def test_box_reach_on_a_diagonal_stops_at_the_nearer_side(self):
+        self.assertAlmostEqual(flow.box_reach(200, 60, 45), 30 * math.sqrt(2))
+
+
 class FlowDataTests(unittest.TestCase):
     def test_every_corridor_has_a_thai_name_and_a_colour_readable_under_white_text(
         self,
