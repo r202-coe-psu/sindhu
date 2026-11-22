@@ -289,6 +289,9 @@ class FlowLayer:
             label = html.BUTTON([arrow, text], Class="flow-label", type="button")
             label.style.background = source["color"]
             label.bind("click", lambda ev, s=source: self.fly_to_source(s))
+            # The label sits inside the map container; without this the click
+            # also reaches the map and drops a pin while pin mode is on.
+            self.leaflet.DomEvent.disableClickPropagation(label)
             container.appendChild(label)
             self.labels.append((source, label, arrow))
 
