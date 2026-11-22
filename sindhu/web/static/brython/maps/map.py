@@ -651,14 +651,14 @@ class Map:
 
     def _flow_layer(self):
         if getattr(self, "flow_layer", None) is None:
-            self.flow_layer = FlowLayer(self.map)
+            self.flow_layer = FlowLayer(self.map, self.fit_bounds_options)
         return self.flow_layer
 
-    def set_flow_corridors(self, geojson):
-        self._flow_layer().set_corridors(geojson)
+    def set_waterways(self, geojson):
+        self._flow_layer().set_waterways(geojson)
 
-    def set_flow_context(self, geojson):
-        self._flow_layer().set_context(geojson)
+    def set_waterways_visible(self, visible):
+        self._flow_layer().set_visible(visible)
 
     def __del__(self):
         self.map.remove()

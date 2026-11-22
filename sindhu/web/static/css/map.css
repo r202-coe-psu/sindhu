@@ -259,8 +259,8 @@ body.map-focus .map-focus-hint {
 }
 
 /* Sits on the map container, not in a pane, so it stays put while panning;
-   only the label itself takes pointer events and dragging elsewhere is
-   untouched. */
+   only the label and its big arrow take pointer events and dragging
+   elsewhere is untouched. */
 .flow-label {
   position: absolute;
   z-index: 650;
@@ -316,7 +316,7 @@ body.map-focus .map-focus-hint {
 .flow-source-arrow {
   position: absolute;
   z-index: 640;
-  pointer-events: none;
+  cursor: pointer;
   filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
 }
 .flow-source-arrow svg {

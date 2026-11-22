@@ -7,8 +7,7 @@ from urllib.parse import urlencode
 
 from maps.base import BaseMap
 
-FLOW_CORRIDORS_URL = "/static/resources/hatyai_flow_corridors.geojson"
-FLOW_CONTEXT_URL = "/static/resources/hatyai_waterways_context.geojson"
+WATERWAYS_URL = "/static/resources/hatyai_waterways.geojson"
 
 
 class BaseMonitor:
@@ -114,20 +113,15 @@ class BaseMonitor:
         return True
 
     async def load_flow(self):
-        """Draw the drainage corridors, then the faint waterway network behind
-        them; a missing file must not break the page."""
-        for url, draw in (
-            (FLOW_CORRIDORS_URL, self.map.set_flow_corridors),
-            (FLOW_CONTEXT_URL, self.map.set_flow_context),
-        ):
-            try:
-                response = await aio.get(url, cache=True)
-                if response.status == 200 or response.status == 0:
-                    draw(json.loads(response.data))
-                else:
-                    print(f"[Monitor] {url} returned HTTP {response.status}")
-            except Exception as e:
-                print(f"[Monitor] Failed to load {url}: {e}")
+        """Draw the waterway network; a missing file must not break the page."""
+        try:
+            response = await aio.get(WATERWAYS_URL, cache=True)
+            if response.status == 200 or response.status == 0:
+                self.map.set_waterways(json.loads(response.data))
+            else:
+                print(f"[Monitor] {WATERWAYS_URL} returned HTTP {response.status}")
+        except Exception as e:
+            print(f"[Monitor] Failed to load {WATERWAYS_URL}: {e}")
 
     async def load_zones(self):
         """Draw active API flood zones from database."""

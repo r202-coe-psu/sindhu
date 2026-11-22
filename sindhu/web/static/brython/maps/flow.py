@@ -1,6 +1,8 @@
-"""Drainage corridors through Hat Yai: coloured lines, direction arrows and
-"water comes from" labels that pin to the screen edge when their source is
-off screen.
+"""The Songkhla waterway network, with the three drainage systems through
+Hat Yai marked by direction arrows and "water comes from" labels that pin to
+the screen edge when their source is off screen.
+
+Every line is drawn in one blue; picking a label colours its system.
 
 The geometry helpers are pure functions on screen pixels (x right, y down) so
 they run under CPython in tests; only ``FlowLayer`` touches Leaflet.
@@ -17,7 +19,8 @@ CORRIDORS = {
 }
 
 # route: where the water heads.  angle: degrees clockwise from north of the
-# big arrow drawn beside the label while the source is on screen.
+# big arrow drawn beside the label while the source is on screen.  system: the
+# drainage system the label selects, or None for a label that only flies.
 FLOW_SOURCES = [
     {
         "id": "sadao",
@@ -28,6 +31,7 @@ FLOW_SOURCES = [
         "dest_lat": 7.15,
         "dest_lng": 100.465,
         "angle": 0,
+        "system": "utapao",
         "color": CORRIDORS["utapao"]["color"],
     },
     {
@@ -39,6 +43,7 @@ FLOW_SOURCES = [
         "dest_lat": 7.15,
         "dest_lng": 100.465,
         "angle": 65,
+        "system": "khuanlang",
         "color": CORRIDORS["khuanlang"]["color"],
     },
     {
@@ -50,6 +55,7 @@ FLOW_SOURCES = [
         "dest_lat": 7.15,
         "dest_lng": 100.465,
         "angle": 295,
+        "system": "khohong",
         "color": CORRIDORS["khohong"]["color"],
     },
     {
@@ -61,6 +67,7 @@ FLOW_SOURCES = [
         "dest_lat": 7.25,
         "dest_lng": 100.465,
         "angle": 0,
+        "system": None,
         "color": "#0c4a6e",
     },
 ]
@@ -72,18 +79,20 @@ OSM_ATTRIBUTION = (
 )
 ARROW_SPACING_PX = 100
 ARROW_SIZE_PX = 18
-LINE_WEIGHT_PX = 4
 LABEL_FLY_MIN_ZOOM = 13
-# Between overlayPane (400) and markerPane (600): above the zone fills and
-# below the station markers.
-LINES_PANE = ("flowLines", "420")
-CONTEXT_PANE = ("flowContext", "410")
-# The rest of the waterway network: thin and faint so the corridors stay the
-# story, and only from city zoom, where it no longer clutters the map.
-CONTEXT_MIN_ZOOM = 12
-CONTEXT_COLOR = "#0369a1"
-CONTEXT_WEIGHT_PX = {"river": 2.0, "canal": 1.5, "stream": 1.0, "drain": 1.0}
+# Panes sit between overlayPane (400) and markerPane (600): above the zone
+# fills and below the station markers.  Corridor lines get their own pane above
+# the rest of the network so a selected system draws over the lines it crosses.
+NETWORK_PANE = ("waterways", "410")
+CORRIDOR_PANE = ("flowLines", "420")
 ARROWS_PANE = ("flowArrows", "425")
+# A mid blue that reads on the light basemap and stays apart from the
+# highlighted utapao blue (#1d4ed8).
+WATERWAY_COLOR = "#2f8fe0"
+WATERWAY_WEIGHT_PX = {"river": 3.0, "canal": 2.2, "stream": 1.4, "drain": 1.1}
+WATERWAY_OPACITY = 0.85
+SELECTED_WEIGHT_PX = 4.5
+SELECTED_OPACITY = 0.95
 FALLBACK_LABEL_SIZE = (180, 56)
 LABEL_EDGE_GAP_PX = 8
 # (left, top, right, bottom) px of the map that pinned labels keep clear: the
@@ -103,6 +112,30 @@ ARROW_SVG = (
     'style="fill:{color};transform:rotate({angle}deg)">'
     '<path d="M0 -7 L6 6 L0 3 L-6 6 Z"/></svg>'
 )
+
+
+def waterway_style(fclass, corridor, selected):
+    """Leaflet style of one waterway line.
+
+    A line of the ``selected`` system takes that system's colour and a heavier
+    weight; every other line, corridor or not, is drawn as a plain waterway of
+    its fclass.
+    """
+    if corridor is not None and corridor == selected:
+        color, weight, opacity = (
+            CORRIDORS[corridor]["color"],
+            SELECTED_WEIGHT_PX,
+            SELECTED_OPACITY,
+        )
+    else:
+        color = WATERWAY_COLOR
+        weight = WATERWAY_WEIGHT_PX.get(fclass, WATERWAY_WEIGHT_PX["stream"])
+        opacity = WATERWAY_OPACITY
+    return {"color": color, "weight": weight, "opacity": opacity}
+
+
+def arrow_color(corridor, selected):
+    return CORRIDORS[corridor]["color"] if corridor == selected else WATERWAY_COLOR
 
 
 def screen_bearing(x1, y1, x2, y2):
@@ -188,20 +221,26 @@ def spread_along_edge(centres, sizes, low, high):
 
 
 class FlowLayer:
-    def __init__(self, leaflet_map):
+    def __init__(self, leaflet_map, fit_options=None):
         self.map = leaflet_map
         self.leaflet = window.L
+        self.fit_options = fit_options or (lambda: {})
+        self.selected = None
+        self.visible = True
         self.features = []
-        self.line_layers = []
+        # (corridor, polyline) per group of lines sharing a corridor and fclass.
+        self.line_groups = []
+        self.system_bounds = {}
         self.labels = []
         self._marks_by_zoom = None
 
-        self._create_pane(*CONTEXT_PANE)
-        self._create_pane(*LINES_PANE)
-        self._create_pane(*ARROWS_PANE)
-        self.line_renderer = self.leaflet.svg({"pane": LINES_PANE[0]})
-        self.context_renderer = self.leaflet.svg({"pane": CONTEXT_PANE[0]})
-        self.context_layer = self.leaflet.layerGroup()
+        for pane in (NETWORK_PANE, CORRIDOR_PANE, ARROWS_PANE):
+            self._create_pane(*pane)
+        self.renderers = {
+            pane[0]: self.leaflet.svg({"pane": pane[0]})
+            for pane in (NETWORK_PANE, CORRIDOR_PANE)
+        }
+        self.line_layer = self.leaflet.layerGroup().addTo(self.map)
         self.arrow_layer = self.leaflet.layerGroup().addTo(self.map)
 
         if self.map.attributionControl:
@@ -209,8 +248,8 @@ class FlowLayer:
 
         self._create_labels()
         self.map.on("zoomend moveend", lambda e: self.refresh_arrows())
-        self.map.on("zoomend", lambda e: self.refresh_context())
         self.map.on("move zoom resize", lambda e: self.place_labels())
+        self.map.on("click", self._on_map_click)
         self.place_labels()
 
     def _create_pane(self, name, z_index):
@@ -218,76 +257,93 @@ class FlowLayer:
         pane.style.zIndex = z_index
         pane.style.pointerEvents = "none"
 
-    def set_corridors(self, geojson):
-        for layer in self.line_layers:
-            self.map.removeLayer(layer)
-        self.line_layers = []
+    def set_waterways(self, geojson):
+        self.line_layer.clearLayers()
+        self.line_groups = []
         self.features = []
+        self.system_bounds = {}
         self._marks_by_zoom = None
 
-        by_corridor = {}
+        grouped = {}
         for feature in geojson.get("features", []):
-            corridor = (feature.get("properties") or {}).get("corridor")
-            coordinates = (feature.get("geometry") or {}).get("coordinates") or []
-            if corridor not in CORRIDORS or len(coordinates) < 2:
-                continue
-            latlngs = [[lat, lng] for lng, lat in coordinates]
-            self.features.append((corridor, latlngs))
-            by_corridor.setdefault(corridor, []).append(latlngs)
-
-        for corridor, parts in by_corridor.items():
-            layer = self.leaflet.polyline(
-                parts,
-                {
-                    "pane": LINES_PANE[0],
-                    "renderer": self.line_renderer,
-                    "interactive": False,
-                    "color": CORRIDORS[corridor]["color"],
-                    "weight": LINE_WEIGHT_PX,
-                    "opacity": 0.9,
-                    "lineCap": "round",
-                    "lineJoin": "round",
-                },
-            )
-            layer.addTo(self.map)
-            self.line_layers.append(layer)
-        self.refresh_arrows()
-
-    def set_context(self, geojson):
-        self.context_layer.clearLayers()
-        by_class = {}
-        for feature in geojson.get("features", []):
+            properties = feature.get("properties") or {}
             coordinates = (feature.get("geometry") or {}).get("coordinates") or []
             if len(coordinates) < 2:
                 continue
-            fclass = (feature.get("properties") or {}).get("fclass")
-            by_class.setdefault(fclass, []).append(
-                [[lat, lng] for lng, lat in coordinates]
-            )
-        for fclass, parts in by_class.items():
-            self.context_layer.addLayer(
-                self.leaflet.polyline(
-                    parts,
-                    {
-                        "pane": CONTEXT_PANE[0],
-                        "renderer": self.context_renderer,
-                        "interactive": False,
-                        "color": CONTEXT_COLOR,
-                        "weight": CONTEXT_WEIGHT_PX.get(fclass, 1.0),
-                        "opacity": 0.6,
-                        "lineCap": "round",
-                        "lineJoin": "round",
-                    },
-                )
-            )
-        self.refresh_context()
+            corridor = properties.get("corridor")
+            if corridor not in CORRIDORS:
+                corridor = None
+            latlngs = [[lat, lng] for lng, lat in coordinates]
+            grouped.setdefault((corridor, properties.get("fclass")), []).append(latlngs)
+            if corridor:
+                self.features.append((corridor, latlngs))
+                self.system_bounds.setdefault(corridor, []).extend(latlngs)
 
-    def refresh_context(self):
-        show = self.map.getZoom() >= CONTEXT_MIN_ZOOM
-        if show and not self.map.hasLayer(self.context_layer):
-            self.context_layer.addTo(self.map)
-        elif not show and self.map.hasLayer(self.context_layer):
-            self.map.removeLayer(self.context_layer)
+        for (corridor, fclass), parts in grouped.items():
+            pane = CORRIDOR_PANE if corridor else NETWORK_PANE
+            layer = self.leaflet.polyline(
+                parts,
+                {
+                    "pane": pane[0],
+                    "renderer": self.renderers[pane[0]],
+                    "interactive": False,
+                    "lineCap": "round",
+                    "lineJoin": "round",
+                    **waterway_style(fclass, corridor, self.selected),
+                },
+            )
+            self.line_layer.addLayer(layer)
+            self.line_groups.append((corridor, fclass, layer))
+        self.refresh_arrows()
+
+    def _on_map_click(self, e):
+        # Selection stays put while the waterways are hidden, ready for the
+        # checkbox to bring it back.
+        if self.visible:
+            self.select(None)
+
+    def select(self, system):
+        """Colour one drainage system, or all-blue for ``None``."""
+        if system == self.selected:
+            return
+        self.selected = system
+        for corridor, fclass, layer in self.line_groups:
+            layer.setStyle(waterway_style(fclass, corridor, system))
+            if corridor and corridor == system:
+                layer.bringToFront()
+        for source, label, _arrow, _big_arrow in self.labels:
+            label.setAttribute(
+                "aria-pressed", str(bool(system and source["system"] == system)).lower()
+            )
+        self.refresh_arrows()
+
+    def on_source_click(self, source):
+        """Pick a label's system again to clear it; a label with no system
+        flies to its point and clears the selection."""
+        system = source["system"]
+        if system is None:
+            self.select(None)
+            self.fly_to_source(source)
+        elif system == self.selected:
+            self.select(None)
+        else:
+            self.select(system)
+            self.fit_system(system)
+
+    def fit_system(self, system):
+        bounds = self.leaflet.latLngBounds(self.system_bounds[system])
+        self.map.fitBounds(bounds, {**self.fit_options(), "maxZoom": 15})
+
+    def set_visible(self, visible):
+        self.visible = visible
+        for layer in (self.line_layer, self.arrow_layer):
+            if visible:
+                layer.addTo(self.map)
+            else:
+                self.map.removeLayer(layer)
+        if visible:
+            self.refresh_arrows()
+        self.place_labels()
 
     def _marks_at(self, zoom):
         """Arrow marks of every line at ``zoom``, in world pixels.
@@ -312,6 +368,8 @@ class FlowLayer:
 
     def refresh_arrows(self):
         self.arrow_layer.clearLayers()
+        if not self.visible:
+            return
         zoom = self.map.getZoom()
         view = self.map.getPixelBounds()
         pad = ARROW_SIZE_PX
@@ -321,7 +379,7 @@ class FlowLayer:
         for corridor, (min_x, min_y, max_x, max_y), marks in self._marks_at(zoom):
             if max_x < left or min_x > right or max_y < top or min_y > bottom:
                 continue
-            color = CORRIDORS[corridor]["color"]
+            color = arrow_color(corridor, self.selected)
             for x, y, angle in marks:
                 if left <= x <= right and top <= y <= bottom:
                     self.arrow_layer.addLayer(
@@ -381,13 +439,17 @@ class FlowLayer:
             )
             label = html.BUTTON([chip, tag], Class="flow-label", type="button")
             label.style.setProperty("--flow-color", source["color"])
-            label.bind("click", lambda ev, s=source: self.fly_to_source(s))
-            # The label sits inside the map container; without this the click
-            # also reaches the map and drops a pin while pin mode is on.
-            self.leaflet.DomEvent.disableClickPropagation(label)
-
+            label.setAttribute("aria-pressed", "false")
+            label.bind("click", lambda ev, s=source: self.on_source_click(s))
             big_arrow = html.DIV(Class="flow-source-arrow")
             big_arrow.innerHTML = SOURCE_ARROW_SVG.format(color=source["color"])
+            big_arrow.bind("click", lambda ev, s=source: self.on_source_click(s))
+            # Both sit inside the map container; without this a click also
+            # reaches the map, which would drop a pin in pin mode and clear
+            # the selection it just made.
+            for control in (label, big_arrow):
+                self.leaflet.DomEvent.disableClickPropagation(control)
+
             container.appendChild(big_arrow)
             container.appendChild(label)
             self.labels.append((source, label, arrow, big_arrow))
@@ -397,6 +459,13 @@ class FlowLayer:
         self.map.flyTo([source["lat"], source["lng"]], zoom)
 
     def place_labels(self):
+        for _source, label, _arrow, big_arrow in self.labels:
+            display = "" if self.visible else "none"
+            label.style.display = display
+            if not self.visible:
+                big_arrow.style.display = display
+        if not self.visible:
+            return
         size = self.map.getSize()
         left, top, right, bottom = PIN_INSETS
         placed = []

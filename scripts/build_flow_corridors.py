@@ -1,12 +1,13 @@
-"""Build the drainage-corridor waterways drawn with flow arrows on the map.
+"""Build the Songkhla waterway network drawn on the map.
 
 The sources are OSM waterway exports, merged by osm_id (the first source
-wins).  scripts/fetch_osm_waterways.py refreshes the second one.  OSM draws a waterway in the direction
-the water flows, so the vertex order of each line is its flow direction.
+wins).  scripts/fetch_osm_waterways.py refreshes the second one.  OSM draws a
+waterway in the direction the water flows, so the vertex order of each line is
+its flow direction.
 
-The lines listed in CORRIDOR_LINES become the corridors, drawn bold with
-arrows.  Every other line goes to a simplified context file drawn thin and
-faint: drawing all 807 source lines at full weight cluttered the map.
+Every line is written simplified, with its fclass.  The lines listed in
+CORRIDOR_LINES also carry their drainage system as ``corridor``: the map draws
+direction arrows on them and highlights a system when its label is picked.
 
     python scripts/build_flow_corridors.py
 """
@@ -20,13 +21,10 @@ SOURCES = [
     ROOT / "fixtures" / "waterways" / "songkhla_waterways_osm.geojson",
     ROOT / "fixtures" / "waterways" / "songkhla_south_osm.geojson",
 ]
-OUTPUT = (
-    ROOT / "sindhu" / "web" / "static" / "resources" / "hatyai_flow_corridors.geojson"
-)
-CONTEXT_OUTPUT = OUTPUT.with_name("hatyai_waterways_context.geojson")
-# About 9 m: below a pixel at the zoom the context lines appear.
-CONTEXT_TOLERANCE_DEG = 0.00008
-CONTEXT_DECIMALS = 5
+OUTPUT = ROOT / "sindhu" / "web" / "static" / "resources" / "hatyai_waterways.geojson"
+# About 9 m: below a pixel at city zoom.
+SIMPLIFY_TOLERANCE_DEG = 0.00008
+COORD_DECIMALS = 5
 
 # One drainage system per "water comes from" label on the map: Sadao water
 # runs down Khlong U-Taphao; Khuan Lang water runs down Khlong Wat into the
@@ -96,33 +94,6 @@ CORRIDOR_LINES = {
 }
 
 
-def build(source):
-    corridor_of = {
-        osm_id: corridor
-        for corridor, osm_ids in CORRIDOR_LINES.items()
-        for osm_id in osm_ids
-    }
-    by_id = {f["properties"]["osm_id"]: f for f in source["features"]}
-    missing = sorted(set(corridor_of) - set(by_id))
-    if missing:
-        raise SystemExit(f"osm_id not in source: {', '.join(missing)}")
-
-    features = [
-        {
-            "type": "Feature",
-            "properties": {
-                "osm_id": osm_id,
-                "name": by_id[osm_id]["properties"]["name"],
-                "corridor": corridor,
-            },
-            "geometry": by_id[osm_id]["geometry"],
-        }
-        for corridor, osm_ids in CORRIDOR_LINES.items()
-        for osm_id in osm_ids
-    ]
-    return {"type": "FeatureCollection", "features": features}
-
-
 def load_source():
     features, seen = [], set()
     for path in SOURCES:
@@ -155,21 +126,33 @@ def simplify(points, tolerance):
     return head[:-1] + simplify(points[worst_at:], tolerance)
 
 
-def build_context(source):
-    corridor_ids = {osm_id for osm_ids in CORRIDOR_LINES.values() for osm_id in osm_ids}
+def build(source):
+    corridor_of = {
+        osm_id: corridor
+        for corridor, osm_ids in CORRIDOR_LINES.items()
+        for osm_id in osm_ids
+    }
+    missing = sorted(
+        set(corridor_of) - {f["properties"]["osm_id"] for f in source["features"]}
+    )
+    if missing:
+        raise SystemExit(f"osm_id not in source: {', '.join(missing)}")
+
     features = []
     for feature in source["features"]:
-        if feature["properties"]["osm_id"] in corridor_ids:
-            continue
-        points = simplify(feature["geometry"]["coordinates"], CONTEXT_TOLERANCE_DEG)
+        properties = {"fclass": feature["properties"]["fclass"]}
+        corridor = corridor_of.get(feature["properties"]["osm_id"])
+        if corridor:
+            properties["corridor"] = corridor
+        points = simplify(feature["geometry"]["coordinates"], SIMPLIFY_TOLERANCE_DEG)
         features.append(
             {
                 "type": "Feature",
-                "properties": {"fclass": feature["properties"]["fclass"]},
+                "properties": properties,
                 "geometry": {
                     "type": "LineString",
                     "coordinates": [
-                        [round(x, CONTEXT_DECIMALS), round(y, CONTEXT_DECIMALS)]
+                        [round(x, COORD_DECIMALS), round(y, COORD_DECIMALS)]
                         for x, y in points
                     ],
                 },
@@ -183,13 +166,8 @@ def render(collection):
 
 
 def main():
-    source = load_source()
-    for path, collection in (
-        (OUTPUT, build(source)),
-        (CONTEXT_OUTPUT, build_context(source)),
-    ):
-        path.write_text(render(collection), encoding="utf-8")
-        print(f"wrote {path.relative_to(ROOT)}")
+    OUTPUT.write_text(render(build(load_source())), encoding="utf-8")
+    print(f"wrote {OUTPUT.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

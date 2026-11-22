@@ -171,6 +171,54 @@ class SourceArrowPlacementTests(unittest.TestCase):
         self.assertAlmostEqual(flow.box_reach(200, 60, 45), 30 * math.sqrt(2))
 
 
+class WaterwayStyleTests(unittest.TestCase):
+    def test_every_class_is_blue_and_thicker_for_bigger_waterways(self):
+        styles = {
+            fclass: flow.waterway_style(fclass, None, None)
+            for fclass in ("river", "canal", "stream", "drain")
+        }
+        self.assertEqual({s["color"] for s in styles.values()}, {flow.WATERWAY_COLOR})
+        weights = [styles[c]["weight"] for c in ("river", "canal", "stream", "drain")]
+        self.assertEqual(weights, sorted(weights, reverse=True))
+        self.assertGreater(weights[1], weights[2])
+
+    def test_an_unknown_class_is_drawn_like_a_stream(self):
+        self.assertEqual(
+            flow.waterway_style("ditch", None, None),
+            flow.waterway_style("stream", None, None),
+        )
+
+    def test_a_corridor_line_looks_like_any_other_line_until_selected(self):
+        for system in flow.CORRIDORS:
+            for selected in (None, *(set(flow.CORRIDORS) - {system})):
+                with self.subTest(system=system, selected=selected):
+                    self.assertEqual(
+                        flow.waterway_style("canal", system, selected),
+                        flow.waterway_style("canal", None, selected),
+                    )
+
+    def test_the_selected_system_takes_its_colour_and_a_heavier_line(self):
+        for system, info in flow.CORRIDORS.items():
+            for fclass in ("river", "canal", "stream", "drain"):
+                with self.subTest(system=system, fclass=fclass):
+                    base = flow.waterway_style(fclass, None, system)
+                    picked = flow.waterway_style(fclass, system, system)
+                    self.assertEqual(picked["color"], info["color"])
+                    self.assertGreater(picked["weight"], base["weight"])
+
+    def test_arrows_are_blue_until_their_system_is_selected(self):
+        self.assertEqual(flow.arrow_color("khohong", None), flow.WATERWAY_COLOR)
+        self.assertEqual(flow.arrow_color("khohong", "utapao"), flow.WATERWAY_COLOR)
+        self.assertEqual(
+            flow.arrow_color("khohong", "khohong"), flow.CORRIDORS["khohong"]["color"]
+        )
+
+    def test_the_base_blue_is_not_any_system_colour(self):
+        self.assertNotIn(
+            flow.WATERWAY_COLOR, [info["color"] for info in flow.CORRIDORS.values()]
+        )
+
+
 class FlowDataTests(unittest.TestCase):
     def test_every_corridor_has_a_thai_name_and_a_colour_readable_under_white_text(
         self,
@@ -185,11 +233,15 @@ class FlowDataTests(unittest.TestCase):
             return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
 
         data = json.loads(
-            (
-                BRYTHON_ROOT.parent / "resources" / "hatyai_flow_corridors.geojson"
-            ).read_text(encoding="utf-8")
+            (BRYTHON_ROOT.parent / "resources" / "hatyai_waterways.geojson").read_text(
+                encoding="utf-8"
+            )
         )
-        drawn = {f["properties"]["corridor"] for f in data["features"]}
+        drawn = {
+            f["properties"]["corridor"]
+            for f in data["features"]
+            if "corridor" in f["properties"]
+        }
         self.assertEqual(set(flow.CORRIDORS), drawn)
         for corridor, info in flow.CORRIDORS.items():
             with self.subTest(corridor=corridor):
@@ -197,6 +249,23 @@ class FlowDataTests(unittest.TestCase):
                 self.assertGreaterEqual(1.05 / (luminance(info["color"]) + 0.05), 4.5)
         colours = [info["color"] for info in flow.CORRIDORS.values()]
         self.assertEqual(len(set(colours)), len(colours))
+
+    def test_each_source_selects_its_own_system_and_the_lake_selects_none(self):
+        systems = {s["id"]: s["system"] for s in flow.FLOW_SOURCES}
+        self.assertEqual(
+            systems,
+            {
+                "sadao": "utapao",
+                "khuanlang": "khuanlang",
+                "khohong": "khohong",
+                "lake": None,
+            },
+        )
+        for source in flow.FLOW_SOURCES:
+            if source["system"]:
+                self.assertEqual(
+                    source["color"], flow.CORRIDORS[source["system"]]["color"]
+                )
 
     def test_sources_are_readable_under_white_text_and_point_at_a_destination(self):
         self.assertEqual(
