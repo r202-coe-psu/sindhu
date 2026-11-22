@@ -7,6 +7,8 @@ from urllib.parse import urlencode
 
 from maps.base import BaseMap
 
+FLOW_CORRIDORS_URL = "/static/resources/hatyai_flow_corridors.geojson"
+
 
 class BaseMonitor:
     def __init__(
@@ -89,6 +91,7 @@ class BaseMonitor:
                 self.map.add_focus_control()
 
             await self.load_zones()
+            await self.load_flow()
 
             if "my_locate" in document and not getattr(self, "_locate_bound", False):
                 document["my_locate"].bind("click", lambda ev: self.map.fly_to_user())
@@ -108,6 +111,17 @@ class BaseMonitor:
 
         self.set_map_loading(False)
         return True
+
+    async def load_flow(self):
+        """Draw the drainage corridors; a missing file must not break the page."""
+        try:
+            response = await aio.get(FLOW_CORRIDORS_URL, cache=True)
+            if response.status == 200 or response.status == 0:
+                self.map.set_flow_corridors(json.loads(response.data))
+            else:
+                print(f"[Monitor] Flow corridors returned HTTP {response.status}")
+        except Exception as e:
+            print(f"[Monitor] Failed to load flow corridors: {e}")
 
     async def load_zones(self):
         """Draw active API flood zones from database."""
