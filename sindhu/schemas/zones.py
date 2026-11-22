@@ -13,8 +13,10 @@ def normalize_tambon_name(value) -> str:
     are the same tag. A dict from older data contributes its name_th.
     """
     if isinstance(value, dict):
-        value = value.get("name_th") or ""
-    name = str(value or "").strip()
+        value = value.get("name_th")
+    if not isinstance(value, str):
+        raise ValueError("each tambon must be a name")
+    name = value.strip()
     for prefix in ("ตำบล", "ต."):
         if name.startswith(prefix):
             name = name[len(prefix) :].strip()
@@ -55,6 +57,14 @@ class BaseZone(BaseModel):
 
 class CreateUpdateZone(BaseZone):
     station_ids: List[PydanticObjectId] = Field(default_factory=list)
+
+    @field_validator("tambons", mode="before")
+    @classmethod
+    def _normalize_tambons(cls, v):
+        # null on an update would otherwise wipe every tag; omit the field instead.
+        if v is None:
+            raise ValueError("tambons must be a list of names; omit it to keep the tags")
+        return super()._normalize_tambons(v)
 
 
 class Zone(bases.BaseSchema, BaseZone):
