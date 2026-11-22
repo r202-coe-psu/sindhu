@@ -1,6 +1,7 @@
 """Build the drainage-corridor waterways drawn with flow arrows on the map.
 
-The source is an OSM waterway export.  OSM draws a waterway in the direction
+The sources are OSM waterway exports, merged by osm_id (the first source
+wins).  scripts/fetch_osm_waterways.py refreshes the second one.  OSM draws a waterway in the direction
 the water flows, so the vertex order of each line is its flow direction.
 
 The lines listed in CORRIDOR_LINES become the corridors, drawn bold with
@@ -15,7 +16,10 @@ import math
 import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "fixtures" / "waterways" / "songkhla_waterways_osm.geojson"
+SOURCES = [
+    ROOT / "fixtures" / "waterways" / "songkhla_waterways_osm.geojson",
+    ROOT / "fixtures" / "waterways" / "songkhla_south_osm.geojson",
+]
 OUTPUT = (
     ROOT / "sindhu" / "web" / "static" / "resources" / "hatyai_flow_corridors.geojson"
 )
@@ -30,6 +34,12 @@ CONTEXT_DECIMALS = 5
 # canals into Khlong Toei.
 CORRIDOR_LINES = {
     "utapao": [
+        # Upstream main stem towards Sadao, traced from the U-Taphao head.
+        "128549054",
+        "244973765",
+        "1055050832",
+        "1051632070",
+        "219800884",
         "321674114",
         "453743011",
         "453743013",
@@ -113,6 +123,17 @@ def build(source):
     return {"type": "FeatureCollection", "features": features}
 
 
+def load_source():
+    features, seen = [], set()
+    for path in SOURCES:
+        for feature in json.loads(path.read_text(encoding="utf-8"))["features"]:
+            osm_id = feature["properties"]["osm_id"]
+            if osm_id not in seen:
+                seen.add(osm_id)
+                features.append(feature)
+    return {"type": "FeatureCollection", "features": features}
+
+
 def simplify(points, tolerance):
     """Douglas-Peucker: drop vertices closer than ``tolerance`` to the chord."""
     if len(points) < 3:
@@ -162,7 +183,7 @@ def render(collection):
 
 
 def main():
-    source = json.loads(SOURCE.read_text(encoding="utf-8"))
+    source = load_source()
     for path, collection in (
         (OUTPUT, build(source)),
         (CONTEXT_OUTPUT, build_context(source)),

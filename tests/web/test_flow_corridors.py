@@ -13,7 +13,7 @@ _spec.loader.exec_module(build_flow_corridors)
 
 class FlowCorridorDataTests(unittest.TestCase):
     def test_committed_file_matches_the_build_script(self):
-        source = json.loads(build_flow_corridors.SOURCE.read_text(encoding="utf-8"))
+        source = build_flow_corridors.load_source()
         for path, build in (
             (build_flow_corridors.OUTPUT, build_flow_corridors.build),
             (build_flow_corridors.CONTEXT_OUTPUT, build_flow_corridors.build_context),
@@ -26,7 +26,7 @@ class FlowCorridorDataTests(unittest.TestCase):
                 )
 
     def test_context_holds_every_source_line_that_is_not_a_corridor(self):
-        source = json.loads(build_flow_corridors.SOURCE.read_text(encoding="utf-8"))
+        source = build_flow_corridors.load_source()
         corridors = json.loads(build_flow_corridors.OUTPUT.read_text(encoding="utf-8"))
         context = json.loads(
             build_flow_corridors.CONTEXT_OUTPUT.read_text(encoding="utf-8")

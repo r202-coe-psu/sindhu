@@ -65,6 +65,11 @@ FLOW_SOURCES = [
     },
 ]
 
+# The waterway lines are OpenStreetMap data (ODbL), which requires this credit.
+OSM_ATTRIBUTION = (
+    '&copy; <a href="https://www.openstreetmap.org/copyright">'
+    "OpenStreetMap</a> contributors"
+)
 ARROW_SPACING_PX = 100
 ARROW_SIZE_PX = 18
 LINE_WEIGHT_PX = 4
@@ -198,6 +203,9 @@ class FlowLayer:
         self.context_renderer = self.leaflet.svg({"pane": CONTEXT_PANE[0]})
         self.context_layer = self.leaflet.layerGroup()
         self.arrow_layer = self.leaflet.layerGroup().addTo(self.map)
+
+        if self.map.attributionControl:
+            self.map.attributionControl.addAttribution(OSM_ATTRIBUTION)
 
         self._create_labels()
         self.map.on("zoomend moveend", lambda e: self.refresh_arrows())
