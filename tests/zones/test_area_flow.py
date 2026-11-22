@@ -66,10 +66,10 @@ def _load_brython_classes():
         browser.aio = _AioStub()
         sys.modules["browser"] = browser
     browser = sys.modules["browser"]
-    # Another test module may have registered a leaner aio stub first.
+    # Another test module may have registered a stub whose every attribute
+    # exists but does nothing, so always install the working coroutines.
     for name in ("get", "post", "run"):
-        if not hasattr(browser.aio, name):
-            setattr(browser.aio, name, getattr(_AioStub, name))
+        setattr(browser.aio, name, getattr(_AioStub, name))
 
     if "javascript" not in sys.modules:
         javascript = types.ModuleType("javascript")
