@@ -436,6 +436,8 @@ class BaseMonitor:
                         '<div class="text-sm text-warning font-semibold"><i class="ph ph-warning"></i> นอกพื้นที่ Zone</div>'
                     ).openPopup()
         except Exception as e:
+            if seq != self._area_seq:
+                return
             print(f"[Monitor] Locate error: {e}")
             self.set_area_message(location_message(MSG_ERROR, error=e))
 

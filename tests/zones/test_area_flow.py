@@ -372,6 +372,31 @@ class MonitorAreaFlowTests(unittest.TestCase):
         self.assertEqual(self.monitor.selected_zone_ids, ["z2"])
         self.assertEqual(self.monitor.selected_zone_codes, ["S2", "S3"])
 
+    def test_failed_locate_after_newer_pick_keeps_the_pick(self):
+        release = None
+
+        async def slow_failing_post(url, data=None, headers=None):
+            await release.wait()
+            raise ConnectionError("offline")
+
+        async def scenario():
+            nonlocal release
+            release = asyncio.Event()
+            sys.modules["browser"].aio.post = slow_failing_post
+            locate = asyncio.create_task(self.monitor.on_location_received(7.0, 100.0))
+            await asyncio.sleep(0)
+            await self.monitor._select_area(["z2"], SOURCE_LIST)
+            release.set()
+            await locate
+
+        asyncio.run(scenario())
+
+        self.assertEqual(self.monitor.selected_zone_ids, ["z2"])
+        self.assertEqual(self.monitor.selected_zone_codes, ["S2", "S3"])
+        self.assertFalse(
+            any(m and "ไม่สามารถระบุตำแหน่งได้" in m for m in self.messages)
+        )
+
     def test_select_area_with_unknown_ids_selects_nothing(self):
         self.assertFalse(
             asyncio.run(self.monitor._select_area(["nope"], "list"))
