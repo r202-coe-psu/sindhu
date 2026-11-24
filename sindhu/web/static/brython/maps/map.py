@@ -5,7 +5,9 @@ import json
 
 from maps.cctv_pairing import feed_key as visual_feed_key
 from maps.cctv_pairing import pair_cameras, pin_shift
+from maps.flow import SOURCE_ARROW_SIZE_PX, SOURCE_ARROW_SVG, FlowLayer
 from maps.marker_sizes import CCTV, MY_LOCATION, USER, hit_box_html, is_far_zoom
+from maps.zone_flow import upstream_arrow, zone_rings
 
 
 VISUAL_FEED_POPUP_OPTIONS = {"minWidth": 240, "maxWidth": 280, "autoPanPadding": [24, 24]}
@@ -25,6 +27,11 @@ class Map:
     _visual_feed_popup = None
     _visual_feed_popup_flying = False
     _replacing_visual_feed_layer = False
+    # Zones feeding the selected zone, and the label that names them.  Class
+    # level so a Map without a selection reads as "nothing upstream".
+    _upstream_zone_ids = frozenset()
+    _upstream_label = None
+    _zone_arrow_layer = None
 
     def __init__(self, center, zoom, min_zoom):
         self.center = center
@@ -63,7 +70,7 @@ class Map:
             },
         )
         # Default basemap (#67): Windy-style neutral grey without labels, so
-        # the rivers, zones and markers are the only colour on the map.  Esri's
+        # the zones and markers are the only colour on the map.  Esri's
         # Light Gray Canvas needs no API key (Carto's tiles now do, and show a
         # watermark without one); the .basemap-gray filter in setup.css turns
         # its land (#efefef) into ≈ #808080 with the sea a little darker.
@@ -129,7 +136,7 @@ class Map:
         #     navi, nonavi
         # )  # set user's current location on map(success, error)
 
-        # Above the zones and rivers, below the markers, and transparent to
+        # Above the zones, below the markers, and transparent to
         # the mouse so everything underneath stays clickable.
         label_pane = self.map.createPane("placeLabels")
         label_pane.style.zIndex = "450"
@@ -181,8 +188,8 @@ class Map:
 
     # A zone shows two things at once (#67): its outline says which zone it
     # is, its fill says how risky it is.  The outline colours sit in hue gaps
-    # the risk legend leaves free (green/orange/red/purple/grey) and away from
-    # the light-cyan rivers; each zone also has its own dash pattern so the
+    # the risk legend leaves free (green/orange/red/purple/grey); each zone
+    # also has its own dash pattern so the
     # three stay apart for colour-blind users.  A dark casing under every
     # outline keeps the lighter colours visible on the grey basemap.
     ZONE_IDENTITIES = (
@@ -242,6 +249,21 @@ class Map:
             "dash": dash if self.DASH_PATTERN.match(dash) else preset["dash"],
         }
 
+    # Dashed blue water tone with a light fill: reads as "water comes from
+    # here" and stays distinct from the solid, risk-coloured selected zone.
+    ZONE_UPSTREAM_STYLE = {
+        "fillColor": "#38bdf8",
+        "fillOpacity": 0.22,
+        "color": "#0369a1",
+        "weight": 3.5,
+        "opacity": 1.0,
+        "dashArray": "10, 6",
+    }
+    # Above the waterway arrows (425), below the station markers (600).
+    ZONE_ARROW_PANE_Z_INDEX = "430"
+    # CSS fades the waterway labels and their big arrows while it is set.
+    FLOW_FADED_CLASS = "flow-faded"
+
     def set_zone_risk(self, zone_id, level):
         """Fill a zone with the worst risk among its stations."""
         entry = self.zone_layers_by_id.get(str(zone_id))
@@ -249,9 +271,15 @@ class Map:
             return False
 
         entry["risk"] = level
-        state = "selected" if str(zone_id) in self._selected_zone_ids else "normal"
-        self._apply_zone_style(str(zone_id), state)
+        self._apply_zone_style(str(zone_id), self._zone_state(str(zone_id)))
         return True
+
+    def _zone_state(self, zone_id):
+        if zone_id in self._selected_zone_ids:
+            return "selected"
+        if zone_id in self._upstream_zone_ids:
+            return "upstream"
+        return "normal"
 
     def zone_style(self, zone_id, state="normal"):
         """Style for one zone in a given interaction state."""
@@ -281,6 +309,9 @@ class Map:
                 "dashArray": "",
                 "interactive": False,
             }
+
+        if state == "upstream":
+            return dict(self.ZONE_UPSTREAM_STYLE)
 
         identity = entry.get("identity") or self.zone_identity(zone, 0)
         weight = self.ZONE_WEIGHT + {"hover": 1.0, "selected": 1.5}.get(state, 0.0)
@@ -388,8 +419,8 @@ class Map:
         """Draw every zone boundary so users can click a zone directly.
 
         Zones live in their own pane below the overlay pane, which keeps the
-        river lines and the station markers clickable on top of them.  Their
-        name labels sit in a pane above the rivers but below the markers.
+        station markers clickable on top of them.  Their name labels sit in a
+        pane above the zones but below the markers.
         """
         self._on_zone_select = on_select
         self.clear_all_zones()
@@ -413,6 +444,14 @@ class Map:
             casing_pane = self.map.createPane("zoneCasings")
             casing_pane.style.zIndex = "349"
             casing_pane.style.pointerEvents = "none"
+
+        arrow_pane = self.map.getPane("zoneArrows")
+        if not arrow_pane:
+            arrow_pane = self.map.createPane("zoneArrows")
+            arrow_pane.style.zIndex = self.ZONE_ARROW_PANE_Z_INDEX
+            arrow_pane.style.pointerEvents = "none"
+        if self._zone_arrow_layer is None:
+            self._zone_arrow_layer = self.leaflet.layerGroup().addTo(self.map)
 
         if self._zone_renderer is None:
             self._zone_renderer = self.leaflet.svg({"pane": "zones"})
@@ -468,8 +507,8 @@ class Map:
             entry["layer"] = layer
             if name:
                 layer.bindTooltip(
-                    f'<span class="zone-chip" style="color:{identity["color"]};'
-                    f'border-color:{identity["color"]};">{escape_html(name)}</span>',
+                    f'<span class="zone-chip" style="--zone-color:{identity["color"]};">'
+                    f"{escape_html(name)}</span>",
                     {
                         "permanent": True,
                         "direction": "center",
@@ -592,7 +631,9 @@ class Map:
             entry = self.zone_layers_by_id.get(zone_id)
             if not entry:
                 return
-            self._apply_zone_style(zone_id, "hover" if entering else "normal")
+            self._apply_zone_style(
+                zone_id, "hover" if entering else self._zone_state(zone_id)
+            )
 
         return handler
 
@@ -625,16 +666,42 @@ class Map:
             return False
 
         self._selected_zone_ids = ids
+        # Old documents have no field; ids with no drawn layer (inactive or
+        # reference zones) simply have nothing to highlight.
+        upstream_by_zone = {
+            zone_id: [
+                str(upstream_id)
+                for upstream_id in (
+                    self.zone_layers_by_id[zone_id]["zone"].get("upstream_zone_ids")
+                    or []
+                )
+                if str(upstream_id) in self.zone_layers_by_id
+                and str(upstream_id) not in ids
+            ]
+            for zone_id in ids
+        }
+        upstream_ids = []
+        for zone_upstream in upstream_by_zone.values():
+            upstream_ids += [u for u in zone_upstream if u not in upstream_ids]
+        self._upstream_zone_ids = frozenset(upstream_ids)
         # The other zones keep their normal dashed outline: they stay visible
         # and clickable so a different zone can be picked straight away.
         for key, other in self.zone_layers_by_id.items():
+            self._apply_zone_style(key, self._zone_state(key))
             if key in ids:
-                self._apply_zone_style(key, "selected")
                 if other.get("casing"):
                     other["casing"].bringToFront()
                 other["layer"].bringToFront()
-            else:
-                self._apply_zone_style(key)
+
+        self._clear_upstream_arrows()
+        for zone_id, zone_upstream in upstream_by_zone.items():
+            self._draw_upstream_arrows(zone_id, zone_upstream)
+        self.map.getContainer().classList.add(self.FLOW_FADED_CLASS)
+
+        names = [self._zone_display_name(upstream_id) for upstream_id in upstream_ids]
+        self._show_upstream_label(
+            "น้ำไหลมาจาก: " + ", ".join(names) if names else "ไม่มีข้อมูลต้นน้ำ"
+        )
 
         if fit_bounds:
             bounds = None
@@ -649,8 +716,83 @@ class Map:
         self.show_reset_button()
         return True
 
+    def _zone_display_name(self, zone_id):
+        zone = self.zone_layers_by_id[zone_id]["zone"]
+        return zone.get("name_th") or zone.get("name") or zone_id
+
+    def _show_upstream_label(self, text):
+        from browser import document as doc
+
+        if self._upstream_label is None:
+            label = doc.createElement("div")
+            label.style.cssText = (
+                "position:absolute;top:12px;left:50%;transform:translateX(-50%);"
+                "z-index:1000;max-width:40%;pointer-events:none;background:var(--color-base-100);"
+                "color:var(--color-brand-700);border:1px solid var(--color-brand-300);border-radius:8px;"
+                "padding:6px 12px;font-size:13px;font-weight:600;"
+                "box-shadow:0 2px 6px rgba(0,0,0,0.15);"
+            )
+            self.map.getContainer().appendChild(label)
+            self._upstream_label = label
+        self._upstream_label.text = text
+        self._upstream_label.style.display = "block"
+
+    def _draw_upstream_arrows(self, zone_id, upstream_ids):
+        """One arrow per upstream zone, pointing into the selected zone."""
+        if self._zone_arrow_layer is None:
+            return
+        selected = self.zone_layers_by_id[zone_id]["zone"]
+        selected_rings = zone_rings(selected.get("boundary"))
+        if not selected_rings:
+            return
+        width, height = SOURCE_ARROW_SIZE_PX
+        for upstream_id in upstream_ids:
+            entry = self.zone_layers_by_id[upstream_id]
+            # The arrow wears the upstream zone's own colour (set per zone in
+            # /zones and shown in the legend), so it says where water comes from.
+            color = (entry.get("identity") or self.zone_identity(entry["zone"]))["color"]
+            boundary = entry["zone"].get("boundary")
+            upstream_rings = zone_rings(boundary)
+            if not upstream_rings:
+                continue
+            arrow = upstream_arrow(upstream_rings, selected_rings)
+            icon = self.leaflet.divIcon(
+                {
+                    "className": "zone-upstream-arrow",
+                    "html": (
+                        f'<div style="transform:rotate({round(arrow["angle"], 1)}deg)">'
+                        f"{SOURCE_ARROW_SVG.format(color=color)}</div>"
+                    ),
+                    "iconSize": [width, height],
+                    "iconAnchor": [width / 2, height / 2],
+                }
+            )
+            self._zone_arrow_layer.addLayer(
+                self.leaflet.marker(
+                    [arrow["lat"], arrow["lng"]],
+                    {
+                        "icon": icon,
+                        "pane": "zoneArrows",
+                        "interactive": False,
+                        "keyboard": False,
+                    },
+                )
+            )
+
+    def _clear_upstream_arrows(self):
+        if self._zone_arrow_layer is not None:
+            self._zone_arrow_layer.clearLayers()
+
+    def _hide_upstream_label(self):
+        if self._upstream_label is not None:
+            self._upstream_label.style.display = "none"
+
     def clear_zone_selection(self):
         self._selected_zone_ids = []
+        self._upstream_zone_ids = frozenset()
+        self._hide_upstream_label()
+        self._clear_upstream_arrows()
+        self.map.getContainer().classList.remove(self.FLOW_FADED_CLASS)
         for zone_id in self.zone_layers_by_id:
             self._apply_zone_style(zone_id)
 
@@ -661,6 +803,21 @@ class Map:
             self._set_zone_entry_visible(entry, False)
         self.zone_layers_by_id = {}
         self._selected_zone_ids = []
+        self._upstream_zone_ids = frozenset()
+        self._hide_upstream_label()
+        self._clear_upstream_arrows()
+        self.map.getContainer().classList.remove(self.FLOW_FADED_CLASS)
+
+    def _flow_layer(self):
+        if getattr(self, "flow_layer", None) is None:
+            self.flow_layer = FlowLayer(self.map, self.fit_bounds_options)
+        return self.flow_layer
+
+    def set_waterways(self, geojson):
+        self._flow_layer().set_waterways(geojson)
+
+    def set_waterways_visible(self, visible):
+        self._flow_layer().set_visible(visible)
 
     def __del__(self):
         self.map.remove()
@@ -1489,167 +1646,6 @@ class Map:
             and not self.leaflet.Browser.edge
         ):
             self.geojson.bringToFront()
-
-    # Waterways from songkhla_basins.geojson, styled by OSM fclass (#67).
-    # Light cyan reads on the grey basemap (river 3.2:1 against #808080).
-    # Streams and drains are the bulk of the 807 lines, so they only appear
-    # from zoom 11, where they no longer blur into a mesh.
-    RIVER_STYLES = {
-        "river": {"color": "#a5f3fc", "weight": 3.0, "opacity": 1.0, "dash": ""},
-        "canal": {"color": "#7dd3fc", "weight": 2.0, "opacity": 1.0, "dash": ""},
-        "stream": {"color": "#7dd3fc", "weight": 1.1, "opacity": 0.75, "dash": ""},
-        "drain": {"color": "#7dd3fc", "weight": 1.0, "opacity": 0.75, "dash": "3 3"},
-    }
-    RIVER_DETAIL_ZOOM = 11
-    RIVER_HIGHLIGHT = "#ecfeff"
-
-    def river_style(self, fclass, zoom):
-        """Leaflet style for one waterway at a zoom level."""
-        spec = self.RIVER_STYLES.get(fclass) or self.RIVER_STYLES["stream"]
-        minor = fclass not in ("river", "canal")
-        if minor and (zoom or 0) < self.RIVER_DETAIL_ZOOM:
-            # Weight 0 also removes the hit area, so hidden streams can't be
-            # clicked by accident.
-            return {
-                "weight": 0,
-                "opacity": 0,
-                "fillOpacity": 0,
-                "className": "river-line",
-            }
-        scale = 1.4 if (zoom or 0) >= 14 else (1.2 if (zoom or 0) >= 12 else 1.0)
-        return {
-            "color": spec["color"],
-            "weight": round(spec["weight"] * scale, 2),
-            "opacity": spec["opacity"],
-            "dashArray": spec["dash"],
-            "fillOpacity": 0,
-            "className": "river-line",
-        }
-
-    def set_rivers_layer(self, data):
-        """Dedicated method for rendering river/waterway GeoJSON with flow animation."""
-        if not data or len(data) == 0:
-            return
-
-        # River selection state (scoped to this layer only)
-        self._selected_river = None
-        self._river_clicked = False
-
-        def get_val(obj, key_name, default_val=None):
-            if obj is None:
-                return default_val
-            if isinstance(obj, dict):
-                return obj.get(key_name, default_val)
-            return getattr(obj, key_name, default_val)
-
-        def style(feature):
-            properties = get_val(feature, "properties", {})
-            return self.river_style(
-                get_val(properties, "fclass", None), self.map.getZoom()
-            )
-
-        def _clear_river_selection(self_ref):
-            """Helper to reset the currently selected river layer."""
-            if self_ref._selected_river:
-                prev = self_ref._selected_river
-                if "rivers" in self_ref.shapes and self_ref.shapes["rivers"].hasLayer(
-                    prev
-                ):
-                    self_ref.shapes["rivers"].resetStyle(prev)
-                if hasattr(prev, "_path") and prev._path:
-                    prev._path.classList.remove("flowing-river")
-                self_ref._selected_river = None
-
-        def on_map_click(e):
-            if self._river_clicked:
-                self._river_clicked = False
-                return
-            _clear_river_selection(self)
-
-        self.map.on("click", on_map_click)
-
-        def on_each_feature(feature, layer):
-
-            def highlight_feature(e):
-                target_layer = e.target
-                feature_obj = target_layer.feature
-                props = get_val(feature_obj, "properties", {})
-                target_layer.setStyle(
-                    {"weight": 5, "color": self.RIVER_HIGHLIGHT, "opacity": 1.0}
-                )
-                if hasattr(target_layer, "_path") and target_layer._path:
-                    target_layer._path.classList.add("flowing-river")
-
-            def zoom_to_feature(e):
-                if getattr(self, "_pin_mode_active", False):
-                    return
-                target_layer = e.target
-                self._river_clicked = True
-
-                target_feature = target_layer.feature
-                geom = get_val(target_feature, "geometry", {})
-                geom_type = get_val(geom, "type", "")
-                if self.map.getZoom() < 11 and geom_type != "Point":
-                    self.map.fitBounds(target_layer.getBounds())
-
-                # Reset previous selection, then set new one
-                if self._selected_river and self._selected_river != target_layer:
-                    _clear_river_selection(self)
-                self._selected_river = target_layer
-                highlight_feature(e)
-
-            # Build popup content
-            popup_detail = ""
-            properties = get_val(feature, "properties", {})
-            name = get_val(properties, "Name", None)
-            if name:
-                display_name = name
-                if name == "Waterway":
-                    lang = getattr(self, "lang_code", "th")
-                    display_name = (
-                        "เส้นทางน้ำ (ไม่ระบุชื่อ)"
-                        if lang == "th"
-                        else "Unnamed Waterway"
-                    )
-                popup_detail += f"<div>{display_name}</div>"
-
-            if popup_detail:
-                layer.bindPopup(popup_detail)
-
-            layer.on(
-                {
-                    "click": zoom_to_feature,
-                }
-            )
-
-        if "rivers" in self.shapes and self.shapes["rivers"] is not None:
-            if self.map.hasLayer(self.shapes["rivers"]):
-                self.map.removeLayer(self.shapes["rivers"])
-            self.shapes.pop("rivers", None)
-
-        self.shapes["rivers"] = self.leaflet.geoJson(
-            data,
-            {
-                "style": style,
-                "onEachFeature": on_each_feature,
-                "renderer": self.leaflet.svg(),
-            },
-        ).addTo(self.map)
-
-        def on_zoom(_event=None):
-            rivers = self.shapes.get("rivers")
-            if not rivers:
-                return
-            rivers.setStyle(style)
-            selected = self._selected_river
-            if selected and rivers.hasLayer(selected):
-                selected.setStyle(
-                    {"weight": 5, "color": self.RIVER_HIGHLIGHT, "opacity": 1.0}
-                )
-
-        if not getattr(self, "_river_zoom_bound", False):
-            self.map.on("zoomend", on_zoom)
-            self._river_zoom_bound = True
 
     def set_shape_boundary(self, data):
         def style(feature):

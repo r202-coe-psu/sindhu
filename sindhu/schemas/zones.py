@@ -43,6 +43,7 @@ class BaseZone(BaseModel):
     # that straddles zones is listed in each of them.
     tambons: List[str] = Field(default_factory=list)
     metadata: dict | None = None
+    upstream_zone_ids: List[PydanticObjectId] = Field(default_factory=list)
 
     @field_validator("tambons", mode="before")
     @classmethod
@@ -63,6 +64,20 @@ class Zone(bases.BaseSchema, BaseZone):
 
 class ZoneWithStations(Zone):
     stations: List[StationSchema] = Field(default_factory=list)
+
+
+class ZoneSummary(BaseModel):
+    id: PydanticObjectId
+    name: str
+    name_th: str | None = None
+    code: str
+
+    class Config:
+        from_attributes = True
+
+
+class ZoneWithUpstream(ZoneWithStations):
+    upstream_zones: List[ZoneSummary] = Field(default_factory=list)
 
 
 class ZoneList(BaseModel):

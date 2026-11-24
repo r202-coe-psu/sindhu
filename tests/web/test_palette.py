@@ -1,8 +1,8 @@
 """Guards for the site palette (#41).
 
-The site has one dark theme built from the brand-* / ink-* tokens in
+The site has one light theme built from the brand-* / ink-* tokens in
 setup.css.  Raw Tailwind palettes (gray-*, slate-*, blue-* …) and bg-white
-bypass those tokens and show up as light patches on the dark theme.
+bypass those tokens, so a retune in setup.css would miss them.
 """
 
 import re
@@ -372,10 +372,10 @@ class PaletteTests(unittest.TestCase):
                     4.5,
                 )
 
-    def test_theme_is_dark(self):
+    def test_theme_is_light(self):
         css = SETUP_CSS.read_text()
         theme = css[css.index('@plugin "daisyui/theme"') :]
-        self.assertIn("color-scheme: dark;", theme[: theme.index("}")])
+        self.assertIn("color-scheme: light;", theme[: theme.index("}")])
 
     def test_text_tokens_are_readable_on_surfaces(self):
         surfaces = {name: _token(name) for name in ("base-100", "base-200")}
@@ -402,10 +402,10 @@ class PaletteTests(unittest.TestCase):
                         _contrast(_token(name), _token(surface)), 4.5
                     )
 
-    def test_ink_scale_gets_lighter_as_the_number_grows(self):
+    def test_ink_scale_gets_darker_as_the_number_grows(self):
         steps = (50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950)
         luminances = [_luminance(_token(f"ink-{step}")) for step in steps]
-        self.assertEqual(luminances, sorted(luminances))
+        self.assertEqual(luminances, sorted(luminances, reverse=True))
         self.assertEqual(len(set(luminances)), len(luminances))
 
 

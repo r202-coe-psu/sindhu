@@ -110,6 +110,7 @@ def _station(code, source, water_level, warning=1.0, critical=2.0, evacuation=3.
     return {
         "code": code,
         "source": source,
+        "bank_level": critical,
         "metadata": {
             "water_level_warning": warning,
             "water_level_critical": critical,
@@ -132,7 +133,7 @@ class ZoneRiskAggregationTests(unittest.TestCase):
                 _station("normal", "rid", 0.5),
                 _station("warning", "rid", 1.5),
                 _station("critical", "rid", 2.5),
-                _station("evacuation", "rid", 3.5),
+                _station("far-over", "rid", 3.5),
             ]
         )
         zone = {
@@ -140,11 +141,11 @@ class ZoneRiskAggregationTests(unittest.TestCase):
                 {"code": "normal"},
                 {"code": "warning"},
                 {"code": "critical"},
-                {"code": "evacuation"},
+                {"code": "far-over"},
             ]
         }
 
-        self.assertEqual(monitor.zone_risk_level(zone)["risk"], 3)
+        self.assertEqual(monitor.zone_risk_level(zone)["risk"], 2)
 
     def test_station_without_fresh_metrics_does_not_recolour_zone(self):
         monitor = self.make_monitor([_station("stale", "rid", None)])
@@ -153,11 +154,30 @@ class ZoneRiskAggregationTests(unittest.TestCase):
 
         self.assertEqual(level["risk"], -1)
 
+    def test_station_without_any_bank_does_not_recolour_zone(self):
+        station = _station("no-bank", "rid", 3.5)
+        station["bank_level"] = None
+        station["metadata"] = {}
+        monitor = self.make_monitor([station])
+
+        level = monitor.zone_risk_level({"stations": [{"code": "no-bank"}]})
+
+        self.assertEqual(level["risk"], -1)
+
+    def test_station_without_admin_bank_is_rated_on_the_etl_bank(self):
+        station = _station("etl-bank", "rid", 3.5)
+        station["bank_level"] = None
+        monitor = self.make_monitor([station])
+
+        level = monitor.zone_risk_level({"stations": [{"code": "etl-bank"}]})
+
+        self.assertEqual(level["risk"], 2)
+
     def test_source_change_recomputes_zone_risk(self):
         monitor = self.make_monitor(
             [
                 _station("shared", "rid", 1.5),
-                _station("shared", "dwr", 3.5),
+                _station("shared", "thaiwater", 3.5),
             ],
             source="rid",
         )
@@ -165,10 +185,32 @@ class ZoneRiskAggregationTests(unittest.TestCase):
         monitor.map = _RiskMap()
 
         monitor.update_zone_risks()
-        monitor.get_selected_source = lambda: "dwr"
+        monitor.get_selected_source = lambda: "thaiwater"
         monitor.update_zone_risks()
 
-        self.assertEqual(monitor.map.updates, [("zone-1", 1), ("zone-1", 3)])
+        self.assertEqual(monitor.map.updates, [("zone-1", 1), ("zone-1", 2)])
+
+    def test_zone_risk_does_not_depend_on_station_order(self):
+        rid = _station("shared", "rid", 3.5)
+        dwr = _station("shared", "dwr", 3.5)
+        zone = {"stations": [{"code": "shared"}]}
+        for stations in ([rid, dwr], [dwr, rid]):
+            with self.subTest(order=[s["source"] for s in stations]):
+                monitor = self.make_monitor(stations)
+                self.assertEqual(monitor.zone_risk_level(zone)["risk"], 2)
+
+    def test_geojson_zone_risk_does_not_depend_on_station_order(self):
+        rid = _station("shared", "rid", 3.5)
+        dwr = _station("shared", "dwr", 3.5)
+        for stations in ([rid, dwr], [dwr, rid]):
+            with self.subTest(order=[s["source"] for s in stations]):
+                monitor = self.make_monitor(stations)
+                geojson = {"properties": {}}
+                monitor.update_zone_properties(geojson, [{"code": "shared"}])
+                self.assertEqual(
+                    geojson["properties"]["fillColor"],
+                    metric_infos.get_risk_level(2)["color"],
+                )
 
     def test_reference_boundary_is_not_sent_for_risk_update(self):
         monitor = self.make_monitor([_station("station", "rid", 3.5)])
@@ -184,7 +226,7 @@ class ZoneRiskAggregationTests(unittest.TestCase):
 
         monitor.update_zone_risks()
 
-        self.assertEqual(monitor.map.updates, [("flood", 3)])
+        self.assertEqual(monitor.map.updates, [("flood", 2)])
 
 
 class ZoneStyleTests(unittest.TestCase):
@@ -201,7 +243,7 @@ class ZoneStyleTests(unittest.TestCase):
 
     def test_outline_keeps_the_zone_colour_at_every_risk(self):
         zone = {"code": "songkhla-zone-1"}
-        for risk in (-1, 0, 1, 2, 3):
+        for risk in (-1, 0, 1, 2):
             with self.subTest(risk=risk):
                 level = metric_infos.get_risk_level(risk)
                 style = self.make_map(zone, level).zone_style("zone")
@@ -210,7 +252,7 @@ class ZoneStyleTests(unittest.TestCase):
 
     def test_fill_follows_the_risk_colour(self):
         zone = {"code": "songkhla-zone-1"}
-        for risk in (0, 1, 2, 3):
+        for risk in (0, 1, 2):
             with self.subTest(risk=risk):
                 level = metric_infos.get_risk_level(risk)
                 style = self.make_map(zone, level).zone_style("zone")
@@ -261,7 +303,7 @@ class ZoneStyleTests(unittest.TestCase):
             "zone_kind": "reference",
             "metadata": {"fill": "#111111", "stroke": "#222222"},
         }
-        level = metric_infos.get_risk_level(3)
+        level = metric_infos.get_risk_level(2)
 
         style = self.make_map(zone, level).zone_style("zone")
 
@@ -452,13 +494,6 @@ class LegendTests(unittest.TestCase):
         map_view.zones_visible = False
         self.assertEqual(map_view.visible_zone_legend_entries(), [])
 
-    def test_failed_river_load_is_reported_in_the_legend(self):
-        map_view = self.make_map()
-        self.assertEqual(map_view.rivers_status_html(), "")
-        map_view.rivers_unavailable = True
-        self.assertIn("โหลดเส้นแม่น้ำไม่สำเร็จ", map_view.rivers_status_html())
-
-
 class _ShownLayers:
     def __init__(self):
         self.shown = set()
@@ -485,6 +520,14 @@ class _PaneMap(_ShownLayers):
     def __init__(self):
         super().__init__()
         self.panes = {}
+        self.container = types.SimpleNamespace(
+            classList=types.SimpleNamespace(
+                add=lambda name: None, remove=lambda name: None
+            )
+        )
+
+    def getContainer(self):
+        return self.container
 
     def getPane(self, name):
         return self.panes.get(name)
@@ -516,6 +559,9 @@ class _ZoneLeaflet:
 
     def geoJson(self, feature, options):
         return _GeoJson(feature, options)
+
+    def layerGroup(self):
+        return _GeoJson(None, {})
 
 
 class ShowAllZonesTests(unittest.TestCase):
@@ -622,36 +668,6 @@ class ZoneAdminTemplateTests(unittest.TestCase):
         self.assertNotIn("form-shading-mode", source)
         self.assertNotIn("shading_mode: shadingMode", source)
         self.assertNotIn("fill: color", source)
-
-
-class RiverStyleTests(unittest.TestCase):
-    def style(self, fclass, zoom):
-        map_view = Map.__new__(Map)
-        map_view.map = _BrowserStub()
-        return map_view.river_style(fclass, zoom)
-
-    def test_main_waterways_show_at_every_zoom(self):
-        for fclass in ("river", "canal"):
-            with self.subTest(fclass=fclass):
-                self.assertGreater(self.style(fclass, 8)["weight"], 0)
-
-    def test_streams_and_drains_wait_for_detail_zoom(self):
-        for fclass in ("stream", "drain"):
-            with self.subTest(fclass=fclass):
-                self.assertEqual(
-                    self.style(fclass, Map.RIVER_DETAIL_ZOOM - 1)["weight"], 0
-                )
-                self.assertGreater(
-                    self.style(fclass, Map.RIVER_DETAIL_ZOOM)["weight"], 0
-                )
-
-    def test_rivers_are_drawn_heavier_than_canals_and_streams(self):
-        zoom = 13
-        weights = [self.style(f, zoom)["weight"] for f in ("river", "canal", "stream")]
-        self.assertEqual(weights, sorted(weights, reverse=True))
-
-    def test_unknown_class_is_drawn_like_a_stream(self):
-        self.assertEqual(self.style(None, 13), self.style("stream", 13))
 
 
 class _MutableClassList:
@@ -827,3 +843,12 @@ class MapFitPaddingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_upstream_arrows_sit_above_the_zones_and_below_the_station_markers(self):
+        map_view = self.draw([self.zone(1)])
+        pane = map_view.map.panes["zoneArrows"]
+        self.assertGreater(
+            int(pane.style.zIndex), int(map_view.map.panes["zones"].style.zIndex)
+        )
+        self.assertLess(int(pane.style.zIndex), 600)
+        self.assertEqual(pane.style.pointerEvents, "none")

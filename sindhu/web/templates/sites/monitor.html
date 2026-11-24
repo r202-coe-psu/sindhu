@@ -60,7 +60,7 @@
             </div>
             <button id="monitor_panel_toggle" type="button" aria-expanded="false" aria-controls="monitor_panel_body"
                 aria-label="ขยาย panel" title="ขยาย panel"
-                class="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-brand-800 hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+                class="shrink-0 w-9 h-9 rounded-full flex items-center justify-center text-brand-800 hover:bg-ink-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand-500">
                 <i class="ph ph-caret-down text-lg monitor-panel-caret transition-transform" aria-hidden="true"></i>
             </button>
         </div>
@@ -116,6 +116,10 @@
                     <label class="flex min-w-0 items-center gap-1.5 cursor-pointer text-xs text-ink-600">
                         <input type="checkbox" id="toggle_zones_layer" checked class="checkbox checkbox-xs checkbox-primary shrink-0" />
                         <span>แสดงขอบเขตโซน</span>
+                    </label>
+                    <label class="flex min-w-0 items-center gap-1.5 cursor-pointer text-xs text-ink-600">
+                        <input type="checkbox" id="toggle_waterways_layer" checked class="checkbox checkbox-xs checkbox-primary shrink-0" />
+                        <span>แสดงเส้นทางน้ำ</span>
                     </label>
                 </div>
             </section>
@@ -341,8 +345,7 @@
     "{{ g.lang_code }}",
     "{{ api_url }}",
     "{{ source }}",
-    reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}",
-    rivers_url="{{ url_for('static', filename='resources/songkhla_basins.geojson') }}"
+    reference_boundary_url="{{ url_for('static', filename='resources/hatyai_boundary.geojson') }}"
     )
   visual_feeds = VisualFeedMonitor("{{ api_url }}")
   monitors.visual_feed_monitor = visual_feeds

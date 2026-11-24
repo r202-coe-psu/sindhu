@@ -22,6 +22,8 @@ from monitors.area import (
     zone_ids_for_value,
 )
 
+WATERWAYS_URL = "/static/resources/hatyai_waterways.geojson"
+
 
 class BaseMonitor:
     def __init__(
@@ -32,7 +34,6 @@ class BaseMonitor:
         center=None,
         zoom=None,
         reference_boundary_url=None,
-        rivers_url=None,
     ):
         self.lang_code = lang_code
         self.acquisition_interval = 60 * 60
@@ -44,7 +45,6 @@ class BaseMonitor:
         self.center = center
         self.zoom = zoom
         self.reference_boundary_url = reference_boundary_url
-        self.rivers_url = rivers_url or "/static/resources/songkhla_basins.geojson"
 
         self.monitor_name = "base"
 
@@ -107,11 +107,9 @@ class BaseMonitor:
                 )
                 self.map.enable_pin_mode(self.on_map_pinned, self.on_pin_mode_off)
                 self.map.add_focus_control()
-                # Rivers come from songkhla_basins.geojson (load_rivers below);
-                # /v1/basins holds the same 807 lines, so it is not drawn twice.
 
             await self.load_zones()
-            await self.load_rivers()
+            await self.load_flow()
 
             if "my_locate" in document and not getattr(self, "_locate_bound", False):
                 document["my_locate"].bind("click", self.on_my_locate_click)
@@ -132,24 +130,16 @@ class BaseMonitor:
         self.set_map_loading(False)
         return True
 
-    async def load_rivers(self):
-        """Load and render river waterways with flow animation."""
-        if not self.rivers_url:
-            return
-
-        loaded = False
+    async def load_flow(self):
+        """Draw the waterway network; a missing file must not break the page."""
         try:
-            response = await aio.get(self.rivers_url, cache=True)
+            response = await aio.get(WATERWAYS_URL, cache=True)
             if response.status == 200 or response.status == 0:
-                rivers_data = json.loads(response.data)
-                self.map.set_rivers_layer(rivers_data)
-                loaded = True
+                self.map.set_waterways(json.loads(response.data))
             else:
-                print(f"[Monitor] Rivers returned HTTP {response.status}")
+                print(f"[Monitor] {WATERWAYS_URL} returned HTTP {response.status}")
         except Exception as e:
-            print(f"[Monitor] Failed to load rivers: {e}")
-        self.map.rivers_unavailable = not loaded
-        self.map.refresh_legend()
+            print(f"[Monitor] Failed to load {WATERWAYS_URL}: {e}")
 
     async def load_zones(self):
         """Draw active API flood zones from database."""

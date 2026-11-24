@@ -1,232 +1,52 @@
-import sys
-import os
+"""Seed the Songkhla flood zones, their upstream links and the Hat Yai
+reference boundary.
+
+The flood zones live in fixtures/zones/songkhla_zones.json. Upstream links are
+stored there as zone codes, because ids differ between databases.
+
+    python scripts/seed_zones_songkhla.py           # write the zones to the database
+    python scripts/seed_zones_songkhla.py --export  # refresh the file from the database
+"""
+
+import asyncio
 import json
+import os
+import sys
 from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
-from dotenv import load_dotenv      
-from sindhu import models
-import asyncio
+from dotenv import load_dotenv  # noqa: E402
+
+from sindhu import models  # noqa: E402
+from sindhu.services.zones import upstream_violation  # noqa: E402
 
 load_dotenv()
 
-SONGKHLA_ZONES = [
-    {
-        "name": "Zone_1",
-        "name_th": "Zone_1",
-        "code": "songkhla-zone-1",
-        "station_codes": [
-            "STN07",
-            "2590",
-            "TSL26",
-            "STN2213",
-            "TSL39",
-            "STN0134",
-            "STN0709",
-            "STN0580",
-        ],
-        "boundary": {
-            "type": "Polygon",
-            "coordinates": [
-                [
-                    [100.47474887369279, 6.906902692029026],
-                    [100.47752924581121, 6.911578622365551],
-                    [100.47526889498796, 6.935859974023014],
-                    [100.47985432730702, 6.954267342063894],
-                    [100.47799464179087, 6.974841712633066],
-                    [100.47481539093751, 6.990659427017707],
-                    [100.47571192458703, 6.995904868863032],
-                    [100.47953299439705, 6.997781122737215],
-                    [100.4913992146005, 6.996512721187924],
-                    [100.50160030445836, 7.000171657615619],
-                    [100.51400764744065, 6.997126342832732],
-                    [100.5172717387425, 6.992816541812348],
-                    [100.51990573433895, 6.993374673376125],
-                    [100.52749310340836, 6.990904680534552],
-                    [100.52841172977323, 6.989177442674224],
-                    [100.52595897212237, 6.988180615437083],
-                    [100.51724446029925, 6.989774397484758],
-                    [100.51582822537162, 6.987082466045745],
-                    [100.51198073369652, 6.985201217450022],
-                    [100.49763528550403, 6.986405181643184],
-                    [100.49716718858981, 6.984790831239472],
-                    [100.49892743884105, 6.982875918576099],
-                    [100.50994455638997, 6.980590068138781],
-                    [100.50783461858084, 6.9730459303220345],
-                    [100.50574420237649, 6.972088505574213],
-                    [100.49518455685656, 6.9749679396179225],
-                    [100.49572493188442, 6.978691276536757],
-                    [100.49130139768661, 6.980400611965852],
-                    [100.48714377261507, 6.988364393188634],
-                    [100.48685860411075, 6.993152058465128],
-                    [100.48346342878457, 6.993382032861608],
-                    [100.48283569941103, 6.987773814724085],
-                    [100.4880431190661, 6.980046540609682],
-                    [100.48875760842348, 6.976833132513521],
-                    [100.48191620876851, 6.976701914776468],
-                    [100.48033569748127, 6.975295299442111],
-                    [100.48091406638123, 6.973735620213646],
-                    [100.49256334079884, 6.972121276806497],
-                    [100.50333300178036, 6.968581076734711],
-                    [100.52027434805713, 6.966343326244604],
-                    [100.52267930341236, 6.964409624216942],
-                    [100.52383400343861, 6.9605116212122216],
-                    [100.51726624769688, 6.951461723496033],
-                    [100.50954949143718, 6.923478131913632],
-                    [100.502231900119, 6.903992347336002],
-                    [100.50189047900125, 6.899601213123897],
-                    [100.49668229648726, 6.890257252067261],
-                    [100.48291523516032, 6.888783727195615],
-                    [100.4830426128892, 6.892273950285321],
-                    [100.4787908247371, 6.893420195025197],
-                    [100.47645250552226, 6.897942471274639],
-                    [100.47474887369279, 6.906902692029026],
-                ]
-            ],
-        },
-    },
-    {
-        "name": "Zone_2",
-        "name_th": "Zone_2",
-        "code": "songkhla-zone-2",
-        "station_codes": [
-            "1109526",
-            "858",
-            "2591",
-            "2590",
-            "TSL28",
-            "TSL27",
-            "TSL25",
-            "TSL24",
-            "TSL40",
-            "STN02",
-            "STN04",
-        ],
-        "boundary": {
-            "type": "Polygon",
-            "coordinates": [
-                [
-                    [100.42819445446685, 7.062826489867635],
-                    [100.43002955788266, 7.076072603934159],
-                    [100.42932408284716, 7.079411432388265],
-                    [100.4315996135461, 7.088803767873521],
-                    [100.43494159612128, 7.091725464864713],
-                    [100.44116922977652, 7.091669007775978],
-                    [100.44613687662039, 7.086354539816721],
-                    [100.44983658281161, 7.072487793758056],
-                    [100.45061178278657, 7.06196365195322],
-                    [100.44941753079586, 7.049411190091451],
-                    [100.45300571882831, 7.026397823475969],
-                    [100.45251847431437, 7.020814453438191],
-                    [100.45735219630467, 7.013305101812604],
-                    [100.46053566482155, 7.001612898661532],
-                    [100.46538825558865, 6.996588998137728],
-                    [100.46409555033972, 6.995014087882325],
-                    [100.4554195851773, 6.996246625050547],
-                    [100.45437391089045, 6.993577856657311],
-                    [100.45909897302883, 6.990446134805008],
-                    [100.4600998708665, 6.987500673170531],
-                    [100.46467324384543, 6.986294735703561],
-                    [100.46607198280932, 6.983521344626797],
-                    [100.4636977193147, 6.981801428152625],
-                    [100.45971898519527, 6.981369899875469],
-                    [100.4558868181285, 6.983129237055253],
-                    [100.44930647616788, 6.990865603260613],
-                    [100.44688881933567, 6.99168650143381],
-                    [100.44064804245966, 7.001984831275307],
-                    [100.42969688977048, 7.03884524764308],
-                    [100.42911773686811, 7.04756145453733],
-                    [100.43084569102524, 7.05186602466496],
-                    [100.42819445446685, 7.062826489867635],
-                ]
-            ],
-        },
-    },
-    {
-        "name": "Zone_3",
-        "name_th": "Zone_3",
-        "code": "songkhla-zone-3",
-        "station_codes": [
-            "STN2212",
-            "STN05",
-            "STN06",
-            "STN01",
-            "STN1025",
-            "STN1026",
-            "TSL24",
-            "TSL27",
-        ],
-        "boundary": {
-            "type": "Polygon",
-            "coordinates": [
-                [
-                    [100.37146252183308, 6.931199093112617],
-                    [100.37385568077556, 6.939506667651497],
-                    [100.37864014062492, 6.944447963795334],
-                    [100.37882042961364, 6.947727109360253],
-                    [100.3807374339507, 6.9501111412004315],
-                    [100.39877351675648, 6.963912714815338],
-                    [100.4046633637261, 6.979427705766879],
-                    [100.40743503645223, 6.983401654252417],
-                    [100.40843408658161, 6.991908809179708],
-                    [100.41085699696521, 6.996560596862721],
-                    [100.42135568956833, 7.000990441455312],
-                    [100.426254512877, 6.999692032427695],
-                    [100.43138786915247, 6.996224690419684],
-                    [100.43361256817388, 6.986623627080016],
-                    [100.43750233924754, 6.983716437539232],
-                    [100.43462317096267, 6.980341816635268],
-                    [100.43578435648962, 6.97255697652043],
-                    [100.42957243597945, 6.948836470104761],
-                    [100.42383560259886, 6.937605943202432],
-                    [100.41867485859046, 6.931193806796482],
-                    [100.4074830303329, 6.923030692365868],
-                    [100.39666067284823, 6.918199900284176],
-                    [100.38472377809248, 6.91690671152102],
-                    [100.37733181035065, 6.917569238636264],
-                    [100.37307880907262, 6.91966862039871],
-                    [100.37167577141524, 6.92246987140212],
-                    [100.37297417146023, 6.9273233766164],
-                    [100.37146252183308, 6.931199093112617],
-                ]
-            ],
-        },
-    },
-]
-
-
+ZONES_PATH = ROOT / "fixtures" / "zones" / "songkhla_zones.json"
 HATYAI_BOUNDARY_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "sindhu"
-    / "web"
-    / "static"
-    / "resources"
-    / "hatyai_boundary.geojson"
+    ROOT / "sindhu" / "web" / "static" / "resources" / "hatyai_boundary.geojson"
 )
 
 
-async def seed_system_settings():
-    """Create the one required map configuration only on a fresh database.
+def upstream_problems(zones):
+    """Messages for upstream links the API would refuse, keyed by zone code."""
+    graph = {zone["code"]: list(zone.get("upstream_codes", [])) for zone in zones}
+    problems = []
+    for code, upstream_codes in graph.items():
+        message = upstream_violation(code, upstream_codes, graph)
+        if message:
+            problems.append(f"{code}: {message}")
+    return problems
 
-    The monitor cannot construct Leaflet or request its zones without this
-    document.  Existing operator configuration is deliberately preserved.
-    """
-    existing = await models.SystemSetting.find_one(sort=[("_id", -1)])
-    if existing:
-        print("System settings: preserved existing configuration")
-        return
 
-    await models.SystemSetting(
-        # GeoJSON point order is [longitude, latitude].  This is the centre
-        # of the three Songkhla flood zones declared below.
-        center={"type": "Point", "coordinates": [100.449937, 6.990255]},
-        zoom=12,
-        min_zoom=6,
-        interpolation_coordinate_1=None,
-        interpolation_coordinate_2=None,
-    ).insert()
-    print("System settings: created Hat Yai map defaults")
+def load_flood_zones():
+    zones = json.loads(ZONES_PATH.read_text(encoding="utf-8"))
+    problems = upstream_problems(zones)
+    if problems:
+        raise SystemExit("invalid upstream links:\n  " + "\n  ".join(problems))
+    return zones
 
 
 def load_hatyai_zone():
@@ -247,55 +67,143 @@ def load_hatyai_zone():
     }
 
 
-async def seed_zones():
+async def connect():
     class Setting:
-        def __init__(self):
-            self.MONGODB_URI = os.getenv(
-                "MONGODB_URI", "mongodb://localhost:27017/sindhudb"
-            )
+        MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/sindhudb")
 
-    settings = Setting()
-    await models.init_beanie(None, settings)
+    await models.init_beanie(None, Setting())
 
+
+async def seed_system_settings():
+    existing = await models.SystemSetting.find_one(sort=[("_id", -1)])
+    if existing:
+        print("System settings: kept existing map defaults")
+        return
+
+    await models.SystemSetting(
+        # Hat Yai municipality is the default focus; the zoom shows the whole
+        # of the Songkhla flood zones.
+        center={"type": "Point", "coordinates": [100.449937, 6.990255]},
+        zoom=12,
+        min_zoom=6,
+        interpolation_coordinate_1=None,
+        interpolation_coordinate_2=None,
+    ).insert()
+    print("System settings: created Hat Yai map defaults")
+
+
+async def upsert_zone(zone_data):
+    codes = zone_data["station_codes"]
+    db_stations = await models.Station.find({"code": {"$in": codes}}).to_list()
+    found = {s.code for s in db_stations}
+    missing = [c for c in codes if c not in found]
+
+    zone = await models.Zone.find_one(models.Zone.code == zone_data["code"])
+    action = "updated" if zone else "created"
+    if zone is None:
+        zone = models.Zone(
+            name=zone_data["name"],
+            code=zone_data["code"],
+            boundary=zone_data["boundary"],
+        )
+    zone.name = zone_data["name"]
+    zone.name_th = zone_data["name_th"]
+    zone.boundary = zone_data["boundary"]
+    zone.zone_kind = zone_data.get("zone_kind", "flood")
+    if "metadata" in zone_data:
+        zone.metadata = zone_data["metadata"]
+    zone.stations = db_stations
+    zone.status = "active"
+    await zone.save()
+
+    msg = (
+        f"  {action}: {zone_data['name_th']} ({len(db_stations)}/{len(codes)} stations)"
+    )
+    if missing:
+        msg += f", missing codes: {missing}"
+    print(msg)
+    return zone
+
+
+async def seed_zones():
+    flood_zones = load_flood_zones()
+    await connect()
     await seed_system_settings()
 
-    for zone_data in [*SONGKHLA_ZONES, load_hatyai_zone()]:
-        codes = zone_data["station_codes"]
-        db_stations = await models.Station.find({"code": {"$in": codes}}).to_list()
-        found = {s.code for s in db_stations}
-        missing = [c for c in codes if c not in found]
+    saved = {}
+    for zone_data in [*flood_zones, load_hatyai_zone()]:
+        saved[zone_data["code"]] = await upsert_zone(zone_data)
 
-        existing = await models.Zone.find_one(models.Zone.code == zone_data["code"])
-        if existing:
-            existing.name = zone_data["name"]
-            existing.name_th = zone_data["name_th"]
-            existing.boundary = zone_data["boundary"]
-            existing.zone_kind = zone_data.get("zone_kind", "flood")
-            if "metadata" in zone_data:
-                existing.metadata = zone_data["metadata"]
-            existing.stations = db_stations
-            existing.status = "active"
-            await existing.save()
+    # Second pass: every zone exists now, so codes resolve to this database's ids.
+    for zone_data in flood_zones:
+        zone = saved[zone_data["code"]]
+        zone.upstream_zone_ids = [
+            saved[code].id for code in zone_data.get("upstream_codes", [])
+        ]
+        await zone.save()
+        if zone_data.get("upstream_codes"):
+            print(f"  upstream: {zone_data['code']} <- {zone_data['upstream_codes']}")
 
-            msg = f"  updated: {zone_data['name_th']} ({len(db_stations)}/{len(codes)} stations)"
-            if missing:
-                msg += f" — missing codes: {missing}"
-            print(msg)
-            continue
-
-        zone_fields = {k: v for k, v in zone_data.items() if k != "station_codes"}
-        zone = models.Zone(**zone_fields)
-        zone.stations = db_stations
-        await zone.insert()
-
-        msg = f"  created: {zone_data['name_th']} ({len(db_stations)}/{len(codes)} stations)"
-        if missing:
-            msg += f" — missing codes: {missing}"
-        print(msg)
+    seeded = set(saved)
+    strays = await models.Zone.find(
+        {"status": "active", "zone_kind": "flood", "code": {"$nin": sorted(seeded)}}
+    ).to_list()
+    for zone in strays:
+        print(f"  warning: active flood zone not in the seed file: {zone.code}")
 
     total = await models.Zone.find({"status": "active"}).count()
     print(f"\nTotal active zones: {total}")
 
 
+async def export_zones():
+    await connect()
+    zones = (
+        await models.Zone.find({"status": "active", "zone_kind": "flood"})
+        .sort("code")
+        .to_list()
+    )
+    code_of = {zone.id: zone.code for zone in zones}
+
+    station_ids = [link.ref.id for zone in zones for link in zone.stations]
+    stations = await models.Station.find({"_id": {"$in": station_ids}}).to_list()
+    station_code_of = {station.id: station.code for station in stations}
+
+    exported = []
+    for zone in zones:
+        dangling = [str(i) for i in zone.upstream_zone_ids if i not in code_of]
+        if dangling:
+            print(
+                f"  warning: {zone.code} skips upstream ids that are not active: {dangling}"
+            )
+        exported.append(
+            {
+                "code": zone.code,
+                "name": zone.name,
+                "name_th": zone.name_th,
+                "zone_kind": zone.zone_kind,
+                "metadata": zone.metadata,
+                "station_codes": list(
+                    dict.fromkeys(
+                        station_code_of[link.ref.id]
+                        for link in zone.stations
+                        if link.ref.id in station_code_of
+                    )
+                ),
+                "upstream_codes": [
+                    code_of[i] for i in zone.upstream_zone_ids if i in code_of
+                ],
+                "boundary": zone.boundary.model_dump()
+                if hasattr(zone.boundary, "model_dump")
+                else zone.boundary,
+            }
+        )
+
+    ZONES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ZONES_PATH.write_text(
+        json.dumps(exported, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"wrote {len(exported)} zones to {ZONES_PATH.relative_to(ROOT)}")
+
+
 if __name__ == "__main__":
-    asyncio.run(seed_zones())
+    asyncio.run(export_zones() if "--export" in sys.argv[1:] else seed_zones())

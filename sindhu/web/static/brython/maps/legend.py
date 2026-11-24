@@ -152,7 +152,7 @@ class LegendMixin:
             rows += f"""
             <div class="flex items-center gap-2">
                 <span class="inline-block w-4 h-3 rounded-sm shrink-0 border border-ink-300" style="background-color: {level["color"]};"></span>
-                <span class="text-[11px] text-ink-700 leading-tight">{level["label"]}</span>
+                <span class="text-[11px] text-ink-700 leading-tight whitespace-nowrap">{level["label"]}</span>
                 <span class="text-[10px] text-ink-400 leading-tight ml-auto pl-2 whitespace-nowrap">{level["range"]}</span>
             </div>
             """
@@ -176,18 +176,7 @@ class LegendMixin:
                 {rows}
             </div>
             {self.zone_legend_html()}
-            {self.rivers_status_html()}
         </div>
-        """
-
-    def rivers_status_html(self):
-        if not getattr(self, "rivers_unavailable", False):
-            return ""
-        return """
-            <div class="mt-1.5 pt-1.5 border-t border-ink-100 text-[10px] text-warning flex items-center gap-1">
-                <i class="ph ph-warning text-xs" aria-hidden="true"></i>
-                <span>โหลดเส้นแม่น้ำไม่สำเร็จ</span>
-            </div>
         """
 
     def render_legend(self, levels, title, subtitle=""):

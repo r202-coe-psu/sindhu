@@ -3,6 +3,7 @@ from loguru import logger
 
 from sindhu import services
 from sindhu.api.core import caching
+from sindhu.services.interpolations import DEFAULT_METHOD, Method
 
 router = APIRouter(prefix="/interpolations", tags=["interpolations"])
 
@@ -10,8 +11,7 @@ CACHE_EXPIRE_SECONDS = 1800
 
 
 @router.get("/rain")
-async def rain(source: str | None = None, method: str | None = None) -> dict:
-    method = method or services.interpolations.DEFAULT_METHOD
+async def rain(source: str | None = None, method: Method = DEFAULT_METHOD) -> dict:
     key = f"sindhu:interpolations:rain:{source or 'all'}:{method}"
 
     result = await caching.redis_client.json().get(key)
