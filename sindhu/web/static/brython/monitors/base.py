@@ -6,6 +6,7 @@ import json
 from urllib.parse import urlencode
 
 from maps.base import BaseMap
+from maps.zone_roles import is_reference_zone
 from monitors.area import (
     ALL_AREAS,
     MSG_DENIED,
@@ -158,22 +159,9 @@ class BaseMonitor:
         for z in db_zones:
             if z.get("status") == "inactive":
                 continue
-            meta = z.get("metadata") or z.get("style") or {}
-            is_ref = (
-                z.get("zone_kind") == "reference"
-                or meta.get("role") == "reference_boundary"
-                or z.get("code") in ("hatyai-boundary", "hatyai")
-                or (
-                    z.get("code")
-                    and "hatyai" in str(z.get("code")).lower()
-                    and "zone" not in str(z.get("code")).lower()
-                )
-                or z.get("name")
-                in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
-                or z.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
-            )
-            if is_ref:
+            if is_reference_zone(z):
                 continue
+            meta = z.get("metadata") or z.get("style") or {}
             if not z.get("style"):
                 z["style"] = meta
             flood_zones.append(z)
@@ -359,16 +347,23 @@ class BaseMonitor:
     def on_map_pinned(self, lat, lng):
         aio.run(self.on_location_received(lat, lng))
 
+    def set_locate_busy(self, busy):
+        if "my_locate" in document:
+            document["my_locate"].disabled = busy
+
     def on_my_locate_click(self, ev):
         self.set_area_message(None)
+        self.set_locate_busy(True)
         self.map.fly_to_user(
             on_found=self.on_my_location_found, on_error=self.on_my_location_error
         )
 
     def on_my_location_found(self, lat, lng):
+        self.set_locate_busy(False)
         aio.run(self.on_location_received(lat, lng))
 
     def on_my_location_error(self, e):
+        self.set_locate_busy(False)
         # GeolocationPositionError.PERMISSION_DENIED == 1
         kind = MSG_DENIED if getattr(e, "code", None) == 1 else MSG_ERROR
         self.set_area_message(location_message(kind, error=e))
@@ -426,6 +421,8 @@ class BaseMonitor:
                         '<div class="text-sm text-warning font-semibold"><i class="ph ph-warning"></i> นอกพื้นที่ Zone</div>'
                     ).openPopup()
         except Exception as e:
+            if seq != self._area_seq:
+                return
             print(f"[Monitor] Locate error: {e}")
             self.set_area_message(location_message(MSG_ERROR, error=e))
 

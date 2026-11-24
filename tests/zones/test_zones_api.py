@@ -76,6 +76,11 @@ class TambonTagTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _zone_schema(tambons="คอหงส์")
 
+    def test_items_that_are_not_names_are_rejected(self):
+        for bad in ([["x"]], [5], [None], [{"code": "1"}]):
+            with self.subTest(tambons=bad), self.assertRaises(ValueError):
+                _zone_schema(tambons=bad)
+
 
 class LocateTests(unittest.IsolatedAsyncioTestCase):
     async def test_inside_zone_populates_zone_and_its_tambons(self):
@@ -197,6 +202,15 @@ class UpdateZoneTests(unittest.IsolatedAsyncioTestCase):
         await self._update(db_zone, self._base_payload(tambons=[]))
 
         self.assertEqual(db_zone.tambons, [])
+
+    async def test_update_with_null_tambons_is_rejected_and_keeps_them(self):
+        db_zone = _db_zone()
+
+        with self.assertRaises(ValueError):
+            await self._update(db_zone, self._base_payload(tambons=None))
+
+        self.assertEqual(db_zone.tambons, ["Old"])
+        self.assertEqual(db_zone.saved, 0)
 
     async def test_update_missing_zone_is_404(self):
         form = schemas.zones.CreateUpdateZone(**self._base_payload())
