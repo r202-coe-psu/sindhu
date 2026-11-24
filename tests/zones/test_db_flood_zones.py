@@ -70,7 +70,7 @@ class DbFloodZoneTests(unittest.TestCase):
         self.map_view.reference_boundary_layer = None
         self.map_view.reference_boundary_visible = True
         self.map_view.zones_visible = True
-        self.map_view._selected_zone_id = None
+        self.map_view._selected_zone_ids = []
         self.map_view.ZONE_STYLE = {"color": "#6366f1", "fillColor": "transparent"}
 
     def test_load_zones_filters_inactive_and_reference_zones(self):
@@ -116,6 +116,34 @@ class DbFloodZoneTests(unittest.TestCase):
         self.assertEqual(monitor.zones[0]["id"], "z1")
         self.assertEqual(len(rendered_zones), 1)
         self.assertEqual(rendered_zones[0]["id"], "z1")
+
+    def test_flood_zone_named_hat_yai_is_drawn(self):
+        monitor = WaterMonitor("th", "http://test", "water")
+        monitor.map = self.map_view
+        rendered_zones = []
+        monitor.map.show_all_zones = lambda zones, **kwargs: rendered_zones.extend(
+            zones
+        )
+        mock_data = {
+            "zones": [
+                {
+                    "id": "z1",
+                    "name": "Hat Yai",
+                    "name_th": "หาดใหญ่",
+                    "code": "hatyai",
+                    "status": "active",
+                    "zone_kind": "flood",
+                }
+            ]
+        }
+
+        async def fake_get(url, cache=False):
+            return _MockResponse(mock_data)
+
+        sys.modules["browser"].aio.get = fake_get
+        asyncio.run(monitor.load_zones())
+
+        self.assertEqual([z["id"] for z in rendered_zones], ["z1"])
 
     def test_load_zones_empty_clears_old_zones(self):
         monitor = WaterMonitor("th", "http://test", "water")

@@ -272,7 +272,7 @@ class ZoneUpstreamArrowMapTests(unittest.TestCase):
             item["id"]: {"layer": _Layer(), "zone": item, "risk": None, "style": {}}
             for item in ARROW_ZONES
         }
-        self.map_view._selected_zone_id = None
+        self.map_view._selected_zone_ids = []
         self.map_view._reset_btn_container = None
 
         patcher = mock.patch.object(sys.modules["browser"], "document", _Document())

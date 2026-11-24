@@ -1,4 +1,4 @@
-from browser import alert, window
+from browser import window
 from html import escape as escape_html
 import re
 import json
@@ -8,6 +8,7 @@ from maps.cctv_pairing import pair_cameras, pin_shift
 from maps.flow import SOURCE_ARROW_SIZE_PX, SOURCE_ARROW_SVG, FlowLayer
 from maps.marker_sizes import CCTV, MY_LOCATION, USER, hit_box_html, is_far_zoom
 from maps.zone_flow import upstream_arrow, zone_rings
+from maps.zone_roles import is_reference_zone
 
 
 VISUAL_FEED_POPUP_OPTIONS = {"minWidth": 240, "maxWidth": 280, "autoPanPadding": [24, 24]}
@@ -18,6 +19,13 @@ def _open_unless_popup(marker, feed, on_feed_click):
     # full viewer underneath.
     if not marker.getPopup():
         on_feed_click(feed)
+
+
+class LocateTimeout:
+    """Stands in for a GeolocationPositionError when no answer ever came."""
+
+    code = 3  # GeolocationPositionError.TIMEOUT
+    message = "หมดเวลารอตำแหน่ง"
 
 
 class Map:
@@ -154,7 +162,7 @@ class Map:
 
         self.zone_layers_by_id = {}
         self.reference_boundary_layer = None
-        self._selected_zone_id = None
+        self._selected_zone_ids = []
         self._on_zone_select = None
         self._zone_renderer = None
         self.zones_visible = True
@@ -198,24 +206,12 @@ class Map:
         {"color": "#4f7cff", "dash": "2 6 10 6"},  # zone 3: vivid blue, dash-dot
     )
     ZONE_CASING_COLOR = "#141414"
+    LOCATE_TIMEOUT_MS = 20000
     ZONE_WEIGHT = 2.6
     ZONE_RISK_FILL_OPACITY = 0.28
     HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
     DASH_PATTERN = re.compile(r"^[0-9][0-9 ,.]*$")
     ZONE_CODE_NUMBER = re.compile(r"zone[-_ ]?([0-9]+)", re.IGNORECASE)
-
-    @staticmethod
-    def _is_reference_zone(zone, style=None):
-        style = style or zone.get("style") or zone.get("metadata") or {}
-        code = str(zone.get("code") or "").lower()
-        return (
-            zone.get("zone_kind") == "reference"
-            or style.get("role") == "reference_boundary"
-            or code in ("hatyai-boundary", "hatyai")
-            or ("hatyai" in code and "zone" not in code)
-            or zone.get("name") in ("Hat Yai", "Hat Yai Boundary", "กรอบพื้นที่หาดใหญ่")
-            or zone.get("name_th") in ("หาดใหญ่", "กรอบพื้นที่หาดใหญ่")
-        )
 
     @staticmethod
     def zone_number(zone):
@@ -275,7 +271,7 @@ class Map:
         return True
 
     def _zone_state(self, zone_id):
-        if self._selected_zone_id == zone_id:
+        if zone_id in self._selected_zone_ids:
             return "selected"
         if zone_id in self._upstream_zone_ids:
             return "upstream"
@@ -290,7 +286,7 @@ class Map:
 
         # Reference boundaries are geographic context, not a risk zone.
         # Keep them as a plain outline without fill and never recolour them.
-        if self._is_reference_zone(zone, custom_style):
+        if is_reference_zone(zone, custom_style):
             ref_color = (
                 custom_style.get("stroke")
                 or (
@@ -462,7 +458,7 @@ class Map:
         for zone in zones:
             if zone.get("status") == "inactive" or not zone.get("boundary"):
                 continue
-            if not str(zone.get("id", "")) or self._is_reference_zone(zone):
+            if not str(zone.get("id", "")) or is_reference_zone(zone):
                 continue
             flood_zones.append(zone)
         flood_zones.sort(key=self._zone_order_key)
@@ -626,7 +622,7 @@ class Map:
 
     def _make_zone_hover(self, zone_id, entering):
         def handler(e):
-            if self._pin_mode_active or self._selected_zone_id == zone_id:
+            if self._pin_mode_active or zone_id in self._selected_zone_ids:
                 return
             entry = self.zone_layers_by_id.get(zone_id)
             if not entry:
@@ -653,31 +649,49 @@ class Map:
         return handler
 
     def select_zone(self, zone_id, fit_bounds=True):
-        zone_id = str(zone_id)
-        entry = self.zone_layers_by_id.get(zone_id)
-        if not entry:
+        return self.select_zones([zone_id], fit_bounds)
+
+    def select_zones(self, zone_ids, fit_bounds=True):
+        """Highlight one or more zones and (optionally) fit their union bounds."""
+        ids = []
+        for zone_id in zone_ids or []:
+            zone_id = str(zone_id)
+            if zone_id in self.zone_layers_by_id and zone_id not in ids:
+                ids.append(zone_id)
+        if not ids:
             return False
 
-        self._selected_zone_id = zone_id
+        self._selected_zone_ids = ids
         # Old documents have no field; ids with no drawn layer (inactive or
         # reference zones) simply have nothing to highlight.
-        upstream_ids = [
-            str(upstream_id)
-            for upstream_id in (entry["zone"].get("upstream_zone_ids") or [])
-            if str(upstream_id) in self.zone_layers_by_id
-            and str(upstream_id) != zone_id
-        ]
+        upstream_by_zone = {
+            zone_id: [
+                str(upstream_id)
+                for upstream_id in (
+                    self.zone_layers_by_id[zone_id]["zone"].get("upstream_zone_ids")
+                    or []
+                )
+                if str(upstream_id) in self.zone_layers_by_id
+                and str(upstream_id) not in ids
+            ]
+            for zone_id in ids
+        }
+        upstream_ids = []
+        for zone_upstream in upstream_by_zone.values():
+            upstream_ids += [u for u in zone_upstream if u not in upstream_ids]
         self._upstream_zone_ids = frozenset(upstream_ids)
         # The other zones keep their normal dashed outline: they stay visible
         # and clickable so a different zone can be picked straight away.
         for key, other in self.zone_layers_by_id.items():
             self._apply_zone_style(key, self._zone_state(key))
-            if key == zone_id:
+            if key in ids:
                 if other.get("casing"):
                     other["casing"].bringToFront()
                 other["layer"].bringToFront()
 
-        self._draw_upstream_arrows(zone_id, upstream_ids)
+        self._clear_upstream_arrows()
+        for zone_id, zone_upstream in upstream_by_zone.items():
+            self._draw_upstream_arrows(zone_id, zone_upstream)
         self.map.getContainer().classList.add(self.FLOW_FADED_CLASS)
 
         names = [self._zone_display_name(upstream_id) for upstream_id in upstream_ids]
@@ -686,7 +700,14 @@ class Map:
         )
 
         if fit_bounds:
-            self.map.fitBounds(entry["layer"].getBounds(), self.fit_bounds_options())
+            bounds = None
+            for key in ids:
+                b = self.zone_layers_by_id[key]["layer"].getBounds()
+                if bounds is None:
+                    bounds = self.leaflet.latLngBounds(b.getSouthWest(), b.getNorthEast())
+                else:
+                    bounds.extend(b)
+            self.map.fitBounds(bounds, self.fit_bounds_options())
 
         self.show_reset_button()
         return True
@@ -714,7 +735,6 @@ class Map:
 
     def _draw_upstream_arrows(self, zone_id, upstream_ids):
         """One arrow per upstream zone, pointing into the selected zone."""
-        self._clear_upstream_arrows()
         if self._zone_arrow_layer is None:
             return
         selected = self.zone_layers_by_id[zone_id]["zone"]
@@ -764,7 +784,7 @@ class Map:
             self._upstream_label.style.display = "none"
 
     def clear_zone_selection(self):
-        self._selected_zone_id = None
+        self._selected_zone_ids = []
         self._upstream_zone_ids = frozenset()
         self._hide_upstream_label()
         self._clear_upstream_arrows()
@@ -778,7 +798,7 @@ class Map:
         for entry in self.zone_layers_by_id.values():
             self._set_zone_entry_visible(entry, False)
         self.zone_layers_by_id = {}
-        self._selected_zone_id = None
+        self._selected_zone_ids = []
         self._upstream_zone_ids = frozenset()
         self._hide_upstream_label()
         self._clear_upstream_arrows()
@@ -1418,51 +1438,78 @@ class Map:
             ).addTo(self.map)
             self.station_lines.append(line)
 
-    def fly_to_user(self):
-        self.map.locate()
+    def fly_to_user(self, on_found=None, on_error=None):
+        # Every bound handler fires on the next fix, so ignore repeat clicks.
+        if getattr(self, "_locating", False):
+            return
+        self._locating = True
+        attempt = {"pending": True, "timer": None}
+
+        def settle():
+            attempt["pending"] = False
+            self._locating = False
+            self.map.off("locationfound", on_location_found)
+            self.map.off("locationerror", on_location_error)
+            if attempt["timer"] is not None:
+                window.clearTimeout(attempt["timer"])
 
         def on_location_found(e):
-            self.user_coord = (e.latlng.lat, e.latlng.lng)
+            try:
+                self.user_coord = (e.latlng.lat, e.latlng.lng)
 
-            self.map.flyTo(self.user_coord, 16)
+                self.map.flyTo(self.user_coord, 16)
 
-            my_location_icon = self._pin_icon(
-                MY_LOCATION,
-                f'<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><i class="ph-fill ph-map-pin text-brand-600 block" style="font-size: {MY_LOCATION.pin[1]}px; line-height: 1;"></i></div>',
-            )
-
-            if (
-                hasattr(self, "user_mark")
-                and self.user_mark
-                and not isinstance(self.user_mark, list)
-            ):
-                self.user_mark.setLatLng(self.user_coord)
-                self.user_mark.setIcon(my_location_icon)
-                self.user_mark.setPopupContent("ตำแหน่งของคุณ")
-            else:
-                self.user_mark = (
-                    self.leaflet.marker(
-                        self.user_coord,
-                        {
-                            "icon": my_location_icon,
-                            "zIndexOffset": 1000,
-                        },
-                    )
-                    .addTo(self.map)
-                    .bindPopup("ตำแหน่งของคุณ")
+                my_location_icon = self._pin_icon(
+                    MY_LOCATION,
+                    f'<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));"><i class="ph-fill ph-map-pin text-brand-600 block" style="font-size: {MY_LOCATION.pin[1]}px; line-height: 1;"></i></div>',
                 )
 
-            self.map.off("locationfound", on_location_found)
-            self.map.off("locationerror", on_location_error)
+                if (
+                    hasattr(self, "user_mark")
+                    and self.user_mark
+                    and not isinstance(self.user_mark, list)
+                ):
+                    self.user_mark.setLatLng(self.user_coord)
+                    self.user_mark.setIcon(my_location_icon)
+                    self.user_mark.setPopupContent("ตำแหน่งของคุณ")
+                else:
+                    self.user_mark = (
+                        self.leaflet.marker(
+                            self.user_coord,
+                            {
+                                "icon": my_location_icon,
+                                "zIndexOffset": 1000,
+                            },
+                        )
+                        .addTo(self.map)
+                        .bindPopup("ตำแหน่งของคุณ")
+                    )
+            finally:
+                settle()
+            if on_found:
+                on_found(self.user_coord[0], self.user_coord[1])
 
         def on_location_error(e):
-            alert(f"ไม่สามารถระบุตำแหน่งได้: {e.message}")
-            self.map.off("locationfound", on_location_found)
-            self.map.off("locationerror", on_location_error)
+            if not attempt["pending"]:
+                return
+            settle()
+            if on_error:
+                on_error(e)
 
-        # ผูกเหตุการณ์
+        def on_timeout():
+            # A dismissed permission prompt may never call back at all.
+            if attempt["pending"]:
+                self.map.stopLocate()
+                on_location_error(LocateTimeout())
+
+        # Bind before locate(): Leaflet can fire locationerror synchronously.
         self.map.on("locationfound", on_location_found)
         self.map.on("locationerror", on_location_error)
+        attempt["timer"] = window.setTimeout(on_timeout, self.LOCATE_TIMEOUT_MS)
+        try:
+            self.map.locate()
+        except Exception as e:
+            on_location_error(e)
 
     def zoom_out(self):
         self.map.zoomOut(1)

@@ -36,6 +36,16 @@
         <span class="hidden sm:inline font-semibold text-sm">ใช้ตำแหน่งปัจจุบันของฉัน</span>
     </button>
 
+    {# Area card — pick a zone or tambon; says what a pick or location found #}
+    <div id="area_card" class="map-ui map-card map-area-card p-1.5 flex flex-col gap-1.5">
+        <select id="area_selector" aria-label="เลือกพื้นที่"
+            class="select select-bordered select-sm w-full bg-base-100 text-ink-700">
+            <option value="">ทุกพื้นที่</option>
+        </select>
+        <div id="area_message" role="status" aria-live="polite"
+            class="hidden rounded-lg border border-warning/40 bg-warning/10 px-2 py-1.5 text-xs text-ink-700"></div>
+    </div>
+
     {# Data panel card — a column on the right, folded to a pill under the user card #}
     <section id="monitor_panel" class="map-ui monitor-data-panel monitor-panel is-collapsed flex flex-col rounded-2xl border overflow-hidden"
         aria-labelledby="panel_header_title">

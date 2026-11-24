@@ -127,7 +127,7 @@ class ZoneUpstreamMapTests(unittest.TestCase):
             zone["id"]: {"layer": _Layer(), "zone": zone, "risk": None, "style": {}}
             for zone in ZONES
         }
-        self.map_view._selected_zone_id = None
+        self.map_view._selected_zone_ids = []
         self.map_view._reset_btn_container = None
 
         patcher = mock.patch.object(sys.modules["browser"], "document", _Document())
