@@ -36,6 +36,16 @@
         <span class="hidden sm:inline font-semibold text-sm">ใช้ตำแหน่งปัจจุบันของฉัน</span>
     </button>
 
+    {# Rain interpolation toggle — on whenever the page opens #}
+    <label title="แสดง/ซ่อนฝนสะสม 24 ชม."
+        class="map-ui map-card map-rain-toggle px-3 py-2 flex items-center gap-2 cursor-pointer text-ink-700">
+        <i class="ph ph-cloud-rain text-xl text-brand-700" aria-hidden="true"></i>
+        {# Icon only on phones, clear of the expanded legend on the left #}
+        <span class="hidden sm:inline font-semibold text-sm">ฝนสะสม 24 ชม.</span>
+        <input type="checkbox" id="toggle_rain_interpolation" checked role="switch"
+            aria-label="ฝนสะสม 24 ชม." class="toggle toggle-sm toggle-primary" />
+    </label>
+
     {# Area card — pick a zone or tambon; says what a pick or location found #}
     <div id="area_card" class="map-ui map-card map-area-card p-1.5 flex flex-col gap-1.5">
         <select id="area_selector" aria-label="เลือกพื้นที่"
@@ -108,10 +118,6 @@
                     <label class="flex min-w-0 items-center gap-1.5 cursor-pointer text-xs text-ink-600">
                         <input type="checkbox" id="hide_no_data" class="checkbox checkbox-xs checkbox-primary shrink-0" />
                         <span>ซ่อนสถานีไม่มีข้อมูล</span>
-                    </label>
-                    <label class="flex min-w-0 items-center gap-1.5 cursor-pointer text-xs text-ink-600">
-                        <input type="checkbox" id="toggle_rain_interpolation" class="checkbox checkbox-xs checkbox-primary shrink-0" />
-                        <span>แสดงฝนสะสม 24 ชม.</span>
                     </label>
                     <label class="flex min-w-0 items-center gap-1.5 cursor-pointer text-xs text-ink-600">
                         <input type="checkbox" id="toggle_zones_layer" checked class="checkbox checkbox-xs checkbox-primary shrink-0" />
