@@ -19,9 +19,9 @@ HATYAI_SOURCE = "hatyai_city_climate"
 DWR_SOURCE = "dwr"
 RID_SOURCE = "rid"
 
-HATYAI_REGISTRY_VERSION = "2026-09-05.v1"
+HATYAI_REGISTRY_VERSION = "2026-10-29.v1"
 DWR_REGISTRY_VERSION = "2026-09-03.v1"
-RID_REGISTRY_VERSION = "2026-09-10.v1"
+RID_REGISTRY_VERSION = "2026-10-29.v1"
 
 HATYAI_SOURCE_URL = "https://hatyaicityclimate.org/flood/map/camera"
 DWR_SOURCE_URL = "https://telemetry.dwr.go.th/api"
@@ -227,6 +227,107 @@ HATYAI_CAMERAS: tuple[dict[str, Any], ...] = (
         "code": "S14",
         "coverage_group": "pawong",
     },
+    # Added 2026-10-29 from GET /api/flood/cams; coverage_group follows the
+    # nearest grouped camera, except that city tunnels join hatyai_city.  ID 75
+    # tunglan is left out: it relays the same image as DWR TA200303.
+    {
+        "upstream_id": 67,
+        "slug": "banghak",
+        "title_th": "บางหัก",
+        "code": "S12",
+        "coverage_group": "hatyai_city",
+    },
+    {
+        "upstream_id": 72,
+        "slug": "citycam02",
+        "title_th": "City Camera 2",
+        "code": "CC02",
+        "coverage_group": "hatyai_city",
+    },
+    {
+        "upstream_id": 76,
+        "slug": "thammanoonvithi",
+        "title_th": "แยกถนนธรรมนูญวิถี",
+        "code": "S16",
+        "coverage_group": "hatyai_city",
+    },
+    {
+        "upstream_id": 77,
+        "slug": "golfclub",
+        "title_th": "หน้าสนามกอล์ฟคอหงส์",
+        "code": "S17",
+        "coverage_group": "kho_hong",
+    },
+    {
+        "upstream_id": 78,
+        "slug": "chanwirot",
+        "title_th": "จันทร์วิโรจน์",
+        "code": "S18",
+        "coverage_group": "hatyai_city",
+    },
+    {
+        "upstream_id": 79,
+        "slug": "phruphlikhwai",
+        "title_th": "พรุพลีควาย",
+        "code": "S19",
+        "coverage_group": "kho_hong",
+    },
+    {
+        "upstream_id": 80,
+        "slug": "banho",
+        "title_th": "บ้านโฮ๊ะ",
+        "code": "S020",
+        "coverage_group": "khuan_lang",
+    },
+    {
+        "upstream_id": 81,
+        "slug": "tharae",
+        "title_th": "ท่าแร่",
+        "code": "S021",
+        "coverage_group": "khuan_lang",
+    },
+    {
+        "upstream_id": 82,
+        "slug": "salalungthong",
+        "title_th": "ศาลาลุงทอง",
+        "code": "S022",
+        "coverage_group": "hatyai_city",
+    },
+    {
+        "upstream_id": 83,
+        "slug": "sriphuwanart",
+        "title_th": "อุโมงค์ถนนศรีภูวนารถ",
+        "code": "S023",
+        "coverage_group": "hatyai_city",
+    },
+    {
+        "upstream_id": 84,
+        "slug": "bangklam",
+        "title_th": "คลองบางกล่ำ",
+        "code": "S024",
+        "coverage_group": "kho_hong",
+    },
+    {
+        "upstream_id": 85,
+        "slug": "tahattoey",
+        "title_th": "ท่าหาดเตย",
+        "code": "S025",
+        "coverage_group": "kho_hong",
+    },
+    {
+        "upstream_id": 86,
+        "slug": "hamnom",
+        "title_th": "คลองหานม",
+        "code": "S026",
+        "coverage_group": "hatyai_city",
+    },
+    {
+        "upstream_id": 87,
+        "slug": "nakhuan",
+        "title_th": "อุโมงค์ลอดหน้าควน",
+        "code": "S027",
+        "coverage_group": "hatyai_city",
+    },
 )
 
 DWR_CAMERAS: tuple[dict[str, Any], ...] = (
@@ -371,7 +472,7 @@ RID_CAMERAS: tuple[dict[str, Any], ...] = (
 )
 
 
-# Provider location values checked 2026-09-05 against BOTH cameraId and name.
+# Provider location values checked 2026-10-29 against BOTH cameraId and name.
 # Input order is latitude, longitude; public GeoJSON reverses that order.
 # These are provider-reported installation locations, not a field survey.
 _HATYAI_LOCATIONS = {
@@ -402,12 +503,26 @@ _HATYAI_LOCATIONS = {
     55: (7.0419274234013995, 100.4933684),
     54: (7.044717341840631, 100.50049802),
     69: (7.100897, 100.567690),
+    68: (7.017221, 100.466135),
+    67: (7.011591, 100.453763),
+    76: (7.005150, 100.480632),
+    77: (7.027406, 100.501217),
+    78: (6.993394, 100.472773),
+    79: (6.969377, 100.557857),
+    80: (6.96217, 100.32056),
+    81: (6.98285, 100.34034),
+    82: (7.000601, 100.456454),
+    83: (6.997437, 100.467089),
+    84: (7.060519, 100.453527),
+    85: (6.96333, 100.4585),
+    86: (6.97213, 100.47135),
+    87: (6.9838, 100.45322),
 }
 
 for _camera in HATYAI_CAMERAS:
     _location = _HATYAI_LOCATIONS.get(_camera["upstream_id"])
     if _location is None:
-        # ID 68 kalyanamit: provider location was an empty string.
+        # ID 72 citycam02: provider location is an empty string.
         continue
     _latitude, _longitude = _location
     _camera.update(
@@ -416,8 +531,8 @@ for _camera in HATYAI_CAMERAS:
             "coordinates": {"type": "Point", "coordinates": [_longitude, _latitude]},
             "coordinate_provenance": {
                 "source": "Hatyai City Climate camera detail API",
-                "method": f"GET /api/flood/cam?id={_camera['upstream_id']}; matched cameraId/name; location=latitude,longitude; provider-reported, not field-surveyed",
-                "effective_date": "2026-09-05",
+                "method": f"GET /api/flood/cam?camId={_camera['upstream_id']}; matched cameraId/name; location=latitude,longitude; provider-reported, not field-surveyed",
+                "effective_date": "2026-10-29",
                 "registry_version": HATYAI_REGISTRY_VERSION,
                 "evidence_url": "https://hatyaicityclimate.org/api/flood/cam",
                 "reference_url": f"https://hatyaicityclimate.org/flood/cam/{_camera['slug']}",

@@ -1,0 +1,301 @@
+"""Real ASGI -> service -> providers; only the external HTTP servers are mocked."""
+
+import datetime as dt
+from email.utils import format_datetime
+import json
+import unittest
+from unittest.mock import patch
+
+import httpx
+from fastapi import FastAPI
+
+from sindhu import models
+from sindhu.api.routers.v1.visual_feeds import router
+from sindhu.services import visual_feeds
+from sindhu.services.cctv_catalog import HATYAI_CAMERAS, RID_CAMERAS
+
+DWR_IDS = [
+    "0e976e02-8381-4f6e-988a-81ecbed96fb9",
+    "3e55f300-3d80-4520-acfa-7a12c2a6bef9",
+]
+
+
+def upstream_handler(request, *, history_date=None, source_failure=None):
+    """Synthetic shapes reconstructed from observed official endpoints; no secrets."""
+    now = dt.datetime.now(visual_feeds.BANGKOK)
+    date = history_date or now.date()
+    path = request.url.path
+    if source_failure == "all" or (
+        source_failure == "dwr" and request.url.host == "telemetry.dwr.go.th"
+    ):
+        return httpx.Response(503)
+    if path in ("/api/flood/cameras", "/api/flood/cams"):
+        items = [
+            {
+                "cameraId": int(c["upstream_id"]),
+                "name": c["slug"],
+                "code": c["code"],
+                "title": c["title_th"],
+                "enable": 1,
+                "statusMsg": None,
+                "atDate": (
+                    now - dt.timedelta(hours=2) if str(c["upstream_id"]) == "3" else now
+                ).strftime("%Y-%m-%d %H:%M:%S"),
+                "photo": f"https://hatyaicityclimate.org/floodphoto/last/{c['slug']}.jpg",
+                "token": "fixture-secret-not-real",
+            }
+            for c in HATYAI_CAMERAS
+        ]
+        return httpx.Response(200, json={"count": len(items), "items": items})
+    if path == "/api/flood/cam":
+        assert dict(request.url.params) == {"camId": "9"}
+        return httpx.Response(
+            200,
+            json={
+                "cameraId": int(request.url.params["camId"]),
+                "token": "fixture-secret-not-real",
+                "photos": [
+                    {
+                        "atDate": f"{date} 02:00:00",
+                        "photoUrl": "https://hatyaicityclimate.org/floodphoto/cam/2.jpg",
+                    },
+                    {
+                        "atDate": f"{date} 01:00:00",
+                        "photoUrl": "https://hatyaicityclimate.org/floodphoto/cam/1.jpg",
+                    },
+                ],
+            },
+        )
+    if path == "/api/public/reportCctv/listPaginate":
+        assert request.method == "POST"
+        return httpx.Response(
+            200,
+            json={
+                "value": {
+                    "totalCount": 2,
+                    "results": [
+                        {
+                            "provinceNameTh": "สงขลา",
+                            "entity": {
+                                "id": ident,
+                                "stationCode": f"TA20030{3+i}",
+                                "stnNameTh": "คลองอู่ตะเภา",
+                                "cctvOnline": True,
+                                "cctvSnapshotLink": "http://fixture:secret@camera.invalid/snap.jpg",
+                            },
+                        }
+                        for i, ident in enumerate(DWR_IDS)
+                    ],
+                }
+            },
+        )
+    if path.startswith("/api/public/reportCctv/snapshot/"):
+        i = DWR_IDS.index(path.rsplit("/", 1)[1])
+        return httpx.Response(
+            200,
+            json={
+                "value": f"/TA20030{3+i}/{now.year}/{now.month}/{now.day}/{now.hour}_{now.minute}.jpg"
+            },
+        )
+    if path == "/api/file/image/cctv":
+        assert request.method == "POST"
+        assert json.loads(request.content)["path"].startswith("/TA20030")
+        return httpx.Response(
+            200,
+            content=b"\xff\xd8\xff\xe0" + b"fixture" + b"\xff\xd9",
+            headers={"content-type": "image/jpeg"},
+        )
+    if path.startswith("/CCTV/") and path.endswith("/image.cgi"):
+        code = path.split("/")[2]
+        if code in {camera["code"] for camera in RID_CAMERAS}:
+            # STN08 stopped writing images, like the real camera did.
+            written = (now - dt.timedelta(days=2 if code == "STN08" else 0)).astimezone(
+                dt.timezone.utc
+            )
+            return httpx.Response(
+                200,
+                content=b"GIF89a" + b"fixture",
+                headers={"last-modified": format_datetime(written, usegmt=True)},
+            )
+    return httpx.Response(404)
+
+
+class ViewerASGITests(unittest.IsolatedAsyncioTestCase):
+    async def test_map_coordinates_keep_longitude_first_and_unknown_camera_null(self):
+        response = await self.api.get("/v1/visual-feeds?has_coordinates=true")
+        self.assertEqual(response.status_code, 200, response.text)
+        feeds = response.json()["visual_feeds"]
+        self.assertEqual(len(feeds), 54)
+        for feed in feeds:
+            longitude, latitude = feed["coordinates"]["coordinates"]
+            self.assertTrue(100 < longitude < 101)
+            self.assertTrue(6 < latitude < 8)
+            self.assertEqual(feed["coordinate_status"], "verified")
+            self.assertEqual(
+                feed["registry_version"],
+                feed["coordinate_provenance"]["registry_version"],
+            )
+        muangkong = next(f for f in feeds if f["slug"] == "muangkong")
+        self.assertEqual(
+            muangkong["coordinates"]["coordinates"], [100.438272, 6.823193]
+        )
+        missing = await self.api.get("/v1/visual-feeds?has_coordinates=false")
+        self.assertEqual(missing.json()["count"], 1)
+        self.assertEqual(missing.json()["visual_feeds"][0]["slug"], "citycam02")
+        self.assertIsNone(missing.json()["visual_feeds"][0]["coordinates"])
+
+    async def asyncSetUp(self):
+        self.failure = None
+        self.upstream_calls = []
+
+        def handler(request):
+            self.upstream_calls.append((request.method, str(request.url)))
+            return upstream_handler(request, source_failure=self.failure)
+
+        self.external = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        visual_feeds.configure_visual_feeds(self.external, None)
+        app = FastAPI()
+        app.include_router(router, prefix="/v1")
+        self.api = httpx.AsyncClient(
+            transport=httpx.ASGITransport(app), base_url="http://test"
+        )
+
+    async def asyncTearDown(self):
+        await self.api.aclose()
+        await self.external.aclose()
+        visual_feeds.close_visual_feeds()
+
+    async def test_full_path_cctv_only_and_no_mongo_or_secrets(self):
+        with (
+            patch.object(
+                models.VisualFeed, "find", side_effect=AssertionError("Mongo called")
+            ),
+            patch.object(
+                models.VisualFeed,
+                "find_one",
+                side_effect=AssertionError("Mongo called"),
+            ),
+        ):
+            response = await self.api.get("/v1/visual-feeds?media_type=cctv")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        payload = response.json()
+        self.assertEqual(payload["count"], 55)
+        self.assertEqual({f["media_type"] for f in payload["visual_feeds"]}, {"cctv"})
+        self.assertNotIn("image_checked_at", response.text)
+        # Freshness comes from capture time alone: camera 3's photo is two
+        # hours old and RID STN08's Last-Modified is two days old.
+        stale = {("hatyai_city_climate", "3"), ("rid", "STN08")}
+        for feed in payload["visual_feeds"]:
+            expected_freshness = (
+                "stale" if (feed["source"], feed["upstream_id"]) in stale else "fresh"
+            )
+            self.assertEqual(
+                feed["image_freshness"], expected_freshness, feed["upstream_id"]
+            )
+        for banned in (
+            "fixture-secret",
+            "raw_payload",
+            "cctvSnapshotLink",
+            "token",
+            "camera.invalid",
+        ):
+            self.assertNotIn(banned, response.text)
+        dwr = [f for f in payload["visual_feeds"] if f["source"] == "dwr"]
+        self.assertEqual(len(dwr), 2)
+        self.assertTrue(
+            all(f["image_url"].startswith("/v1/visual-feeds/dwr/") for f in dwr)
+        )
+
+    async def test_history_public_shape_and_date_validation(self):
+        date = dt.datetime.now(visual_feeds.BANGKOK).date()
+        response = await self.api.get(
+            f"/v1/visual-feeds/hatyai_city_climate/9/history?date={date}"
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(response.json()["frames"]), 2)
+        self.assertNotIn("token", response.text)
+        old = await self.api.get(
+            "/v1/visual-feeds/hatyai_city_climate/9/history?date=1900-01-01"
+        )
+        self.assertEqual(old.status_code, 200, old.text)
+        self.assertEqual(old.json()["frames"], [])
+        for date in ("bad", "9999-12-31"):
+            r = await self.api.get(
+                f"/v1/visual-feeds/hatyai_city_climate/9/history?date={date}"
+            )
+            self.assertEqual(r.status_code, 422)
+
+    async def test_partial_and_total_failure(self):
+        self.failure = "dwr"
+        r = await self.api.get("/v1/visual-feeds")
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.json()["count"], 53)
+        self.assertEqual(
+            r.json()["source_health"]["dwr"]["error"], "source_unavailable"
+        )
+        self.failure = "all"
+        r = await self.api.get("/v1/visual-feeds")
+        # RID's curated registry is local metadata and remains available even
+        # when both live Hatyai/DWR catalogs fail.
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["count"], 11)
+
+    async def test_unknown_id_and_unsupported_history_no_fetch(self):
+        for path, expected in [
+            ("/v1/visual-feeds/unknown/9", 404),
+            (f"/v1/visual-feeds/dwr/{DWR_IDS[0]}/history?date=2026-09-03", 400),
+            ("/v1/visual-feeds/dwr/unknown/snapshot", 404),
+        ]:
+            r = await self.api.get(path)
+            self.assertEqual(r.status_code, expected, r.text)
+        self.assertEqual(self.upstream_calls, [])
+
+    async def test_snapshot_etag_and_content_type(self):
+        url = f"/v1/visual-feeds/dwr/{DWR_IDS[0]}/snapshot"
+        r = await self.api.get(url)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.headers["content-type"], "image/jpeg")
+        self.assertEqual(r.headers["cache-control"], "private, max-age=120")
+        again = await self.api.get(url, headers={"if-none-match": r.headers["etag"]})
+        self.assertEqual(again.status_code, 304)
+        self.assertEqual(again.content, b"")
+
+    async def test_unchanged_snapshot_answers_304_without_fetching_the_image(self):
+        url = f"/v1/visual-feeds/dwr/{DWR_IDS[0]}/snapshot"
+        first = await self.api.get(url)
+        self.assertEqual(first.status_code, 200, first.text)
+
+        def image_fetches():
+            return [c for c in self.upstream_calls if c[1].endswith("/file/image/cctv")]
+
+        def path_lookups():
+            return [c for c in self.upstream_calls if "/reportCctv/snapshot/" in c[1]]
+
+        images_before, paths_before = len(image_fetches()), len(path_lookups())
+        again = await self.api.get(
+            url, headers={"if-none-match": first.headers["etag"]}
+        )
+
+        self.assertEqual(again.status_code, 304)
+        self.assertEqual(again.headers["etag"], first.headers["etag"])
+        self.assertEqual(len(image_fetches()), images_before)
+        self.assertEqual(len(path_lookups()), paths_before + 1)
+
+    async def test_snapshot_etag_follows_the_image_path_not_the_bytes(self):
+        first = await self.api.get(f"/v1/visual-feeds/dwr/{DWR_IDS[0]}/snapshot")
+        second = await self.api.get(f"/v1/visual-feeds/dwr/{DWR_IDS[0]}/snapshot")
+        # Same JPEG bytes in the fixture, but another camera has another dated path.
+        other = await self.api.get(f"/v1/visual-feeds/dwr/{DWR_IDS[1]}/snapshot")
+
+        self.assertEqual(first.content, other.content)
+        self.assertEqual(first.headers["etag"], second.headers["etag"])
+        self.assertNotEqual(first.headers["etag"], other.headers["etag"])
+
+    async def test_rid_snapshot_etag_and_content_type(self):
+        url = "/v1/visual-feeds/rid/STN04/snapshot"
+        r = await self.api.get(url)
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertEqual(r.headers["content-type"], "image/gif")
+        again = await self.api.get(url, headers={"if-none-match": r.headers["etag"]})
+        self.assertEqual(again.status_code, 304)

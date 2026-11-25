@@ -8,7 +8,6 @@
   {# jQuery #}
   <script src="{{ url_for('static', filename='node_modules/jquery/dist/jquery.min.js') }}"></script>
 
-  <link rel="stylesheet" href="{{ 'css/app.css' | static_url }}">
   <script src="{{ 'node_modules/jquery/dist/jquery.min.js' | static_url }}"></script>
   <script type="module" src="{{ 'node_modules/cally/dist/cally.js' | static_url }}"></script>
   <script src="{{ 'node_modules/htmx.org/dist/htmx.min.js' | static_url }}"></script>
@@ -26,8 +25,12 @@
   {% block default_head %}{% endblock %}
   {% include "base/google_analytic.html" %}
   {% block additional_head %}{% endblock %}
+  <link rel="stylesheet" href="{{ 'css/app.css' | static_url }}">
   
-  <title>{% block title %}{% endblock %} | {{ config.get('APP_TITLE') }}</title>
+  <link rel="icon" href="{{ 'images/favicon.ico' | static_url }}" sizes="16x16 32x32 48x48">
+
+  {% set page_title %}{% block title %}{% endblock %}{% endset %}
+  <title>{% if page_title | trim %}{{ page_title | trim }} | {% endif %}{{ config.get('APP_TITLE') }}</title>
 </head>
 
 <body>

@@ -514,18 +514,9 @@ RISK_LEVEL_TITLE = "ระดับความปลอดภัย"
 
 RISK_LEVELS = [
     {
-        "risk": 3,
-        "label": "อพยพ",
-        "range": "ถึงระดับอพยพ",
-        "color": "#9333ea",
-        "border": "#7e22ce",
-        "text": "#FFFFFF",
-        "fill_opacity": 0.5,
-    },
-    {
         "risk": 2,
-        "label": "วิกฤต",
-        "range": "ถึงระดับวิกฤต",
+        "label": "ล้นตลิ่ง",
+        "range": "สูงกว่าตลิ่ง",
         "color": "#ef4444",
         "border": "#dc2626",
         "text": "#FFFFFF",
@@ -533,8 +524,8 @@ RISK_LEVELS = [
     },
     {
         "risk": 1,
-        "label": "เฝ้าระวัง",
-        "range": "ถึงระดับเฝ้าระวัง",
+        "label": "ใกล้ระดับตลิ่ง",
+        "range": "อยู่ในช่วงเฝ้าระวัง",
         "color": "#f97316",
         "border": "#ea580c",
         "text": "#FFFFFF",
@@ -542,8 +533,8 @@ RISK_LEVELS = [
     },
     {
         "risk": 0,
-        "label": "ปกติ",
-        "range": "ต่ำกว่าระดับเฝ้าระวัง",
+        "label": "ต่ำกว่าตลิ่ง",
+        "range": "ต่ำกว่าช่วงเฝ้าระวัง",
         "color": "#22c55e",
         "border": "#16a34a",
         "text": "#FFFFFF",
@@ -551,14 +542,22 @@ RISK_LEVELS = [
     },
     {
         "risk": -1,
-        "label": "ไม่ทราบสถานะ",
-        "range": "ไม่มีข้อมูลใน 24 ชม.",
+        "label": "ไม่มีข้อมูล",
+        "range": "ไม่มีค่าตลิ่ง/ระดับน้ำ",
         "color": "#9ca3af",
         "border": "#6b7280",
         "text": "#FFFFFF",
         "fill_opacity": 0.1,
     },
 ]
+
+
+def risk_badge_style(risk):
+    color = get_risk_level(risk)["color"]
+    return (
+        f"color:color-mix(in oklab, {color} 55%, var(--color-ink-950)); "
+        f"background:color-mix(in oklab, {color} 24%, transparent);"
+    )
 
 
 def get_risk_level(risk):

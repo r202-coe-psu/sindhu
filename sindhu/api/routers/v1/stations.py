@@ -148,10 +148,8 @@ async def update(
         )
 
     data = station.model_dump()
+    data["updated_date"] = datetime.datetime.now()
     await db_station.update(Set(data))
-
-    db_station.updated_date = datetime.datetime.now()
-    await db_station.save()
 
     return db_station
 
@@ -180,9 +178,7 @@ async def delete(
             detail="Not found station",
         )
 
-    db_station.status = "delete"
-    db_station.updated_date = datetime.datetime.now()
-    await db_station.save()
+    await db_station.set({"status": "delete", "updated_date": datetime.datetime.now()})
 
     return db_station
 
@@ -193,26 +189,52 @@ async def update_visibility(
     visibility: schemas.stations.UpdateStationVisibility,
     current_user: models.User = Depends(deps.get_current_active_superuser),
 ) -> schemas.stations.StationList:
-    stations = await models.Station.find(
-        In(models.Station.id, visibility.station_ids)
-    ).to_list()
-    if not stations:
+    selected = models.Station.find(In(models.Station.id, visibility.station_ids))
+    if not await selected.count():
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Not found station",
         )
 
-    now = datetime.datetime.now()
-    for station in stations:
-        station.is_visible = visibility.is_visible
-        station.updated_date = now
-        await station.save()
+    await selected.update(
+        Set(
+            {
+                "is_visible": visibility.is_visible,
+                "updated_date": datetime.datetime.now(),
+            }
+        )
+    )
+    stations = await models.Station.find(
+        In(models.Station.id, visibility.station_ids)
+    ).to_list()
 
     # The public map reads cached responses; drop them so the change shows now
     # instead of after the cache expires
     await FastAPICache.clear(namespace=STATION_METRICS_CACHE_NAMESPACE)
 
     return schemas.stations.StationList(stations=stations)
+
+
+@router.put("/{station_id}/bank-level")
+async def update_bank_level(
+    station_id: PydanticObjectId,
+    form: schemas.stations.UpdateStationBankLevel,
+    current_user: models.User = Depends(deps.get_current_active_superuser),
+) -> schemas.stations.Station:
+    station = await models.Station.get(station_id)
+    if not station:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Not found station",
+        )
+
+    await station.set(
+        {"bank_level": form.bank_level, "updated_date": datetime.datetime.now()}
+    )
+
+    await FastAPICache.clear(namespace=STATION_METRICS_CACHE_NAMESPACE)
+
+    return station
 
 
 @router.get("/metrics/{metric_type}/latest")
