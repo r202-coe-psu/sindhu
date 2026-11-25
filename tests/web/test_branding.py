@@ -87,7 +87,12 @@ class BrandingTemplateTests(unittest.TestCase):
         self.assertEqual(self.name, default_settings.APP_TITLE)
 
     def test_page_without_a_title_has_no_dangling_separator(self):
-        self.assertIn(f"<title>{self.name}</title>", self._html("/th/"))
+        with self.app.test_request_context("/th/"):
+            from flask import g, render_template
+
+            g.lang_code = "th"
+            html = render_template("sites/index.html")
+        self.assertIn(f"<title>{self.name}</title>", html)
 
     def test_page_with_a_title_puts_it_first(self):
         self.assertIn(

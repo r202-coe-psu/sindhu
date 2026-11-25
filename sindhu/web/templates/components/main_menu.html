@@ -4,12 +4,6 @@
   <li>
     <a href="{{ url_for('sites.index') }}"
        class="text-base font-medium {% if request.endpoint == 'sites.index' %}bg-primary text-primary-content hover:bg-primary{% else %}text-ink-700 hover:bg-brand-50 hover:text-brand-600{% endif %}">
-      <i class="ph ph-house text-xl"></i> หน้าแรก
-    </a>
-  </li>
-  <li>
-    <a href="{{ url_for('sites.monitor') }}"
-       class="text-base font-medium {% if request.endpoint == 'sites.monitor' %}bg-primary text-primary-content hover:bg-primary{% else %}text-ink-700 hover:bg-brand-50 hover:text-brand-600{% endif %}">
       <i class="ph ph-chart-line text-xl"></i> ติดตามสถานการณ์
     </a>
   </li>
