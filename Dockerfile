@@ -1,4 +1,4 @@
-FROM debian:sid
+FROM debian:trixie
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.13 python3.13-dev python3.13-venv python3-pip npm locales \
     build-essential cmake libopenblas-dev gfortran cargo \
