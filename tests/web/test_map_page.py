@@ -18,22 +18,21 @@ class MapPageLayoutTests(unittest.TestCase):
         return response.get_data(as_text=True)
 
     def test_monitor_has_no_sidebar_or_header_bar(self):
-        html = self._html("/th/monitor")
+        html = self._html("/th/")
         self.assertIn('class="map-page"', html)
         self.assertNotIn('id="app-sidebar"', html)
         self.assertNotIn('id="toggle-sidebar-btn"', html)
 
     def test_monitor_keeps_the_menu_in_a_floating_card(self):
-        html = self._html("/th/monitor")
+        html = self._html("/th/")
         self.assertIn('id="map_menu_btn"', html)
         menu = re.search(r'<nav id="map_menu".*?</nav>', html, re.S).group(0)
         self.assertIn('href="/th/"', menu)
-        self.assertIn('href="/th/monitor"', menu)
         # Guests see no admin links, same as the sidebar.
         self.assertNotIn("จัดการโซน", menu)
 
     def test_monitor_keeps_login_locate_and_panel(self):
-        html = self._html("/th/monitor")
+        html = self._html("/th/")
         self.assertIn('href="/th/login"', html)
         self.assertIn('id="my_locate"', html)
         self.assertIn('id="monitor_panel"', html)
@@ -41,18 +40,18 @@ class MapPageLayoutTests(unittest.TestCase):
         self.assertIn('id="mapid"', html)
 
     def test_floating_cards_are_marked_for_focus_mode(self):
-        html = self._html("/th/monitor")
+        html = self._html("/th/")
         for element_id in ("my_locate", "monitor_panel"):
             tag = re.search(rf'<[a-z]+ id="{element_id}"[^>]*>', html).group(0)
             self.assertIn("map-ui", tag, element_id)
 
     def test_page_starts_in_standards_mode(self):
         self.assertTrue(
-            self._html("/th/monitor").lstrip().startswith("<!DOCTYPE html>")
+            self._html("/th/").lstrip().startswith("<!DOCTYPE html>")
         )
 
     def test_site_stylesheet_loads_after_leaflet(self):
-        html = self._html("/th/monitor")
+        html = self._html("/th/")
         self.assertLess(html.index("leaflet.css"), html.index("css/app.css"))
 
     def test_site_stylesheet_loads_after_leaflet_draw_on_the_zones_page(self):
@@ -84,7 +83,7 @@ class MapPageLayoutTests(unittest.TestCase):
         self.assertNotIn(".leaflet-control-layers-toggle", css)
 
     def test_panel_is_folded_in_the_markup(self):
-        html = self._html("/th/monitor")
+        html = self._html("/th/")
         panel = re.search(r'<section id="monitor_panel"[^>]*>', html).group(0)
         toggle = re.search(
             r'<button id="monitor_panel_toggle"[^>]*>', html, re.S
@@ -95,7 +94,7 @@ class MapPageLayoutTests(unittest.TestCase):
     def test_monitor_title_names_the_page(self):
         self.assertIn(
             f"<title>ติดตามสถานการณ์ | {self.app.config['APP_TITLE']}</title>",
-            self._html("/th/monitor"),
+            self._html("/th/"),
         )
 
     def test_signed_in_user_gets_admin_links_and_user_menu_in_cards(self):
@@ -119,12 +118,21 @@ class MapPageLayoutTests(unittest.TestCase):
         self.assertIn("ออกจากระบบ", user_card)
         self.assertNotIn("/th/login", user_card)
 
+    def test_old_monitor_url_redirects_to_home(self):
+        response = self.client.get("/th/monitor")
+        self.assertEqual(response.status_code, 301)
+        self.assertTrue(response.location.endswith("/th/"))
+
     def test_other_pages_keep_the_sidebar_and_header(self):
         # default_page.html now includes the shared menu partials.
-        html = self._html("/th/")
+        with self.app.test_request_context("/th/zones/"):
+            from flask import g, render_template
+
+            g.lang_code = "th"
+            html = render_template("sites/index.html")
         self.assertIn('id="app-sidebar"', html)
         self.assertIn('id="toggle-sidebar-btn"', html)
-        self.assertIn('href="/th/monitor"', html)
+        self.assertIn('href="/th/"', html)
         self.assertIn('href="/th/login"', html)
         self.assertNotIn('class="map-page"', html)
 

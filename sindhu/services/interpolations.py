@@ -9,7 +9,7 @@ import shapely
 from loguru import logger
 from geokrige.methods import OrdinaryKriging, SimpleKriging
 from matplotlib.figure import Figure
-from scipy.interpolate import griddata
+from scipy.interpolate import RectBivariateSpline, griddata
 
 from sindhu.services import metrics
 
@@ -84,7 +84,12 @@ RAIN_MIN_FILL_OPACITY = 0.15
 RAIN_MAX_FILL_OPACITY = 0.75
 RAIN_FULL_OPACITY_AT = 50
 
-GRID_STEP_DEG = 0.005  # ~500 m
+GRID_STEP_DEG = 0.01  # ~1 km, enough for a province-wide surface
+# Contours traced on the 1 km grid show corners when zoomed in, so the surface
+# is resampled 4x finer (~250 m) before contouring
+CONTOUR_UPSAMPLE = 4
+# Drops band vertices that bend the edge less than ~20 m
+BAND_SIMPLIFY_DEG = 0.0002
 IDW_POWER = 1
 MIN_POINTS = 3
 
@@ -103,25 +108,19 @@ COLOCATED_TOLERANCE_DEG = 0.001  # ~100 m
 # How far an estimate may stray past the readings before it counts as broken
 MEASURED_RANGE_MARGIN_MM = 5
 
-RAIN_AREA_MARGIN_DEG = 0.005  # ~500 m
-
-HATYAI_BOUNDARY_PATH = (
+SONGKHLA_BOUNDARY_PATH = (
     pathlib.Path(__file__).resolve().parent.parent
     / "web"
     / "static"
     / "resources"
-    / "hatyai_boundary.geojson"
+    / "songkhla_boundary.geojson"
 )
 
 
 def load_rain_area():
-    """The rain surface is the smallest circle that encloses Hat Yai district."""
-    with HATYAI_BOUNDARY_PATH.open("r", encoding="utf-8") as f:
-        district = shapely.geometry.shape(json.load(f))
-    center = shapely.minimum_bounding_circle(district).centroid
-    radius = shapely.minimum_bounding_radius(district)
-    # Fine segments keep the polygon's chords from cutting off the district's tips
-    area = center.buffer(radius + RAIN_AREA_MARGIN_DEG, quad_segs=64)
+    """The rain surface covers the land of Songkhla province."""
+    with SONGKHLA_BOUNDARY_PATH.open("r", encoding="utf-8") as f:
+        area = shapely.geometry.shape(json.load(f))
     shapely.prepare(area)
     return area
 
@@ -205,8 +204,19 @@ def stays_in_measured_range(zi, values):
     return bool(numpy.all((zi >= low) & (zi <= high)))
 
 
+def upsample_grid(x, y, zi, factor=CONTOUR_UPSAMPLE):
+    """Bicubic spline onto a finer grid, so band edges curve instead of zigzag."""
+    xf = numpy.linspace(x[0], x[-1], (x.size - 1) * factor + 1)
+    yf = numpy.linspace(y[0], y[-1], (y.size - 1) * factor + 1)
+    # A spline cannot pass through the NaN that "cubic" leaves outside the hull
+    if numpy.isnan(zi).any():
+        return *numpy.meshgrid(x, y), zi
+    zf = RectBivariateSpline(y, x, zi, kx=3, ky=3)(yf, xf)
+    return *numpy.meshgrid(xf, yf), zf
+
+
 def clip_to_rain_area(features):
-    """Cut each band along the circle so the surface ends in a clean round edge."""
+    """Cut each band along the province border."""
     clipped = []
     for feature in features:
         geometry = shapely.intersection(
@@ -214,9 +224,19 @@ def clip_to_rain_area(features):
         )
         if geometry.is_empty:
             continue
+        feature["geometry"] = geometry
+        clipped.append(feature)
+
+    # Simplifying the bands together keeps neighbours sharing one edge, so no
+    # slivers open between them; the province border stays as drawn
+    simplified = shapely.coverage_simplify(
+        [feature["geometry"] for feature in clipped],
+        BAND_SIMPLIFY_DEG,
+        simplify_boundary=False,
+    )
+    for feature, geometry in zip(clipped, simplified):
         geometry = shapely.set_precision(geometry, 1e-5)
         feature["geometry"] = shapely.geometry.mapping(geometry)
-        clipped.append(feature)
     return clipped
 
 
@@ -227,10 +247,9 @@ def interpolate_rain_contours(lons, lats, values, method=DEFAULT_METHOD):
     # One step of padding so the contours reach past the boundary before the
     # clip below trims them to it; stations outside still shape the edges
     xmin, ymin, xmax, ymax = RAIN_AREA.buffer(GRID_STEP_DEG).bounds
-    xi, yi = numpy.meshgrid(
-        numpy.arange(xmin, xmax + GRID_STEP_DEG, GRID_STEP_DEG),
-        numpy.arange(ymin, ymax + GRID_STEP_DEG, GRID_STEP_DEG),
-    )
+    x = numpy.arange(xmin, xmax + GRID_STEP_DEG, GRID_STEP_DEG)
+    y = numpy.arange(ymin, ymax + GRID_STEP_DEG, GRID_STEP_DEG)
+    xi, yi = numpy.meshgrid(x, y)
     inside = shapely.contains_xy(RAIN_AREA, xi, yi)
 
     zi = numpy.asarray(
@@ -247,6 +266,11 @@ def interpolate_rain_contours(lons, lats, values, method=DEFAULT_METHOD):
         method = FALLBACK_METHOD
         zi = estimate_rain_grid(lons, lats, values, xi, yi, method)
 
+    zi = numpy.asarray(zi, dtype=float)
+    # "nearest" is a step surface: a spline would overshoot its cliffs, and its
+    # cells are meant to keep hard edges
+    if method != "nearest":
+        xi, yi, zi = upsample_grid(x, y, zi)
     # Rain above the scale shares the top color instead of falling off the levels
     zi = numpy.clip(zi, 0, RAIN_UPPER_BOUND)
 
