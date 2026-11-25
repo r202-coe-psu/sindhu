@@ -73,4 +73,43 @@ pipeline {
             }
         }
     }
+
+    post {
+        always {
+            // Discord notification (ci/README.md). Never fails the build: a missing credential,
+            // a missing script or a Discord outage only logs a warning.
+            script {
+                if (!(env.BRANCH_NAME in ['develop', 'main'])) {
+                    return
+                }
+                try {
+                    if (fileExists('ci/discord-notify.sh')) {
+                        withCredentials([string(credentialsId: 'sindhu-discord-webhook-ci', variable: 'DISCORD_WEBHOOK_URL')]) {
+                            withEnv([
+                                'NOTIFY_KIND=deploy',
+                                'NOTIFY_USERNAME=Sindhu Deploy',
+                                "NOTIFY_TARGET=${env.BRANCH_NAME == 'main' ? 'prod' : 'staging'}",
+                                "NOTIFY_RESULT=${currentBuild.currentResult}",
+                                "NOTIFY_JOB=${env.JOB_NAME ?: ''}",
+                                "NOTIFY_BRANCH=${env.BRANCH_NAME ?: ''}",
+                                "NOTIFY_BUILD_NUMBER=${env.BUILD_NUMBER ?: ''}",
+                                "NOTIFY_BUILD_URL=${env.BUILD_URL ?: ''}",
+                                "NOTIFY_COMMIT=${env.GIT_COMMIT ?: ''}",
+                                "NOTIFY_DURATION=${currentBuild.durationString.replace(' and counting', '')}"
+                            ]) {
+                                def rc = sh(script: './ci/discord-notify.sh', returnStatus: true)
+                                if (rc != 0) {
+                                    echo "WARNING: Discord notification failed (exit ${rc}); ignoring."
+                                }
+                            }
+                        }
+                    } else {
+                        echo 'WARNING: ci/discord-notify.sh not found in workspace; skipping Discord notification.'
+                    }
+                } catch (err) {
+                    echo "WARNING: Discord notification skipped: ${err.message}"
+                }
+            }
+        }
+    }
 }
