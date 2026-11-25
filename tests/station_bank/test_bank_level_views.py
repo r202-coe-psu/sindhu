@@ -114,12 +114,13 @@ class WaterCardTests(unittest.TestCase):
                 style = metric_infos.risk_badge_style(marker_risk)
                 self.assertIn(colour, style)
                 self.assertIn(style, _chips(station))
-                self.assertIn(style, _section(station))
+                self.assertIn(colour, _section(station))
 
     def test_tooltip_marks_the_watch_line_apart_from_the_status(self):
         html = _section(_station(waterlevel=11.6))
-        self.assertIn("<span>เฝ้าระวัง</span>", html)
-        self.assertIn("ใกล้ระดับตลิ่ง ·", html)
+        self.assertIn("เฝ้าระวังเมื่อระดับน้ำเริ่มสูงกว่า", html)
+        self.assertIn(">1.00 เมตร</b>", html)
+        self.assertNotIn("ใกล้ระดับตลิ่ง ·", html)
         self.assertIn("background:#f97316; flex:none;", html)
 
     def test_other_metrics_still_show(self):
@@ -215,8 +216,8 @@ class RiskBadgeTests(unittest.TestCase):
 class TooltipSectionTests(unittest.TestCase):
     def test_shows_gap_relative_to_the_bank_only(self):
         html = _section(_station(waterlevel=11.6, diff_wl_bank=-98.76))
-        self.assertIn("ใกล้ระดับตลิ่ง · ต่ำกว่าตลิ่ง 0.40 ม.", html)
-        self.assertIn("0.40", html)
+        self.assertIn(">ต่ำกว่าตลิ่ง</div>", html)
+        self.assertIn(">0.40<", html)
         for raw in ("11.60", "12.00", "11.25", "77.77", "98.76"):
             self.assertNotIn(raw, html)
 
@@ -226,16 +227,17 @@ class TooltipSectionTests(unittest.TestCase):
             "water_level_warning": 11.2,
             "water_level_critical": 12.0,
         }
-        self.assertIn("-0.80 ม.", _section(station))
+        self.assertIn(">0.80 เมตร", _section(station))
 
     def test_watch_line_falls_back_to_one_metre(self):
         station = _station(waterlevel=11.6)
         station["metadata"] = {}
-        self.assertIn("-1.00 ม.", _section(station))
+        self.assertIn(">1.00 เมตร", _section(station))
 
     def test_overflow_draws_the_water_above_the_bank(self):
         html = _section(_station(waterlevel=12.5))
-        self.assertIn("ล้นตลิ่ง · สูงกว่าตลิ่ง 0.50 ม.", html)
+        self.assertIn(">สูงกว่าตลิ่ง</div>", html)
+        self.assertIn(">0.50<", html)
         water_y = float(re.search(r'<rect x="0" y="([\d.]+)"[^>]*fill="url', html)[1])
         self.assertLess(water_y, BaseMap.SECTION_BANK_Y)
 
