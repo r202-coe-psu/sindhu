@@ -260,7 +260,7 @@ class WaterMonitor(BaseMonitor):
             print(f"[Monitor:{self.monitor_name}] Rain interpolation error: {e}")
             return
 
-        # The checkbox may have been cleared while the request was in flight
+        # The toggle may have been switched off while the request was in flight
         if not self.is_rain_interpolation_on():
             return
 
