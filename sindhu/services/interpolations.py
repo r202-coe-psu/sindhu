@@ -1,6 +1,7 @@
 import datetime
 import json
 import pathlib
+import typing
 
 import geojsoncontour
 import numpy
@@ -8,7 +9,7 @@ import shapely
 from loguru import logger
 from geokrige.methods import OrdinaryKriging, SimpleKriging
 from matplotlib.figure import Figure
-from scipy.interpolate import griddata
+from scipy.interpolate import RectBivariateSpline, griddata
 
 from sindhu.services import metrics
 
@@ -20,15 +21,59 @@ RAIN_PARAMETERS = ["rain"]
 # Band edges and colors follow the ECMWF "Precipitation, 24h" scale: the steps
 # are fine for light rain and coarse for extremes, so they are not linear
 RAIN_LEVELS = [
-    0, 0.1, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 35, 40,
-    45, 50, 60, 70, 80, 90, 100, 125, 150, 200, 300,
+    0,
+    0.1,
+    0.5,
+    1,
+    2,
+    3,
+    5,
+    7,
+    10,
+    15,
+    20,
+    25,
+    30,
+    35,
+    40,
+    45,
+    50,
+    60,
+    70,
+    80,
+    90,
+    100,
+    125,
+    150,
+    200,
+    300,
 ]
 RAIN_BAND_COLORS = [
-    "#f7fbff", "#e0f0ff", "#c2e2ff", "#9ed3ff", "#6cbcff",
-    "#3aa3ff", "#1a7fd4", "#0a5aa8", "#0f7a34", "#22a145",
-    "#63c73f", "#c2e03a", "#ffe32e", "#ffc51c", "#ffa015",
-    "#ff7a12", "#f5400f", "#d21810", "#ac0913", "#870018",
-    "#6b0020", "#8f1f8f", "#bd3fbd", "#d982d9", "#f0c4f0",
+    "#f7fbff",
+    "#e0f0ff",
+    "#c2e2ff",
+    "#9ed3ff",
+    "#6cbcff",
+    "#3aa3ff",
+    "#1a7fd4",
+    "#0a5aa8",
+    "#0f7a34",
+    "#22a145",
+    "#63c73f",
+    "#c2e03a",
+    "#ffe32e",
+    "#ffc51c",
+    "#ffa015",
+    "#ff7a12",
+    "#f5400f",
+    "#d21810",
+    "#ac0913",
+    "#870018",
+    "#6b0020",
+    "#8f1f8f",
+    "#bd3fbd",
+    "#d982d9",
+    "#f0c4f0",
 ]
 RAIN_UPPER_BOUND = RAIN_LEVELS[-1]
 # Labels to print under the legend bar; the rest of the edges stay unlabeled
@@ -39,43 +84,67 @@ RAIN_MIN_FILL_OPACITY = 0.15
 RAIN_MAX_FILL_OPACITY = 0.75
 RAIN_FULL_OPACITY_AT = 50
 
-GRID_STEP_DEG = 0.005  # ~500 m
+GRID_STEP_DEG = 0.01  # ~1 km, enough for a province-wide surface
+# Contours traced on the 1 km grid show corners when zoomed in, so the surface
+# is resampled 4x finer (~250 m) before contouring
+CONTOUR_UPSAMPLE = 4
+# Drops band vertices that bend the edge less than ~20 m
+BAND_SIMPLIFY_DEG = 0.0002
 IDW_POWER = 1
 MIN_POINTS = 3
 
 # "cubic" can overshoot past the measured range, so it is not the default
-METHODS = ["idw", "nearest", "cubic", "ordinary", "simple"]
-DEFAULT_METHOD = "ordinary"
+Method = typing.Literal["idw", "nearest", "cubic", "ordinary", "simple"]
+METHODS = typing.get_args(Method)
+DEFAULT_METHOD: Method = "ordinary"
+FALLBACK_METHOD: Method = "idw"
 VARIOGRAM_BINS = 2
 VARIOGRAM_MODEL = "exp"
 
-BASINS_GEOJSON_PATH = (
+# The same gauge can arrive from two sources (thaiwater_rain and rid) a few
+# metres apart with different readings. Kriging cannot fit two values at one
+# spot: its system turns singular and predicts tens of thousands of mm
+COLOCATED_TOLERANCE_DEG = 0.001  # ~100 m
+# How far an estimate may stray past the readings before it counts as broken
+MEASURED_RANGE_MARGIN_MM = 5
+
+SONGKHLA_BOUNDARY_PATH = (
     pathlib.Path(__file__).resolve().parent.parent
     / "web"
     / "static"
     / "resources"
-    / "songkhla_basins.geojson"
+    / "songkhla_boundary.geojson"
 )
 
 
-def load_basin_area():
-    """Build the interpolation area from the Songkhla river network.
-
-    The basin file only has river and canal lines, so the area is a concave
-    hull around them, padded a little so edge stations still get coverage
-    """
-    with BASINS_GEOJSON_PATH.open("r", encoding="utf-8") as f:
-        geojson = json.load(f)
-
-    lines = shapely.GeometryCollection(
-        [shapely.geometry.shape(feature["geometry"]) for feature in geojson["features"]]
-    )
-    area = shapely.concave_hull(lines, ratio=0.3).buffer(0.01)
+def load_rain_area():
+    """The rain surface covers the land of Songkhla province."""
+    with SONGKHLA_BOUNDARY_PATH.open("r", encoding="utf-8") as f:
+        area = shapely.geometry.shape(json.load(f))
     shapely.prepare(area)
     return area
 
 
-BASIN_AREA = load_basin_area()
+RAIN_AREA = load_rain_area()
+
+
+def merge_colocated_points(lons, lats, values, tolerance=COLOCATED_TOLERANCE_DEG):
+    """Collapse stations closer than the tolerance into one point at their mean."""
+    groups = []
+    for point in zip(lons, lats, values):
+        for group in groups:
+            first = group[0]
+            if (
+                abs(first[0] - point[0]) < tolerance
+                and abs(first[1] - point[1]) < tolerance
+            ):
+                group.append(point)
+                break
+        else:
+            groups.append([point])
+
+    merged = numpy.array([numpy.mean(group, axis=0) for group in groups]).reshape(-1, 3)
+    return merged[:, 0], merged[:, 1], merged[:, 2]
 
 
 def idw_grid(lons, lats, values, xi, yi, power=IDW_POWER):
@@ -129,15 +198,79 @@ def estimate_rain_grid(lons, lats, values, xi, yi, method):
     return idw_grid(lons, lats, values, xi, yi)
 
 
-def interpolate_rain_contours(lons, lats, values, method=DEFAULT_METHOD):
-    xmin, ymin, xmax, ymax = BASIN_AREA.bounds
-    xi, yi = numpy.meshgrid(
-        numpy.arange(xmin, xmax + GRID_STEP_DEG, GRID_STEP_DEG),
-        numpy.arange(ymin, ymax + GRID_STEP_DEG, GRID_STEP_DEG),
-    )
+def stays_in_measured_range(zi, values):
+    low = values.min() - MEASURED_RANGE_MARGIN_MM
+    high = values.max() + MEASURED_RANGE_MARGIN_MM
+    return bool(numpy.all((zi >= low) & (zi <= high)))
 
-    zi = estimate_rain_grid(lons, lats, values, xi, yi, method)
-    zi[~shapely.contains_xy(BASIN_AREA, xi, yi)] = numpy.nan
+
+def upsample_grid(x, y, zi, factor=CONTOUR_UPSAMPLE):
+    """Bicubic spline onto a finer grid, so band edges curve instead of zigzag."""
+    xf = numpy.linspace(x[0], x[-1], (x.size - 1) * factor + 1)
+    yf = numpy.linspace(y[0], y[-1], (y.size - 1) * factor + 1)
+    # A spline cannot pass through the NaN that "cubic" leaves outside the hull
+    if numpy.isnan(zi).any():
+        return *numpy.meshgrid(x, y), zi
+    zf = RectBivariateSpline(y, x, zi, kx=3, ky=3)(yf, xf)
+    return *numpy.meshgrid(xf, yf), zf
+
+
+def clip_to_rain_area(features):
+    """Cut each band along the province border."""
+    clipped = []
+    for feature in features:
+        geometry = shapely.intersection(
+            shapely.geometry.shape(feature["geometry"]).buffer(0), RAIN_AREA
+        )
+        if geometry.is_empty:
+            continue
+        feature["geometry"] = geometry
+        clipped.append(feature)
+
+    # Simplifying the bands together keeps neighbours sharing one edge, so no
+    # slivers open between them; the province border stays as drawn
+    simplified = shapely.coverage_simplify(
+        [feature["geometry"] for feature in clipped],
+        BAND_SIMPLIFY_DEG,
+        simplify_boundary=False,
+    )
+    for feature, geometry in zip(clipped, simplified):
+        geometry = shapely.set_precision(geometry, 1e-5)
+        feature["geometry"] = shapely.geometry.mapping(geometry)
+    return clipped
+
+
+def interpolate_rain_contours(lons, lats, values, method=DEFAULT_METHOD):
+    """Return the contour GeoJSON and the method that actually produced it."""
+    lons, lats, values = merge_colocated_points(lons, lats, values)
+
+    # One step of padding so the contours reach past the boundary before the
+    # clip below trims them to it; stations outside still shape the edges
+    xmin, ymin, xmax, ymax = RAIN_AREA.buffer(GRID_STEP_DEG).bounds
+    x = numpy.arange(xmin, xmax + GRID_STEP_DEG, GRID_STEP_DEG)
+    y = numpy.arange(ymin, ymax + GRID_STEP_DEG, GRID_STEP_DEG)
+    xi, yi = numpy.meshgrid(x, y)
+    inside = shapely.contains_xy(RAIN_AREA, xi, yi)
+
+    zi = numpy.asarray(
+        estimate_rain_grid(lons, lats, values, xi, yi, method), dtype=float
+    )
+    # "nearest" and "cubic" leave NaN outside the stations' convex hull
+    estimates = zi[inside & ~numpy.isnan(zi)]
+    if not stays_in_measured_range(estimates, values):
+        logger.warning(
+            f"[interpolations] {method} estimated {estimates.min():.1f}.."
+            f"{estimates.max():.1f} mm from readings of {values.min():.1f}.."
+            f"{values.max():.1f} mm. Falling back to {FALLBACK_METHOD}."
+        )
+        method = FALLBACK_METHOD
+        zi = estimate_rain_grid(lons, lats, values, xi, yi, method)
+
+    zi = numpy.asarray(zi, dtype=float)
+    # "nearest" is a step surface: a spline would overshoot its cliffs, and its
+    # cells are meant to keep hard edges
+    if method != "nearest":
+        xi, yi, zi = upsample_grid(x, y, zi)
     # Rain above the scale shares the top color instead of falling off the levels
     zi = numpy.clip(zi, 0, RAIN_UPPER_BOUND)
 
@@ -152,6 +285,7 @@ def interpolate_rain_contours(lons, lats, values, method=DEFAULT_METHOD):
         )
     )
 
+    geojson["features"] = clip_to_rain_area(geojson["features"])
     for feature in geojson["features"]:
         properties = feature["properties"]
         band_start = float(properties["title"].split("-")[0])
@@ -162,7 +296,7 @@ def interpolate_rain_contours(lons, lats, values, method=DEFAULT_METHOD):
             3,
         )
 
-    return geojson
+    return geojson, method
 
 
 async def get_rain_points(source=None):
@@ -188,10 +322,7 @@ async def get_rain_points(source=None):
     return numpy.array(lons), numpy.array(lats), numpy.array(values, dtype=float)
 
 
-async def get_rain_interpolation(source=None, method=DEFAULT_METHOD):
-    if method not in METHODS:
-        method = DEFAULT_METHOD
-
+async def get_rain_interpolation(source=None, method: Method = DEFAULT_METHOD):
     lons, lats, values = await get_rain_points(source)
 
     result = {
@@ -208,5 +339,7 @@ async def get_rain_interpolation(source=None, method=DEFAULT_METHOD):
         )
         return result
 
-    result["interpolation"] = interpolate_rain_contours(lons, lats, values, method)
+    result["interpolation"], result["method"] = interpolate_rain_contours(
+        lons, lats, values, method
+    )
     return result

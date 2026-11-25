@@ -56,7 +56,7 @@ class AppSettings(BaseAppSettings):
     OPENAPI_PREFIX: str = ""
     OPENAPI_URL: str = "/openapi.json"
     REDOC_URL: str = "/redoc"
-    TITLE: str = os.getenv("APP_TITLE", os.getenv("PROJECT_NAME", "แลน้ำ"))
+    TITLE: str = os.getenv("APP_TITLE", os.getenv("PROJECT_NAME", "เฝ้าดู"))
     VERSION: str = "0.0.2"
 
     MONGODB_URI: str = "mongodb://localhost/sindhudb"

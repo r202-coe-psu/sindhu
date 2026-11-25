@@ -299,7 +299,7 @@
              value="{{ value }}"
              class="checkbox checkbox-primary checkbox-sm"
              {% if is_checked %}checked{% endif %} />
-      <span class="text-sm {{ 'font-medium text-primary' if is_checked else '' }}">{{ label }}</span>
+      <span class="text-sm {{ 'font-medium text-brand-600' if is_checked else '' }}">{{ label }}</span>
     </label>
     {% endfor %}
   </div>
@@ -337,7 +337,7 @@
       {# Tags container #}
       <div id="{{ field_id }}-tags-container" class="flex flex-wrap gap-2 items-center">
         {% for value in selected_values %}
-        <span class="badge badge-secondary flex items-center gap-1">{{ value }}</span>
+        <span class="badge border-ink-400 bg-ink-100 text-ink-900 flex items-center gap-1">{{ value }}</span>
         {% endfor %}
       </div>
 
@@ -424,7 +424,7 @@
         // Add the tag visually
         const tagContainer = document.getElementById(fieldId + '-tags-container');
         const tagElement = document.createElement('span');
-        tagElement.className = 'badge badge-secondary flex items-center gap-1';
+        tagElement.className = 'badge border-ink-400 bg-ink-100 text-ink-900 flex items-center gap-1';
         tagElement.innerHTML = `
           ${tag}
         `;
@@ -978,7 +978,7 @@
 {% endmacro %}
 
 {% macro large_search_select(field, label=None, placeholder="ค้นหา...", api_url=None, dependency_id=None, min_search_length=3, selected_text="",
-label_class="font-semibold text-xs text-black", input_class="input input-bordered w-full pr-10", form_class="form-control w-full relative mb-4") %}
+label_class="font-semibold text-xs text-ink-900", input_class="input input-bordered w-full pr-10", form_class="form-control w-full relative mb-4") %}
 {# Generate Unique IDs #}
 {% set unique_suffix = field.id ~ '_' ~ range(1, 10000) | random %}
 {% set wrapper_id = 'wrapper_' ~ unique_suffix %}

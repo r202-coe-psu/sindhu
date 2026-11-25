@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from sindhu.schemas import bases
 
 UTC = datetime.timezone.utc
+# The provider returns its latest 100 photos per camera and ignores any paging.
+MAX_HISTORY_FRAMES = 100
 HATYAI_IMAGE_HOSTS = {
     "hatyaicityclimate.org",
     "www.hatyaicityclimate.org",
@@ -325,11 +327,6 @@ class PublicVisualFeed(BaseModel):
     image_url: Optional[str] = None
     detail_url: Optional[str] = None
     captured_at: Optional[datetime.datetime] = None
-    image_checked_at: Optional[datetime.datetime] = Field(
-        default=None,
-        exclude=True,
-        description="Internal timestamp of the latest successfully validated RID snapshot; not capture time.",
-    )
     fetched_at: datetime.datetime
     history_supported: bool = False
     attribution: PublicAttribution
@@ -337,14 +334,6 @@ class PublicVisualFeed(BaseModel):
     @field_validator("captured_at", mode="before")
     @classmethod
     def optional_capture_time(cls, value):
-        try:
-            return _as_utc(value)
-        except (TypeError, ValueError, OverflowError):
-            return None
-
-    @field_validator("image_checked_at", mode="before")
-    @classmethod
-    def optional_image_check_time(cls, value):
         try:
             return _as_utc(value)
         except (TypeError, ValueError, OverflowError):
@@ -447,13 +436,26 @@ class VisualFeedHistory(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source: Literal["hatyai_city_climate"]
     upstream_id: str
-    date: datetime.date
+    date: Optional[datetime.date] = None
     timezone: Literal["Asia/Bangkok"] = "Asia/Bangkok"
-    frames: List[HistoryFrame] = Field(default_factory=list, max_length=144)
+    frames: List[HistoryFrame] = Field(
+        default_factory=list, max_length=MAX_HISTORY_FRAMES
+    )
+    available_dates: List[datetime.date] = Field(
+        default_factory=list, max_length=MAX_HISTORY_FRAMES
+    )
+    # Range of everything the provider returned, before any ``date`` filter.
+    oldest_captured_at: Optional[datetime.datetime] = None
+    latest_captured_at: Optional[datetime.datetime] = None
+    # True when the newest provider photo is older than the staleness window,
+    # i.e. this camera's history stopped updating.
+    history_stale: bool = False
     fetched_at: datetime.datetime
     possibly_truncated: bool = False
 
-    @field_validator("fetched_at", mode="before")
+    @field_validator(
+        "fetched_at", "oldest_captured_at", "latest_captured_at", mode="before"
+    )
     @classmethod
     def utc_time(cls, value):
         return _as_utc(value)
@@ -465,6 +467,7 @@ __all__ = [
     "CoordinateStatus",
     "GeoJSONPoint",
     "HistoryFrame",
+    "MAX_HISTORY_FRAMES",
     "MediaType",
     "PublicAttribution",
     "PublicSourceHealth",
