@@ -1,4 +1,10 @@
 FROM debian:trixie
+# Plain-HTTP deb.debian.org crawls (~100 KB/s) from the PSU network; the campus mirror
+# serves both debian and debian-security. Override for builds elsewhere, e.g.
+#   docker compose build --build-arg DEBIAN_MIRROR=http://deb.debian.org
+ARG DEBIAN_MIRROR=http://mirrors.psu.ac.th
+RUN sed -i "s|http://deb.debian.org/|${DEBIAN_MIRROR}/|" /etc/apt/sources.list.d/debian.sources \
+    && printf 'Acquire::Retries "5";\nAcquire::http::Timeout "30";\n' > /etc/apt/apt.conf.d/80-retries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.13 python3.13-dev python3.13-venv python3-pip npm locales \
     build-essential cmake libopenblas-dev gfortran cargo \
