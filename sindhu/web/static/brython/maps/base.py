@@ -117,10 +117,9 @@ class BaseMap(LegendMixin, Map):
                 stroke="{warn_color}" stroke-width="1.4" stroke-dasharray="4 3"/>
         """
         warn_row = f"""
-        <div style="display:flex; align-items:center; gap:5px; font-size:10px; color:var(--color-ink-500);">
-            <span style="width:8px; height:2px; background:{warn_color}; flex:none;"></span>
-            <span>เฝ้าระวัง</span>
-            <b style="color:var(--color-ink-900); font-weight:600; margin-left:auto;">-{warn_drop:.2f} ม.</b>
+        <div style="margin-top:6px; display:flex; align-items:center; gap:6px; font-size:11px; line-height:1.4; color:var(--color-ink-500);">
+            <span style="width:10px; height:2px; background:{warn_color}; flex:none;"></span>
+            <span>เฝ้าระวังเมื่อระดับน้ำเริ่มสูงกว่า <b style="color:var(--color-ink-900); font-weight:600; white-space:nowrap;">{warn_drop:.2f} เมตร</b></span>
         </div>
         """
 
@@ -171,10 +170,9 @@ class BaseMap(LegendMixin, Map):
                         <div style="font-size:10px; color:var(--color-ink-500); line-height:1; margin-bottom:4px;">{comparison["side"]}</div>
                         <div style="font-size:21px; font-weight:800; color:var(--color-brand-700); line-height:1; letter-spacing:-0.02em;">{gap:.2f}<span style="font-size:11px; font-weight:600; color:var(--color-ink-500); margin-left:2px;">ม.</span></div>
                     </div>
-                    {warn_row}
                 </div>
             </div>
-            <div style="margin-top:8px; text-align:center; font-size:12px; font-weight:700; border-radius:7px; padding:4px 0; {badge_style}">{comparison["summary"]}</div>
+            {warn_row}
         </div>
         """
 
